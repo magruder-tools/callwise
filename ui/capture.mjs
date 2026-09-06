@@ -102,7 +102,7 @@ export class AudioCapture {
       this.bridge.audio(channel, data.buffer);
     };
     await ctx.resume();
-    this.bridge.captureStatus(channel, "listening");
+    if (this.active && generation === this.generation) this.bridge.captureStatus(channel, "listening");
   }
   stop() {
     this.generation++;

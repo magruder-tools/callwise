@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { resolveCodexBin } from "./codex-path.mjs";
 import { parseEnv } from "node:util";
 
 export function readConfig(paths = []) {
@@ -17,7 +18,7 @@ export function readConfig(paths = []) {
     strategyModel: env.CALLWISE_STRATEGY_MODEL || "gpt-6-astra",
     transcriptionModel:
       env.CALLWISE_TRANSCRIPTION_MODEL || "gpt-live-transcribe",
-    codexBin: env.CALLWISE_CODEX_BIN || "codex",
+    codexBin: resolveCodexBin(env.CALLWISE_CODEX_BIN),
     codexEffort: env.CALLWISE_CODEX_EFFORT || "high",
     firefliesKey: env.FIREFLIES_API_KEY || "",
     mcpUrl: env.CALLWISE_MCP_URL || "",

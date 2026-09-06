@@ -31,7 +31,13 @@ export class CallController extends EventEmitter {
     this.generation = 0;
     this.pendingSearch = null;
     this.engine = new CoachEngine();
-    this.engine.on("state", () => this.emit("state", this.snapshot()));
+    this.lastEngineStatus = this.engine.status;
+    this.engine.on("state", () => {
+      const wasRunning = this.lastEngineStatus === "running";
+      this.lastEngineStatus = this.engine.status;
+      if (wasRunning && this.engine.status !== "running") this.stopInputs();
+      this.emit("state", this.snapshot());
+    });
     this.fireflies = new FirefliesClient({ apiKey: config.firefliesKey });
     this.transcribers = new Map();
     this.capture = { mic: "off", system: "off" };

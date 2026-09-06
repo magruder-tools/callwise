@@ -12,3 +12,5 @@ private-context/
 sessions/
 credentials.json
 artifacts/
+
+bundled/

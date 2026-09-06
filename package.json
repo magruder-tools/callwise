@@ -18,9 +18,10 @@
     "check": "node scripts/check.mjs",
     "format": "prettier --write .",
     "doctor": "node scripts/doctor.mjs",
-    "dist:mac": "electron-builder --mac zip --arm64 --publish never",
+    "dist:mac": "node scripts/bundle-codex.mjs && electron-builder --mac zip --arm64 --publish never",
     "dist:win": "electron-builder --win zip --x64 --publish never",
-    "package:source": "node scripts/package-source.mjs"
+    "package:source": "node scripts/package-source.mjs",
+    "bundle:codex": "node scripts/bundle-codex.mjs"
   },
   "dependencies": {
     "socket.io-client": "4.8.3",
@@ -59,7 +60,19 @@
         "NSMicrophoneUsageDescription": "Callwise transcribes your voice while you explicitly run a call session.",
         "NSAudioCaptureUsageDescription": "Callwise transcribes meeting audio while you explicitly run a call session.",
         "NSScreenCaptureUsageDescription": "Callwise uses system capture to hear your selected meeting. Video frames are not sent to AI."
+      },
+      "minimumSystemVersion": "14.2",
+      "identity": "-"
+    },
+    "extraResources": [
+      {
+        "from": "bundled/codex",
+        "to": "codex"
+      },
+      {
+        "from": "docs/INSTALL_MAC.md",
+        "to": "INSTALL_MAC.md"
       }
-    }
+    ]
   }
 }

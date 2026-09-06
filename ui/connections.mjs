@@ -16,6 +16,7 @@ export function connectionControls(bridge, { toast, showError }) {
   function disable() {
     for (const id of [
       "inspect-codex",
+      "codex-signin",
       "apply-context",
       "context-backend",
       "context-consent",
@@ -29,6 +30,8 @@ export function connectionControls(bridge, { toast, showError }) {
       "transcription-model",
     ])
       $(id).disabled = locked() || pending.has(id);
+    $("codex-cancel-signin").hidden = !pending.has("codex-signin");
+    if (pending.has("codex-signin")) $("inspect-codex").disabled = true;
     for (const input of $("codex-apps").querySelectorAll("input"))
       input.disabled = locked() || input.dataset.ready !== "true";
     $("context-cancel").hidden =
@@ -135,6 +138,17 @@ export function connectionControls(bridge, { toast, showError }) {
     );
     disable();
   }
+  $("codex-signin").addEventListener("click", () =>
+    run("codex-signin", async () => {
+      $("connection-result").textContent = "Complete ChatGPT sign-in in your browser. No password or API key is sent to Callwise.";
+      await bridge.command("desktop.codex.signin");
+      $("connection-result").textContent = "Codex is signed in. Click Find my apps to choose sources for this call.";
+      toast("Codex sign-in complete.");
+    }),
+  );
+  $("codex-cancel-signin").addEventListener("click", () =>
+    run("codex-cancel-signin", async () => { await bridge.command("desktop.codex.cancel"); }),
+  );
   $("inspect-codex").addEventListener("click", () =>
     run("inspect-codex", async () => {
       $("connection-result").textContent =

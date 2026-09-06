@@ -9,6 +9,7 @@ import {
   globalShortcut,
   systemPreferences,
   safeStorage,
+  powerMonitor,
 } from "electron";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
@@ -21,6 +22,7 @@ import {
 } from "../core/connections.mjs";
 import { safeUrl } from "../core/context.mjs";
 import { CallController } from "../core/controller.mjs";
+import { CodexLogin } from "./codex-login.mjs";
 import { CodexContextProvider } from "../providers/codex-context.mjs";
 import { CodexProvider } from "../providers/codex.mjs";
 
@@ -76,6 +78,7 @@ async function boot() {
           }),
     });
   controller = makeController(controllerConfig(baseConfig, saved));
+  const codexLogin = new CodexLogin({ bin: controller.config.codexBin, cwd: workDir, openBrowser: (url) => shell.openExternal(url) });
   if (vaultWarning) controller.engine.error(vaultWarning);
   win = new BrowserWindow({
     width: 1250,
@@ -92,7 +95,7 @@ async function boot() {
       sandbox: true,
       webSecurity: true,
       offscreen: smoke,
-      backgroundThrottling: !smoke,
+      backgroundThrottling: false,
     },
   });
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
@@ -104,6 +107,7 @@ async function boot() {
     controller.engine.pause();
   });
   win.on("closed", () => {
+    codexLogin.close();
     controller.close();
     win = null;
   });
@@ -162,7 +166,16 @@ async function boot() {
       throw new Error("Untrusted app frame.");
     if (typeof name !== "string" || JSON.stringify(payload).length > 300000)
       throw new Error("Invalid request.");
+    if (name === "desktop.codex.signin") {
+      if (smoke || controller.engine.status === "running" || controller.connecting)
+        throw new Error("Pause the live session before signing into Codex.");
+      return codexLogin.signIn();
+    }
+    if (name === "desktop.codex.cancel") { codexLogin.cancel(); return {}; }
+    if (["pause", "end", "new"].includes(name)) codexLogin.cancel();
+    if (name === "start" && codexLogin.busy) throw new Error("Finish or cancel Codex sign-in first.");
     if (name === "desktop.connections.save") {
+      if (codexLogin.busy) throw new Error("Finish or cancel Codex sign-in before changing connections.");
       if (controller.engine.status === "running" || controller.connecting)
         throw new Error("Pause the session before changing connections.");
       saved = saveConnections(vault, safeStorage, payload);
@@ -297,14 +310,22 @@ async function boot() {
   globalShortcut.register("CommandOrControl+Shift+P", () => {
     void controller.command("pause");
   });
+  for (const event of ["suspend", "lock-screen"]) powerMonitor.on(event, () => {
+    codexLogin.cancel();
+    if (controller.engine.status === "running") {
+      controller.stopInputs(); controller.engine.pause();
+      controller.engine.error("Callwise paused because this Mac slept or locked. Resume when you are ready.");
+    }
+  });
   app.on("will-quit", () => {
+    codexLogin.close();
     globalShortcut.unregisterAll();
     controller.close();
   });
   app.on("window-all-closed", () => app.quit());
   await win.loadFile(page);
   if (smoke) {
-    const artifacts = path.join(root, "artifacts");
+    const artifacts = process.env.CALLWISE_SMOKE_DIR || (app.isPackaged ? path.join(app.getPath("temp"), "callwise-smoke") : path.join(root, "artifacts"));
     mkdirSync(artifacts, { recursive: true });
     const { DEMO_TRANSCRIPT } = await import("../fixtures/demo.mjs");
     await controller.command("start", { source: "demo" });
@@ -336,7 +357,12 @@ async function boot() {
     app.quit();
   }
 }
+if (!app.requestSingleInstanceLock()) app.quit();
+else {
+app.on("second-instance", () => { if (win) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); } });
 void boot().catch((error) => {
   console.error(`Callwise startup failed: ${error.message}`);
   app.exit(1);
 });
+
+}

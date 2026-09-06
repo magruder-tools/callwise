@@ -1,0 +1,37 @@
+// Build-time only: include the public, pinned native Codex executable so the
+// person installing Callwise does not need Node, npm, or a separate CLI install.
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, copyFileSync, chmodSync, rmSync, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { tmpdir } from "node:os";
+import path from "node:path";
+const version = "0.153.4";
+const spec = `@openai/codex@${version}-darwin-arm64`;
+const work = mkdtempSync(path.join(tmpdir(), "callwise-codex-bundle-"));
+const out = path.resolve("bundled/codex");
+try {
+  const [pkg] = JSON.parse(execFileSync("npm", ["pack", spec, "--json", "--pack-destination", work], {
+    encoding: "utf8", timeout: 180000, maxBuffer: 2000000,
+  }));
+  const archive = path.join(work, path.basename(pkg.filename));
+  const integrity = `sha512-${createHash("sha512").update(readFileSync(archive)).digest("base64")}`;
+  if (pkg.integrity !== integrity) throw new Error("Codex archive integrity mismatch.");
+  execFileSync("tar", ["-xzf", archive, "-C", work], { timeout: 30000 });
+  const binary = path.join(work, "package/vendor/aarch64-apple-darwin/codex/codex");
+  if (!existsSync(binary)) throw new Error("The pinned Codex package does not contain the expected Apple Silicon executable.");
+  mkdirSync(out, { recursive: true });
+  copyFileSync(binary, path.join(out, "codex"));
+  chmodSync(path.join(out, "codex"), 0o755);
+  for (const name of ["LICENSE", "NOTICE"]) {
+    const response = await fetch(`https://raw.githubusercontent.com/openai/codex/rust-v${version}/${name}`, { signal: AbortSignal.timeout(15000) });
+    if (name === "NOTICE" && response.status === 404) continue;
+    if (!response.ok) throw new Error(`Could not obtain the Codex ${name} notice.`);
+    writeFileSync(path.join(out, name), await response.text());
+  }
+  const manifest = { version, package: spec, integrity,
+    sha256: createHash("sha256").update(readFileSync(binary)).digest("hex"),
+    source: `https://github.com/openai/codex/tree/rust-v${version}`,
+    modified: false };
+  writeFileSync(path.join(out, "BUILD.json"), JSON.stringify(manifest, null, 2));
+  console.log(`Bundled official Codex ${version} for Apple Silicon; archive integrity verified.`);
+} finally { rmSync(work, { recursive: true, force: true }); }

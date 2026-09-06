@@ -1,0 +1,65 @@
+{
+  "name": "callwise",
+  "productName": "Callwise",
+  "version": "0.1.0",
+  "description": "A personal thinking copilot for live conversations",
+  "private": true,
+  "type": "module",
+  "main": "desktop/main.mjs",
+  "license": "GPL-3.0-or-later",
+  "author": "Callwise contributors",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "start": "electron .",
+    "demo": "node scripts/demo-server.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node scripts/check.mjs",
+    "format": "prettier --write .",
+    "doctor": "node scripts/doctor.mjs",
+    "dist:mac": "electron-builder --mac zip --arm64 --publish never",
+    "dist:win": "electron-builder --win zip --x64 --publish never",
+    "package:source": "node scripts/package-source.mjs"
+  },
+  "dependencies": {
+    "socket.io-client": "4.8.3",
+    "ws": "8.21.3"
+  },
+  "devDependencies": {
+    "electron": "44.2.0",
+    "electron-builder": "26.15.3",
+    "linkedom": "0.18.13",
+    "prettier": "3.6.2"
+  },
+  "build": {
+    "appId": "local.callwise.desktop",
+    "productName": "Callwise",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "desktop/**",
+      "core/**",
+      "providers/**",
+      "ui/**",
+      "fixtures/**",
+      "assets/**",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "assets/icon.icns",
+      "target": [
+        "zip"
+      ],
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Callwise transcribes your voice while you explicitly run a call session.",
+        "NSAudioCaptureUsageDescription": "Callwise transcribes meeting audio while you explicitly run a call session.",
+        "NSScreenCaptureUsageDescription": "Callwise uses system capture to hear your selected meeting. Video frames are not sent to AI."
+      }
+    }
+  }
+}

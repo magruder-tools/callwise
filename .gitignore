@@ -1,0 +1,14 @@
+node_modules/
+release/
+dist/
+.env
+.env.*
+!.env.example
+*.log
+*.zip
+*.bundle
+.DS_Store
+private-context/
+sessions/
+credentials.json
+artifacts/

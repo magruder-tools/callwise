@@ -58,6 +58,7 @@ export class CoachEngine extends EventEmitter {
     };
     this.lastRun = { fast: 0, strategy: 0 };
     this.startedAt = null;
+    this.stoppedAt = null;
     this.source = "demo";
     this.emitState();
   }
@@ -83,9 +84,18 @@ export class CoachEngine extends EventEmitter {
       throw new Error(
         "Confirm that AI assistance and transcription are permitted before starting.",
       );
+    if (this.startedAt !== null && this.clock() - this.startedAt >= this.config.maxSessionMs)
+      throw new Error("Session time limit reached. Export and create a new session.");
     this.source = source;
     this.status = "running";
-    this.startedAt ||= this.clock();
+    this.startedAt ??= this.clock();
+    this.stoppedAt = null;
+    clearTimeout(this.deadlineTimer);
+    this.deadlineTimer = setTimeout(() => {
+      this.pause();
+      this.error("Session time limit reached. Export and create a new session.");
+    }, Math.max(1, this.config.maxSessionMs - (this.clock() - this.startedAt)));
+    this.deadlineTimer.unref?.();
     this.epoch++;
     this.log(
       "session",
@@ -98,6 +108,7 @@ export class CoachEngine extends EventEmitter {
   pause() {
     if (this.status !== "running") return;
     this.status = "paused";
+    this.stoppedAt = this.clock();
     this.epoch++;
     this.cancel();
     this.log("session", "Paused. Capture and coaching stopped.");
@@ -105,12 +116,15 @@ export class CoachEngine extends EventEmitter {
   }
   end() {
     this.status = "ended";
+    this.stoppedAt = this.clock();
     this.epoch++;
     this.cancel();
     this.log("session", "Session ended. Export only if you want to keep it.");
     this.emitState();
   }
   cancel() {
+    clearTimeout(this.deadlineTimer);
+    this.deadlineTimer = null;
     for (const t of Object.values(this.timers || {})) clearTimeout(t);
     this.timers = {};
     for (const job of Object.values(this.inflight || {}))
@@ -141,6 +155,8 @@ export class CoachEngine extends EventEmitter {
       return false;
     }
     const prior = this.transcript.get(segment.id);
+    // Network deltas may arrive after completion; never turn final evidence back into a partial.
+    if (prior?.final && segment.final === false) return false;
     if (
       prior?.text === segment.text &&
       prior.final === (segment.final !== false)
@@ -178,7 +194,7 @@ export class CoachEngine extends EventEmitter {
     this.timers[lane] = setTimeout(
       () => {
         delete this.timers[lane];
-        void this.run(lane);
+        void this.run(lane).catch((error) => this.error(error.message));
       },
       Math.max(0, delay),
     );
@@ -188,7 +204,18 @@ export class CoachEngine extends EventEmitter {
       throw new Error("Unknown coaching lane.");
     if (this.status !== "running")
       throw new Error("Start or resume the session first.");
-    if (this.inflight[lane]) return { busy: true };
+    if (this.clock() - this.startedAt >= this.config.maxSessionMs) {
+      this.pause();
+      throw new Error("Session time limit reached. Export and create a new session.");
+    }
+    if (this.inflight[lane]) {
+      if (!question) return { busy: true };
+      // An explicit user question takes precedence over a speculative suggestion.
+      this.inflight[lane].controller.abort();
+      delete this.inflight[lane];
+    }
+    clearTimeout(this.timers[lane]);
+    delete this.timers[lane];
     if (!this.providers[lane]) {
       this.error(`${lane} provider is not configured.`);
       return;
@@ -259,7 +286,7 @@ export class CoachEngine extends EventEmitter {
         question,
         signal: job.controller.signal,
       });
-      if (epoch !== this.epoch) return;
+      if (epoch !== this.epoch || this.inflight[lane]?.id !== job.id) return;
       if (this.status !== "running" || job.controller.signal.aborted) {
         this.metrics.discarded++;
         return;
@@ -305,6 +332,7 @@ export class CoachEngine extends EventEmitter {
         });
       }
       this.cards = this.cards.slice(-100);
+      return { ok: true };
     } catch (error) {
       if (epoch === this.epoch && !job.controller.signal.aborted)
         this.error(error.message || "Coaching request failed.");
@@ -340,7 +368,10 @@ export class CoachEngine extends EventEmitter {
     if (!card || card.status !== "new") return;
     card.status = status;
     this.metrics[status]++;
-    if (status === "dismissed") this.dismissed.push(card);
+    if (status === "dismissed") {
+      this.dismissed.push(card);
+      this.dismissed = this.dismissed.slice(-40);
+    }
     this.emitState();
   }
   log(kind, message) {
@@ -348,6 +379,8 @@ export class CoachEngine extends EventEmitter {
     this.activity = this.activity.slice(-30);
   }
   error(message) {
+    const safe = String(message).slice(0, 400);
+    if (this.errors.at(-1)?.message === safe && this.clock() - this.errors.at(-1).at < 10000) return;
     this.errors.push({
       message: String(message).slice(0, 400),
       at: this.clock(),
@@ -361,6 +394,7 @@ export class CoachEngine extends EventEmitter {
       status: this.status,
       source: this.source,
       startedAt: this.startedAt,
+      stoppedAt: this.stoppedAt,
       settings: { ...this.settings },
       revision: this.revision,
       transcript: [...this.transcript.values()].sort(

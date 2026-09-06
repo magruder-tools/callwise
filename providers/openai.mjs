@@ -9,7 +9,7 @@ export class OpenAIProvider {
   async generate({ lane, prompt, signal }) {
     if (!this.apiKey)
       throw new Error(
-        "Add OPENAI_API_KEY to the private .env.local file, then restart Callwise. Demo works without a key.",
+        "Open Connections and save your OpenAI API key. The demo works without a key.",
       );
     const response = await this.fetch("https://api.openai.com/v1/responses", {
       method: "POST",

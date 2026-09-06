@@ -17,12 +17,17 @@ jobs:
           npm run check 2>&1 | tee check.log
           test ${PIPESTATUS[0]} -eq 0
       - name: Tests
-        run: npm test
+        run: |
+          npm test 2>&1 | tee test.log
+          test ${PIPESTATUS[0]} -eq 0
       - name: Dependency audit
         run: npm audit --omit=dev --audit-level=high
-      - name: Upload check diagnostics
+      - name: Upload diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: callwise-check-diagnostics
-          path: check.log
+          path: |
+            check.log
+            test.log
+          if-no-files-found: ignore

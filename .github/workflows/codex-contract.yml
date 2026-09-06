@@ -1,0 +1,29 @@
+name: Codex protocol contract
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/codex-contract.yml'
+permissions:
+  contents: read
+jobs:
+  schema:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Inspect public Codex CLI protocol without signing in
+        run: |
+          mkdir -p /tmp/callwise-contract
+          npm install --prefix /tmp/callwise-contract @openai/codex
+          /tmp/callwise-contract/node_modules/.bin/codex --version > /tmp/callwise-contract/VERSION.txt
+          /tmp/callwise-contract/node_modules/.bin/codex app-server generate-json-schema --out /tmp/callwise-contract/schema
+          tar -czf /tmp/callwise-codex-contract.tar.gz -C /tmp/callwise-contract .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: codex-public-protocol
+          path: /tmp/callwise-codex-contract.tar.gz
+          retention-days: 3
+          if-no-files-found: error

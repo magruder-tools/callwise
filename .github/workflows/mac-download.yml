@@ -1,0 +1,85 @@
+name: Mac download
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/mac-download.yml'
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: |
+          git archive --format=zip --prefix=Callwise-source/ HEAD > Callwise-source.zip
+          git rev-parse HEAD > BUILD_COMMIT.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Callwise-source
+          path: |
+            Callwise-source.zip
+            BUILD_COMMIT.txt
+          retention-days: 7
+  mac:
+    runs-on: macos-15
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Checks and tests on macOS
+        run: |
+          set -o pipefail
+          npm run check 2>&1 | tee check.log
+          npm test 2>&1 | tee test.log
+          npm audit --omit=dev --audit-level=high 2>&1 | tee audit.log
+      - name: Native Electron smoke test without keys or recording
+        run: |
+          set -o pipefail
+          npm start -- --smoke 2>&1 | tee smoke.log
+      - name: Build personal-use Apple Silicon ZIP
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          set -o pipefail
+          npm run dist:mac 2>&1 | tee package.log
+          git rev-parse HEAD > release/BUILD_COMMIT.txt
+          shasum -a 256 release/*.zip > release/SHA256SUMS.txt
+          /usr/libexec/PlistBuddy -c 'Print :NSAudioCaptureUsageDescription' release/mac-arm64/Callwise.app/Contents/Info.plist
+          file release/mac-arm64/Callwise.app/Contents/MacOS/Callwise
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Callwise-Apple-Silicon
+          path: |
+            release/*.zip
+            release/BUILD_COMMIT.txt
+            release/SHA256SUMS.txt
+          retention-days: 14
+          compression-level: 0
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Callwise-Mac-validation
+          path: |
+            check.log
+            test.log
+            audit.log
+            smoke.log
+            package.log
+            artifacts/*.png
+          retention-days: 14
+          if-no-files-found: ignore

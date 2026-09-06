@@ -6,92 +6,14 @@ import { parseHTML } from "linkedom";
 import { CallController } from "../core/controller.mjs";
 
 test("renderer runs against the real controller: start, source-linked cards, feedback, and pause", async () => {
-  const { window, document } = parseHTML(
-    await readFile(new URL("../ui/index.html", import.meta.url), "utf8"),
-  );
-  const c = new CallController({ demoOnly: true });
-  const tracked = [];
-  const originalInterval = globalThis.setInterval;
-  // linkedom models DOM/events, not native media or window rendering. No external
-  // browser is controlled by this test and no audio/device permission is used.
-  globalThis.window = window;
-  globalThis.document = document;
-  globalThis.setInterval = (...args) => {
-    const id = originalInterval(...args);
-    tracked.push(id);
-    return id;
-  };
-  window.callwise = {
-    desktop: false,
-    command: (name, payload) => c.command(name, payload),
-    onState: (cb) => {
-      c.on("state", cb);
-      return () => c.off("state", cb);
-    },
-    onStopCapture: () => () => {},
-  };
-  // DOM simulator omits the HTMLSelectElement value setter and dialog API.
-  for (const select of document.querySelectorAll("select"))
-    Object.defineProperty(select, "value", {
-      configurable: true,
-      get() {
-        return (
-          this._selectedValue ??
-          this.querySelector("option")?.getAttribute("value") ??
-          this.querySelector("option")?.textContent ??
-          ""
-        );
-      },
-      set(value) {
-        this._selectedValue = value;
-      },
-    });
-  for (const dialog of document.querySelectorAll("dialog")) {
-    dialog.showModal = () => dialog.setAttribute("open", "");
-    dialog.close = () => dialog.removeAttribute("open");
-  }
-  const byId = (id) => document.getElementById(id);
-  const click = (el) =>
-    el.dispatchEvent(new window.Event("click", { bubbles: true }));
-  try {
-    await import("../ui/app.mjs");
-    assert.equal(byId("status-label").textContent, "Ready when you are");
-    click(byId("start"));
-    await wait(25);
-    assert.equal(c.engine.status, "running");
-    assert.equal(byId("context-count").textContent, "3");
-    await c.command("transcript", {
-      speaker: "Client",
-      text: "Are these attribution windows comparable?",
-    });
-    await c.command("nudge");
-    assert.ok(
-      byId("fast-cards").textContent.includes("Check whether the ROAS"),
-    );
-    assert.ok(byId("fast-cards").querySelectorAll(".source-chip").length > 0);
-    click(byId("fast-cards").querySelector(".source-chip"));
-    await wait(5);
-    assert.ok(byId("source-text").textContent.includes("DEMO"));
-    assert.equal(byId("source-dialog").hasAttribute("open"), true);
-    click(byId("fast-cards").querySelector(".card-actions button"));
-    await wait(5);
-    assert.equal(c.engine.metrics.accepted, 1);
-    assert.ok(byId("fast-cards").textContent.includes("Marked useful"));
-    click(byId("pause"));
-    await wait(5);
-    assert.equal(c.engine.status, "paused");
-    assert.equal(byId("status-label").textContent, "Session paused");
-    click(byId("end"));
-    await wait(5);
-    click(byId("start"));
-    await wait(5);
-    assert.equal(c.engine.status, "idle");
-    assert.equal(byId("transcript-count").textContent, "0");
-  } finally {
-    c.close();
-    for (const id of tracked) clearInterval(id);
-    globalThis.setInterval = originalInterval;
-    delete globalThis.window;
-    delete globalThis.document;
-  }
+  const { window, document } = parseHTML(await readFile(new URL("../ui/index.html", import.meta.url), "utf8"));
+  const required=["status-label","status-dot","start","pause","end","source","backend","mode","goal","project","quiet","profile","save-profile","auto-search","ask-submit","transcript-submit","deep-think","fast-status","strategy-status","usage","retention","transcript-footnote","mic-label","system-label","transcript","transcript-count","context-list","context-count","openai-status","fireflies-status","mcp-status","model-labels","import-file","inspect-codex","error-box","demo-notice","live-consent","fireflies-field","source-title","source-text","source-link","source-dialog","consent","fireflies-id","question","ask-form","transcript-form","speaker","transcript-text","context-form","context-title","context-url","context-text","context-dialog","add-context","settings-open","settings-dialog","context-search-open","search-dialog","search-form","search-query","export","compact","toast","openai-key","fireflies-key","fast-model","strategy-model","transcription-model","save-connections","check-connections","connection-result"];
+  const missing=required.filter(id=>!document.getElementById(id)); assert.deepEqual(missing,[],`UI fixture is missing IDs: ${missing.join(", ")}`);
+  const c = new CallController({ demoOnly: true }); const tracked=[]; const originalInterval=globalThis.setInterval;
+  globalThis.window=window;globalThis.document=document;globalThis.setInterval=(...args)=>{const id=originalInterval(...args);tracked.push(id);return id;};
+  window.callwise={desktop:false,command:(name,payload)=>c.command(name,payload),onState:(cb)=>{c.on("state",cb);return()=>c.off("state",cb);},onStopCapture:()=>()=>{}};
+  for(const select of document.querySelectorAll("select"))Object.defineProperty(select,"value",{configurable:true,get(){return this._selectedValue??this.querySelector("option")?.getAttribute("value")??this.querySelector("option")?.textContent??"";},set(value){this._selectedValue=value;}});
+  for(const dialog of document.querySelectorAll("dialog")){dialog.showModal=()=>dialog.setAttribute("open","");dialog.close=()=>dialog.removeAttribute("open");}
+  const byId=id=>document.getElementById(id);const click=el=>el.dispatchEvent(new window.Event("click",{bubbles:true}));
+  try{await import("../ui/app.mjs");assert.equal(byId("status-label").textContent,"Ready when you are");click(byId("start"));await wait(25);assert.equal(c.engine.status,"running");assert.equal(byId("context-count").textContent,"3");await c.command("transcript",{speaker:"Client",text:"Are these attribution windows comparable?"});await c.command("nudge");assert.ok(byId("fast-cards").textContent.includes("Check whether the ROAS"));assert.ok(byId("fast-cards").querySelectorAll(".source-chip").length>0);click(byId("fast-cards").querySelector(".source-chip"));await wait(5);assert.ok(byId("source-text").textContent.includes("DEMO"));assert.equal(byId("source-dialog").hasAttribute("open"),true);click(byId("fast-cards").querySelector(".card-actions button"));await wait(5);assert.equal(c.engine.metrics.accepted,1);assert.ok(byId("fast-cards").textContent.includes("Marked useful"));click(byId("pause"));await wait(5);assert.equal(c.engine.status,"paused");assert.equal(byId("status-label").textContent,"Session paused");click(byId("end"));await wait(5);click(byId("start"));await wait(5);assert.equal(c.engine.status,"idle");assert.equal(byId("transcript-count").textContent,"0");}finally{c.close();for(const id of tracked)clearInterval(id);globalThis.setInterval=originalInterval;delete globalThis.window;delete globalThis.document;}
 });

@@ -1,3 +1,8 @@
+> **Connected context update:** Callwise now has an opt-in Codex context bridge.
+> Follow [docs/CODEX_CONTEXT.md](docs/CODEX_CONTEXT.md) for **Find my apps**,
+> per-session source selection, and the known-record test. Use current source,
+> not an earlier development ZIP. No live-account validation is claimed.
+
 # Run Callwise on your Mac
 
 Callwise is an early build. The offline demo is tested in code; **live OpenAI inference and macOS meeting-audio capture still require a real practice call on your Mac before you trust it for an important meeting.**
@@ -37,4 +42,4 @@ Callwise is an early build. The offline demo is tested in code; **live OpenAI in
 - **Saved connections cannot be unlocked:** quit Callwise, unlock/login to your Mac normally, and reopen. If the warning persists, move `connections.bin` out of Callwise's app-data folder and save connections again. Do not delete the old file until the new setup works.
 - **No microphone:** System Settings → Privacy & Security → Microphone → allow Callwise/Terminal, then restart.
 - **No meeting audio:** System Settings → Privacy & Security → Screen & System Audio Recording → allow Callwise/Terminal, restart, then select a source that includes audio.
-- **One audio channel dies:** Callwise should pause rather than quietly continue with an
+- **One audio channel dies:** Callwise should pause rather than quietly continue with an incomplete transcript. Resume after checking the connection; use a new session when changing clients.

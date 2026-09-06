@@ -43,7 +43,16 @@ export class ContextStore {
       url: safeUrl(input.url),
       kind: String(input.kind || "note").slice(0, 40),
       project: String(input.project || "").slice(0, 100),
-      updatedAt: input.updatedAt || new Date().toISOString(),
+      updatedAt:
+        input.kind === "connector"
+          ? null
+          : input.updatedAt || new Date().toISOString(),
+      ...(input.provenance?.provider === "codex"
+        ? {
+            provenance: { ...input.provenance },
+            retrievedAt: input.retrievedAt,
+          }
+        : {}),
     };
     this.docs.set(id, doc);
     return doc;
@@ -65,7 +74,7 @@ export class ContextStore {
     if (!queryTerms.length) return [];
     const hits = [];
     for (const doc of this.docs.values()) {
-      if (project && doc.project && doc.project !== project) continue;
+      if (doc.project && doc.project !== project) continue;
       const titleTerms = new Set(terms(doc.title));
       const chunks = doc.text.match(/[\s\S]{1,1800}/g) || [];
       let best = null;
@@ -86,6 +95,9 @@ export class ContextStore {
             kind: doc.kind,
             project: doc.project,
             updatedAt: doc.updatedAt,
+            ...(doc.provenance
+              ? { provenance: doc.provenance, retrievedAt: doc.retrievedAt }
+              : {}),
             excerpt: text,
             chunk: index,
             score,

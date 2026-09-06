@@ -7,6 +7,11 @@ discovery, interview practice, negotiation, and general calls.
 and macOS audio validation are pending. This is not a claim of parity with or
 superiority to Final Round, Glass, Cue, or any commercial product.**
 
+**New: selected read-only ChatGPT apps through local Codex are now implemented.**
+See [Connected context setup and validation](docs/CODEX_CONTEXT.md). Actual account-specific
+retrieval still needs a practice test on your Mac. This feature does not import ChatGPT memory
+or guarantee that every ChatGPT app is available through Codex.
+
 Start with [START_HERE.md](START_HERE.md). The specific setup tasks for the next
 session are in [NEXT_SESSION.md](NEXT_SESSION.md).
 
@@ -71,10 +76,9 @@ unsigned downloaded application from launching.
 
 - Live testing with your OpenAI key, Fireflies beta access, and Codex installation.
 - macOS capture and permissions across Zoom, Meet, Teams, FaceTime, and devices.
-- Automatic reuse of your ChatGPT Gmail, Drive, Notion, and meeting-history
-  connections. The Codex bridge can discover apps, but does **not** automatically
-  execute inherited connector tools. Use imported context or a configured
-  read-only MCP source in this build.
+- Live validation of your selected ChatGPT apps through Codex. The new separate
+  read-only context bridge is implemented and opt-in; account-specific access,
+  provider metadata, and actual retrieval quality still need validation.
 - ChatGPT memory/chat-history import; native Gmail/Drive OAuth onboarding.
 - PDF/Word extraction, speaker diarization beyond you/others for local audio,
   local Whisper, screenshots for model input, and autonomous post-call actions.

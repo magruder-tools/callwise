@@ -55,6 +55,9 @@ export class CoachEngine extends EventEmitter {
       project: "",
       quiet: false,
       autoSearch: false,
+      contextBackend: "off",
+      contextApps: [],
+      contextConsent: false,
     };
     this.lastRun = { fast: 0, strategy: 0 };
     this.startedAt = null;
@@ -65,11 +68,31 @@ export class CoachEngine extends EventEmitter {
   configure(patch) {
     if (this.status === "running")
       throw new Error("Pause the session before changing its configuration.");
+    if (
+      patch.contextBackend !== undefined &&
+      !["off", "codex", "mcp"].includes(patch.contextBackend)
+    )
+      throw new Error("Choose a supported context provider.");
+    if (
+      patch.contextApps !== undefined &&
+      (!Array.isArray(patch.contextApps) ||
+        patch.contextApps.length > 12 ||
+        patch.contextApps.some(
+          (id) => typeof id !== "string" || !/^[a-zA-Z0-9_-]{1,200}$/.test(id),
+        ))
+    )
+      throw new Error("Choose up to 12 valid context apps.");
+    if (patch.contextBackend !== undefined)
+      this.settings.contextBackend = patch.contextBackend;
+    if (patch.contextApps !== undefined)
+      this.settings.contextApps = [...new Set(patch.contextApps)];
+    if (typeof patch.contextConsent === "boolean")
+      this.settings.contextConsent = patch.contextConsent;
     for (const key of ["mode", "goal", "profile", "project"])
       if (typeof patch[key] === "string")
         this.settings[key] = patch[key].slice(
           0,
-          key === "profile" ? 6000 : 2000,
+          key === "profile" ? 6000 : key === "project" ? 100 : 2000,
         );
     if (typeof patch.quiet === "boolean") this.settings.quiet = patch.quiet;
     if (typeof patch.autoSearch === "boolean")
@@ -84,17 +107,27 @@ export class CoachEngine extends EventEmitter {
       throw new Error(
         "Confirm that AI assistance and transcription are permitted before starting.",
       );
-    if (this.startedAt !== null && this.clock() - this.startedAt >= this.config.maxSessionMs)
-      throw new Error("Session time limit reached. Export and create a new session.");
+    if (
+      this.startedAt !== null &&
+      this.clock() - this.startedAt >= this.config.maxSessionMs
+    )
+      throw new Error(
+        "Session time limit reached. Export and create a new session.",
+      );
     this.source = source;
     this.status = "running";
     this.startedAt ??= this.clock();
     this.stoppedAt = null;
     clearTimeout(this.deadlineTimer);
-    this.deadlineTimer = setTimeout(() => {
-      this.pause();
-      this.error("Session time limit reached. Export and create a new session.");
-    }, Math.max(1, this.config.maxSessionMs - (this.clock() - this.startedAt)));
+    this.deadlineTimer = setTimeout(
+      () => {
+        this.pause();
+        this.error(
+          "Session time limit reached. Export and create a new session.",
+        );
+      },
+      Math.max(1, this.config.maxSessionMs - (this.clock() - this.startedAt)),
+    );
     this.deadlineTimer.unref?.();
     this.epoch++;
     this.log(
@@ -206,7 +239,9 @@ export class CoachEngine extends EventEmitter {
       throw new Error("Start or resume the session first.");
     if (this.clock() - this.startedAt >= this.config.maxSessionMs) {
       this.pause();
-      throw new Error("Session time limit reached. Export and create a new session.");
+      throw new Error(
+        "Session time limit reached. Export and create a new session.",
+      );
     }
     if (this.inflight[lane]) {
       if (!question) return { busy: true };
@@ -252,15 +287,41 @@ export class CoachEngine extends EventEmitter {
       if (lane === "strategy" && this.settings.autoSearch && this.retriever) {
         try {
           const docs = await this.retriever({
-            query: query.slice(0, 1500),
+            query: (
+              question ||
+              `${this.settings.project}: ${rows
+                .slice(-3)
+                .map((row) => row.text)
+                .join(" ")}`
+            ).slice(0, 1500),
+            recent: question ? [{ text: question }] : rows.slice(-3),
+            project: this.settings.project,
+            sessionId: this.sessionId,
             signal: job.controller.signal,
           });
           if (epoch !== this.epoch || job.controller.signal.aborted) return;
-          for (const doc of docs)
-            this.context.add({ ...doc, project: this.settings.project });
-          sources = this.context.search(query, {
+          const added = docs.map((doc) =>
+            this.context.add({ ...doc, project: this.settings.project }),
+          );
+          const matches = this.context.search(query, {
             project: this.settings.project,
           });
+          const seen = new Set();
+          // The retriever already selected these excerpts semantically; a second
+          // keyword-only pass must not drop them because synonyms differ.
+          sources = [
+            ...added.map(({ text, ...doc }) => ({
+              ...doc,
+              excerpt: text.slice(0, 1800),
+            })),
+            ...matches,
+          ]
+            .filter((doc) => {
+              if (seen.has(doc.id)) return false;
+              seen.add(doc.id);
+              return true;
+            })
+            .slice(0, 5);
         } catch (error) {
           if (job.controller.signal.aborted) return;
           this.log(
@@ -380,7 +441,11 @@ export class CoachEngine extends EventEmitter {
   }
   error(message) {
     const safe = String(message).slice(0, 400);
-    if (this.errors.at(-1)?.message === safe && this.clock() - this.errors.at(-1).at < 10000) return;
+    if (
+      this.errors.at(-1)?.message === safe &&
+      this.clock() - this.errors.at(-1).at < 10000
+    )
+      return;
     this.errors.push({
       message: String(message).slice(0, 400),
       at: this.clock(),
@@ -395,7 +460,10 @@ export class CoachEngine extends EventEmitter {
       source: this.source,
       startedAt: this.startedAt,
       stoppedAt: this.stoppedAt,
-      settings: { ...this.settings },
+      settings: {
+        ...this.settings,
+        contextApps: [...this.settings.contextApps],
+      },
       revision: this.revision,
       transcript: [...this.transcript.values()].sort(
         (a, b) => a.startMs - b.startMs,
@@ -435,7 +503,8 @@ export class CoachEngine extends EventEmitter {
         c.body,
         c.say ? `Suggested wording: ${c.say}` : "",
         ...c.sources.map(
-          (src) => `Source: ${src.title}${src.url ? ` — ${src.url}` : ""}`,
+          (src) =>
+            `Source: ${src.title}${src.url ? ` — ${src.url}` : ""}${src.provenance ? ` | Retrieved via ${src.provenance.appName} / ${src.provenance.action} at ${src.retrievedAt}` : ""}`,
         ),
       );
     lines.push("", "## Transcript");

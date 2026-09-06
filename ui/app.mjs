@@ -1,4 +1,5 @@
 import { AudioCapture } from "./capture.mjs";
+import { connectionControls } from "./connections.mjs";
 const $ = (id) => document.getElementById(id);
 const esc = (value) =>
   String(value ?? "").replace(
@@ -71,6 +72,7 @@ async function act(name, payload = {}) {
     return null;
   }
 }
+const connections = connectionControls(bridge, { toast, showError });
 const timestamp = (ms) =>
   `${String(Math.floor(ms / 60000)).padStart(2, "0")}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
 
@@ -189,7 +191,7 @@ function render(next) {
   ])
     if (document.activeElement !== $(id)) $(id).value = value;
   $("quiet").checked = state.settings.quiet;
-  $("auto-search").checked = state.settings.autoSearch;
+
   $("fast-status").textContent = state.thinking.fast
     ? "Finding a useful next thought…"
     : running
@@ -276,7 +278,7 @@ function render(next) {
   $("model-labels").textContent =
     `Fast: ${state.config.fastModel || "gpt-5.6-luna"} · Strategy: ${state.config.strategyModel || "gpt-6-astra"}`;
   $("import-file").disabled = !bridge.desktop;
-  $("inspect-codex").disabled = !bridge.desktop;
+  connections.sync(state);
   if (state.errors.length) {
     $("error-box").textContent = state.errors.at(-1).message;
     $("error-box").hidden = false;
@@ -299,7 +301,14 @@ async function openSource(id, excerpt) {
   const doc = await act("context.get", { id });
   if (!doc) return;
   $("source-title").textContent = doc.title;
-  $("source-text").textContent = excerpt || doc.text;
+  $("source-text").textContent = [
+    doc.provenance
+      ? `Retrieved from ${doc.provenance.appName} • ${doc.provenance.action}\nRetrieved at: ${doc.retrievedAt} (not the source modification date)\n`
+      : "",
+    excerpt || doc.text,
+  ]
+    .filter(Boolean)
+    .join("\n");
   sourceUrl = doc.url;
   $("source-link").hidden = !sourceUrl;
   $("source-dialog").showModal();
@@ -311,7 +320,6 @@ function configure() {
     project: $("project").value,
     quiet: $("quiet").checked,
     profile: $("profile").value,
-    autoSearch: $("auto-search").checked,
   });
 }
 for (const id of ["mode", "goal", "project", "quiet"])
@@ -328,7 +336,7 @@ $("start").addEventListener("click", async () => {
     }
     return;
   }
-  await configure();
+  if (!(await configure())) return;
   const source = $("source").value;
   $("start").disabled = true;
   const result = await act("start", {
@@ -389,14 +397,6 @@ $("save-profile").addEventListener("click", async () => {
   const result = await configure();
   if (result) toast("Preferences saved for this session.");
 });
-$("inspect-codex").addEventListener("click", async () => {
-  $("connection-result").textContent =
-    "Checking your local Codex installation…";
-  const result = await act("codex.inspect");
-  $("connection-result").textContent = result
-    ? `${result.signedIn ? "Signed in" : "Not signed in"} · ${result.apps.length} apps discovered.\n${result.note}`
-    : "Codex is not ready. See the setup guide.";
-});
 $("add-context").addEventListener("click", () =>
   $("context-dialog").showModal(),
 );
@@ -427,9 +427,13 @@ $("context-search-open").addEventListener("click", () =>
 $("search-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   $("search-result").textContent = "Searching…";
-  const result = await act("context.mcp", { query: $("context-query").value });
+  const result = await act("context.connected", {
+    query: $("context-query").value,
+  });
   $("search-result").textContent = result
-    ? "Results added as a source for this session."
+    ? result.added !== undefined
+      ? `${result.added} verified source(s) added. ${result.retrieval?.detail || ""}`
+      : "Results added as a source for this session."
     : "Search unavailable. Check your connections.";
 });
 $("history-form").addEventListener("submit", async (event) => {
@@ -469,7 +473,9 @@ $("compact").addEventListener("click", async () => {
 setInterval(() => {
   if (!state) return;
   $("clock").textContent = timestamp(
-    state.startedAt ? Math.max(0, Date.now() - state.startedAt) : 0,
+    state.startedAt
+      ? Math.max(0, (state.stoppedAt || Date.now()) - state.startedAt)
+      : 0,
   );
   drawCards("fast");
   drawCards("strategy");

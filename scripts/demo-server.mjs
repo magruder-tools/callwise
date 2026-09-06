@@ -81,6 +81,8 @@ const server = http.createServer(async (req, res) => {
     ![
       "index.html",
       "app.mjs",
+      "connections.mjs",
+      "context.css",
       "styles.css",
       "capture.mjs",
       "audio-worklet.js",

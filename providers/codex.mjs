@@ -18,7 +18,9 @@ export class CodexRpc extends EventEmitter {
     this.buffer = "";
   }
   async connect() {
-    if (this.process) return;
+    if (this.connecting) return this.connecting;
+    if (this.process && this.initialized) return;
+    this.buffer = "";
     const child = this.spawn(this.bin, ["app-server"], {
       cwd: this.cwd,
       stdio: ["pipe", "pipe", "pipe"],
@@ -27,6 +29,7 @@ export class CodexRpc extends EventEmitter {
     this.process = child;
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
+      if (this.process !== child) return;
       this.buffer += chunk;
       if (this.buffer.length > 2_000_000) {
         this.fail(new Error("Codex sent an oversized response."));
@@ -45,23 +48,40 @@ export class CodexRpc extends EventEmitter {
       }
     });
     child.stderr.on("data", () => {}); // Diagnostics can contain private prompts or local paths.
-    child.on("error", () =>
+    child.on("error", () => {
+      if (this.process !== child) return;
       this.fail(
         new Error(
           "Codex could not start. Install Codex CLI, sign in, and check CALLWISE_CODEX_BIN.",
         ),
-      ),
-    );
+      );
+    });
     child.on("exit", () => {
+      if (this.process !== child) return;
       this.process = null;
+      this.initialized = false;
       this.fail(new Error("Codex App Server stopped. Restart the connection."));
     });
-    await this.request(
+    this.connecting = this.request(
       "initialize",
-      { clientInfo: { name: "callwise", title: "Callwise", version: "0.1.0" } },
+      {
+        clientInfo: { name: "callwise", title: "Callwise", version: "0.1.0" },
+        capabilities: { experimentalApi: true },
+      },
       15000,
-    );
-    this.send({ method: "initialized", params: {} });
+    )
+      .then(() => {
+        this.send({ method: "initialized", params: {} });
+        this.initialized = true;
+      })
+      .catch((error) => {
+        this.close();
+        throw error;
+      })
+      .finally(() => {
+        this.connecting = null;
+      });
+    return this.connecting;
   }
   protocol() {
     if (this.protocolInfo) return this.protocolInfo;
@@ -84,10 +104,10 @@ export class CodexRpc extends EventEmitter {
           "utf8",
         ),
       );
-      const modes = thread.definitions?.SandboxMode?.enum || [];
-      const approvals = JSON.stringify(
-        thread.definitions?.AskForApproval || {},
-      );
+      const definitions = thread.definitions || thread.$defs || {};
+      const turnDefinitions = turn.definitions || turn.$defs || {};
+      const modes = definitions.SandboxMode?.enum || [];
+      const approvals = JSON.stringify(definitions.AskForApproval || {});
       const sandbox = modes.includes("read-only")
         ? "read-only"
         : modes.includes("readOnly")
@@ -98,7 +118,10 @@ export class CodexRpc extends EventEmitter {
         : approvals.includes('"unlessTrusted"')
           ? "unlessTrusted"
           : null;
-      const policies = turn.definitions?.SandboxPolicy?.oneOf || [];
+      const policies =
+        turnDefinitions.SandboxPolicy?.oneOf ||
+        turnDefinitions.SandboxPolicy?.anyOf ||
+        [];
       const readOnly = policies.find((p) =>
         p.properties?.type?.enum?.includes("readOnly"),
       );
@@ -123,20 +146,44 @@ export class CodexRpc extends EventEmitter {
       throw new Error("Codex is not connected.");
     this.process.stdin.write(JSON.stringify(message) + "\n");
   }
-  request(method, params = {}, timeout = 15000) {
+  request(method, params = {}, timeout = 15000, signal) {
     const id = ++this.nextId;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
+      if (signal?.aborted) {
+        reject(new Error("Codex request cancelled."));
+        return;
+      }
+      let timer;
+      const cleanup = () => {
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", abort);
         this.pending.delete(id);
+      };
+      const abort = () => {
+        cleanup();
+        reject(new Error("Codex request cancelled."));
+      };
+      timer = setTimeout(() => {
+        cleanup();
         reject(new Error(`Codex ${method} timed out.`));
       }, timeout);
-      this.pending.set(id, { resolve, reject, timer });
+      this.pending.set(id, {
+        resolve: (value) => {
+          cleanup();
+          resolve(value);
+        },
+        reject: (error) => {
+          cleanup();
+          reject(error);
+        },
+        timer,
+      });
+      signal?.addEventListener("abort", abort, { once: true });
       try {
         this.send({ id, method, params });
-      } catch (e) {
-        clearTimeout(timer);
-        this.pending.delete(id);
-        reject(e);
+      } catch (error) {
+        cleanup();
+        reject(error);
       }
     });
   }
@@ -193,6 +240,8 @@ export class CodexRpc extends EventEmitter {
   close() {
     const child = this.process;
     this.process = null;
+    this.initialized = false;
+    this.buffer = "";
     if (child) {
       child.stdin.end();
       child.kill();
@@ -247,6 +296,9 @@ export class CodexProvider {
         "apps._default.enabled": false,
         "features.shell_tool": false,
         web_search: "disabled",
+        "features.code_mode.enabled": false,
+        "tools.view_image": false,
+        "tools.web_search": false,
       };
       for (const feature of [
         "unified_exec",
@@ -255,19 +307,23 @@ export class CodexProvider {
         "browser_use_external",
         "browser_use_full_cdp_access",
         "code_mode_host",
-        "code_mode",
         "node_repl",
         "multi_agent",
         "view_image",
         "tool_suggest",
         "skill_search",
         "skill_mcp_dependency_install",
+        "hooks",
+        "codex_hooks",
+        "memories",
       ])
         config[`features.${feature}`] = false;
       for (const name of Object.keys(effective.config?.mcp_servers || {}))
         config[`mcp_servers.${name}.enabled`] = false;
       for (const name of Object.keys(effective.config?.apps || {}))
         config[`apps.${name}.enabled`] = false;
+      for (const name of Object.keys(effective.config?.plugins || {}))
+        config[`plugins.${name}.enabled`] = false;
       signal.throwIfAborted();
       const result = await this.rpc.request("thread/start", {
         model: this.model,

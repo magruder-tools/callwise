@@ -1,0 +1,33 @@
+name: Offline development workspace
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/offline-workspace.yml'
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Package tracked source and offline test dependencies
+        run: |
+          git rev-parse HEAD > BASE_COMMIT.txt
+          git ls-files -z | tar --null -T - -cf /tmp/workspace.tar
+          tar -rf /tmp/workspace.tar node_modules BASE_COMMIT.txt
+          gzip /tmp/workspace.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: callwise-offline-workspace
+          path: /tmp/workspace.tar.gz
+          retention-days: 3
+          if-no-files-found: error

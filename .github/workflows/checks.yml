@@ -20,6 +20,9 @@ jobs:
         run: |
           npm test 2>&1 | tee test.log
           test ${PIPESTATUS[0]} -eq 0
+      - name: Capture renderer context
+        if: failure()
+        run: nl -ba ui/app.mjs | sed -n '425,445p' > renderer-lines.log
       - name: Dependency audit
         run: npm audit --omit=dev --audit-level=high
       - name: Upload diagnostics
@@ -30,4 +33,5 @@ jobs:
           path: |
             check.log
             test.log
+            renderer-lines.log
           if-no-files-found: ignore

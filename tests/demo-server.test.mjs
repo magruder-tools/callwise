@@ -32,6 +32,7 @@ test(
       assert.equal(response?.status, 200);
       for (const asset of [
         "app.mjs",
+        "suggestion-focus.mjs",
         "connections.mjs",
         "context.css",
         "styles.css",

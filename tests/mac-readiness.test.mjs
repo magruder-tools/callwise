@@ -78,5 +78,5 @@ test("Mac package includes the helper, explicit audio permissions and no runtime
   assert.ok(pkg.build.extraResources.some(r => r.to === "codex"));
   assert.ok(pkg.build.mac.extendInfo.NSAudioCaptureUsageDescription);
   assert.ok(!pkg.build.files.some(r => /\.env|connections\.bin/.test(r)));
-  assert.equal(pkg.version, "0.1.0");
+  assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
 });

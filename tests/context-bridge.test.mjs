@@ -313,6 +313,25 @@ test("Codex discovery paginates and exposes runtime ready state without changing
   assert.ok(rpc.calls.every((c) => !c.method.includes("write")));
   p.close();
 });
+test("discovery handles catalogs beyond 2100 entries and still rejects repeated cursors", async () => {
+  const rpc = new FakeRpc();
+  const original = rpc.request.bind(rpc);
+  let pages = 0;
+  rpc.request = async (method, params, ...rest) => {
+    if (method !== "app/list") return original(method, params, ...rest);
+    pages++;
+    return {
+      data: pages === 37 ? [APP] : [],
+      nextCursor: pages < 37 ? String(pages) : null,
+    };
+  };
+  const p = provider(rpc);
+  assert.equal((await p.inspect()).apps[0].ready, true);
+  assert.equal(pages, 37);
+  rpc.request = async () => ({ data: [], nextCursor: "repeated" });
+  await assert.rejects(p.inventory(), /discovery did not finish/);
+  p.close();
+});
 test("retrieval scopes a dedicated thread, uses exact app mentions, and accepts only actual tool evidence", async () => {
   const rpc = new FakeRpc(),
     p = provider(rpc);
@@ -534,7 +553,7 @@ test("unknown and malformed context selections are rejected", async () => {
     c.close();
   }
 });
-test("new sessions discard connector evidence but preserve explicitly retained notes", async () => {
+test("new sessions discard connector evidence but preserve saved choices and explicitly retained notes", async () => {
   const c = controller();
   try {
     await enable(c);
@@ -548,7 +567,9 @@ test("new sessions discard connector evidence but preserve explicitly retained n
     await c.command("new", { clearContext: false });
     assert.equal(c.engine.context.list().length, 1);
     assert.equal(c.engine.context.list()[0].kind, "note");
-    assert.equal(c.engine.settings.contextConsent, false);
+    assert.equal(c.engine.settings.contextConsent, true);
+    assert.deepEqual(c.engine.settings.contextApps, [APP.id]);
+    assert.equal(c.retrieval.snapshot().searches, 0);
   } finally {
     c.close();
   }

@@ -122,3 +122,10 @@ export class AudioCapture {
     for (const channel of ["mic", "system"]) this.onMeter(channel, 0);
   }
 }
+
+export function describeAudioCapture(capture = {}) {
+  const label = (status) => status === "receiving" ? "receiving" :
+    status === "listening" ? "listening" :
+    status?.startsWith("No signal") ? "no signal yet" : "starting";
+  return `Mic: ${label(capture.mic)} · Computer: ${label(capture.system)}`;
+}

@@ -12,8 +12,8 @@ export class CoachEngine extends EventEmitter {
     this.config = {
       fastDelay: 2500,
       strategyDelay: 14000,
-      fastCooldown: 7000,
-      strategyCooldown: 35000,
+      fastCooldown: 18000,
+      strategyCooldown: 60000,
       fastTTL: 30000,
       strategyTTL: 150000,
       maxFast: 120,
@@ -376,7 +376,7 @@ export class CoachEngine extends EventEmitter {
           );
           continue;
         }
-        if (!question && card.confidence < 0.58) continue;
+        if (!question && card.confidence < 0.7) continue;
         if (this.isDuplicate(card)) continue;
         const now = this.clock();
         this.cards.push({
@@ -392,7 +392,8 @@ export class CoachEngine extends EventEmitter {
           demo: this.source === "demo",
         });
       }
-      this.cards = this.cards.slice(-100);
+      // The normal session caps allow at most 270 cards. Keep their history.
+      this.cards = this.cards.slice(-300);
       return { ok: true };
     } catch (error) {
       if (epoch === this.epoch && !job.controller.signal.aborted)

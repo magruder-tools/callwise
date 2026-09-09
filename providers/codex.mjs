@@ -5,6 +5,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { COACH_SCHEMA } from "../core/prompts.mjs";
 
+// App Server may broadcast the full app catalog (including icon metadata).
+// Keep a finite per-message limit while allowing real connected-app catalogs.
+export const MAX_CODEX_MESSAGE_BYTES = 16 * 1024 * 1024;
+
 // JSON-lines client for the documented Codex App Server stdio protocol.
 export class CodexRpc extends EventEmitter {
   constructor({ bin = "codex", cwd, spawnImpl = spawn } = {}) {
@@ -31,20 +35,24 @@ export class CodexRpc extends EventEmitter {
     child.stdout.on("data", (chunk) => {
       if (this.process !== child) return;
       this.buffer += chunk;
-      if (this.buffer.length > 2_000_000) {
-        this.fail(new Error("Codex sent an oversized response."));
-        this.close();
-        return;
-      }
       let index;
       while ((index = this.buffer.indexOf("\n")) !== -1) {
         const line = this.buffer.slice(0, index);
         this.buffer = this.buffer.slice(index + 1);
+        if (Buffer.byteLength(line, "utf8") > MAX_CODEX_MESSAGE_BYTES) {
+          this.fail(new Error("Codex sent an oversized response."));
+          this.close();
+          return;
+        }
         try {
           this.receive(JSON.parse(line));
         } catch {
           /* Ignore non-JSON diagnostics; never display raw output. */
         }
+      }
+      if (Buffer.byteLength(this.buffer, "utf8") > MAX_CODEX_MESSAGE_BYTES) {
+        this.fail(new Error("Codex sent an oversized response."));
+        this.close();
       }
     });
     child.stderr.on("data", () => {}); // Diagnostics can contain private prompts or local paths.

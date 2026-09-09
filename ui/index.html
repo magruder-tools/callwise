@@ -1,8 +1,526 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'"><title>Callwise — Your thinking copilot</title><link rel="stylesheet" href="./styles.css"><link rel="stylesheet" href="./context.css"></head><body>
-<header class="topbar"><div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>callwise<span class="brand-period">.</span></span><span class="alpha">EARLY BUILD</span></div><div class="top-status"><span id="status-dot" class="dot"></span><span id="status-label">Ready when you are</span><time id="clock">00:00</time></div><div class="top-actions"><button id="compact" class="icon-button" title="Toggle floating compact view" aria-label="Toggle compact view">↗</button><button id="settings-open" class="text-button">Connections <span aria-hidden="true">⚙</span></button></div></header>
-<div class="workspace"><aside class="sidebar"><div class="section-label">YOUR WORKSPACE</div><button class="nav-item selected"><span aria-hidden="true">◉</span> Conversation <span class="nav-dot"></span></button><button id="add-context" class="nav-item"><span aria-hidden="true">▤</span> Add context <span class="plus">+</span></button><button id="export" class="nav-item"><span aria-hidden="true">↗</span> Export session</button><div class="side-divider"></div><div class="section-label">CALL INTENTION</div><label class="sr-only" for="mode">Call type</label><select id="mode"><option value="general">General conversation</option><option value="sales">Sales &amp; discovery</option><option value="strategy">Strategy &amp; consulting</option><option value="interview">Interview practice</option><option value="negotiation">Negotiation</option></select><label class="field-label" for="goal">What would make this call a win?</label><textarea id="goal" rows="4" maxlength="2000">Have a useful conversation and agree on clear next steps.</textarea><label class="field-label" for="project">Context scope</label><input id="project" placeholder="e.g. Northstar" maxlength="100"><label class="check quiet-check"><input type="checkbox" id="quiet"><span>Only help when I ask</span></label><p class="muted micro">Pause to change your call intention.</p><div class="side-divider"></div><div class="section-label">CONTEXT IN THIS SESSION <span id="context-count">0</span></div><div id="context-list" class="context-list"><p class="muted micro">Add a brief, notes, or a past transcript. Suggestions can cite the originals.</p></div><button id="context-search-open" class="subtle-button">Search connected context <span>↗</span></button><div class="lookup-state"><p id="context-lookup-status" class="muted micro" aria-live="polite">Connected context is off.</p><small id="context-lookup-count">0 / 20 Codex lookups this session</small><button id="context-cancel" type="button" class="subtle-button" hidden>Cancel lookup</button></div><div class="sidebar-bottom"><span class="privacy-icon" aria-hidden="true">◈</span><div><strong>Your conversation. Your control.</strong><p>Capture starts only when you do.</p></div></div></aside>
-<main class="main-panel"><div class="main-heading"><div><div class="eyebrow">A LITTLE MORE CLARITY</div><h1>Your thinking copilot.</h1><p id="heading-note">Stay in the conversation. Keep the bigger picture.</p></div><div class="orbit" aria-hidden="true"><div></div><span>✦</span></div></div><section class="session-bar" aria-label="Session controls"><div class="session-source"><span class="section-label">INPUT</span><label class="sr-only" for="source">Conversation source</label><select id="source"><option value="demo">Demo conversation</option><option value="audio">Microphone + computer</option><option value="fireflies">Fireflies live transcript</option><option value="manual">Paste conversation text</option></select></div><div class="session-buttons"><button id="start" class="primary-button"><span aria-hidden="true">▶</span> Start demo</button><button id="pause" class="secondary-button" disabled>Pause</button><button id="end" class="text-button" disabled>End</button></div></section><div id="demo-notice" class="notice"><span class="pill">DEMO</span><span>A fictional client call. Scripted coaching. No microphone, accounts, or API usage.</span></div><div id="live-consent" class="notice live-consent" hidden><label class="check"><input type="checkbox" id="consent"><span>AI assistance and transcription are permitted, and I have any required participant consent.</span></label></div><div id="fireflies-field" hidden><label class="field-label" for="fireflies-id">Active Fireflies transcript ID</label><input id="fireflies-id" placeholder="Meeting / transcript ID"></div><div class="coaching-heading"><h2>In the moment <span class="pill subtle">FAST</span></h2><span id="fast-status" class="lane-status">Listening for what matters</span></div><section id="fast-cards" class="cards" aria-live="polite" aria-label="Immediate coaching"></section><div class="coaching-heading strategy-heading"><h2>The bigger picture <span class="pill violet">STRATEGY</span></h2><span id="strategy-status" class="lane-status">Room for a deeper thought</span></div><section id="strategy-cards" class="cards" aria-live="polite" aria-label="Strategic coaching"></section><div class="ask-area"><form id="ask-form"><span class="ask-spark" aria-hidden="true">✦</span><label class="sr-only" for="question">Ask your copilot</label><input id="question" placeholder="What am I missing? Ask your copilot…" maxlength="3000" autocomplete="off"><button id="ask-submit" class="send-button" aria-label="Ask copilot" disabled>↑</button></form><div class="ask-footer"><button class="prompt-chip" data-question="What is the best next question to ask?">Next question</button><button class="prompt-chip" data-question="What assumption should I pressure-test?">Pressure-test this</button><button id="deep-think" class="prompt-chip">Think deeper <span>✦</span></button><span class="shortcut">⌘ ⇧ Space</span></div></div><div id="error-box" class="error-box" role="alert" hidden></div><footer class="main-footer"><span id="usage">0 fast · 0 strategic requests</span><span id="retention">Session stays in memory until you export</span></footer></main>
-<aside class="transcript-panel"><div class="transcript-heading"><h2>Conversation</h2><span id="transcript-count">0</span></div><div class="meters"><div class="meter-row"><span>You</span><div class="meter"><i id="meter-mic"></i></div><span id="mic-label">off</span></div><div class="meter-row"><span>Others</span><div class="meter"><i id="meter-system"></i></div><span id="system-label">off</span></div></div><div id="transcript" class="transcript" aria-label="Live transcript"><div class="transcript-empty"><span>〰</span><strong>The conversation starts here.</strong><p>Try the demo to watch context turn into useful questions and strategic advice.</p></div></div><form id="transcript-form" class="transcript-input"><label class="sr-only" for="speaker">Speaker</label><select id="speaker"><option>Other</option><option>You</option></select><label class="sr-only" for="transcript-text">Paste spoken text</label><textarea id="transcript-text" rows="2" placeholder="Paste a line from the conversation…" maxlength="10000"></textarea><button id="transcript-submit" class="secondary-button" disabled>Add to conversation</button></form><div class="transcript-foot"><span class="dot small"></span><span id="transcript-footnote">Nothing is being captured</span></div></aside></div>
-<dialog id="settings-dialog"><form method="dialog" class="dialog-top"><div><div class="eyebrow">MAKE IT YOURS</div><h2>Connections &amp; preferences</h2></div><button class="icon-button" aria-label="Close connections">×</button></form><p class="muted">Demo works without setup. For live coaching, add your API key here; Callwise encrypts it using macOS secure storage.</p><div class="connection-row"><div class="connection-icon green">✦</div><div><strong>OpenAI API</strong><p>Fast coaching, strategy, and transcription</p></div><span id="openai-status" class="badge">Key needed</span></div><label class="field-label" for="openai-key">OpenAI API key</label><input id="openai-key" type="password" autocomplete="off" spellcheck="false" placeholder="Paste key — saved encrypted on this Mac"><div class="connection-row"><div class="connection-icon purple">⌘</div><div><strong>Codex + ChatGPT</strong><p>Strategy and read-only context through your sign-in</p></div><button id="inspect-codex" class="secondary-button" type="button">Find my apps</button></div><div class="dialog-actions"><button id="codex-signin" type="button" class="primary-button">Sign in with ChatGPT</button><button id="codex-cancel-signin" type="button" class="secondary-button" hidden>Cancel sign-in</button></div><p class="muted micro">The Mac download includes the Codex helper. Sign-in opens the official login page in your browser. Your password stays with OpenAI.</p><div class="connection-row"><div class="connection-icon orange">≈</div><div><strong>Fireflies</strong><p>Optional live transcript and past meetings</p></div><span id="fireflies-status" class="badge">Optional</span></div><label class="field-label" for="fireflies-key">Fireflies API key (optional)</label><input id="fireflies-key" type="password" autocomplete="off" spellcheck="false" placeholder="Leave blank to keep the saved key"><div class="connection-row"><div class="connection-icon blue">▤</div><div><strong>Read-only context search</strong><p>Optional configured MCP source</p></div><span id="mcp-status" class="badge">Not connected</span></div><label class="field-label" for="fast-model">Fast coaching model</label><input id="fast-model" value="gpt-5.6-luna" autocomplete="off"><label class="field-label" for="strategy-model">Strategy model</label><input id="strategy-model" value="gpt-6-astra" autocomplete="off"><label class="field-label" for="transcription-model">Transcription model</label><input id="transcription-model" value="gpt-live-transcribe" autocomplete="off"><div class="dialog-actions"><button id="save-connections" type="button" class="primary-button">Save encrypted connections</button><button id="check-connections" type="button" class="secondary-button">Check model access</button></div><label class="field-label" for="backend">Strategy engine</label><select id="backend"><option value="openai">Astra via OpenAI API</option><option value="codex">Astra via Codex (experimental)</option></select><section class="context-settings" aria-labelledby="context-settings-title"><div class="eyebrow">YOUR WORK, IN CONTEXT</div><h3 id="context-settings-title">Connected context</h3><p class="muted micro">Uses apps available to your Codex ChatGPT sign-in, not ChatGPT memory or chat history. Global app settings are not changed.</p><label class="field-label" for="context-backend">Where to look</label><select id="context-backend"><option value="off">Off — only context I add myself</option><option value="codex">My connected apps through Codex</option><option value="mcp">My configured read-only MCP source</option></select><div class="context-apps" id="codex-apps" aria-label="Choose apps for this session"></div><label class="check quiet-check"><input type="checkbox" id="context-consent"><span>Allow selected read-only sources for this session. Relevant call excerpts may be used as search queries.</span></label><label class="check quiet-check"><input type="checkbox" id="auto-search"><span>Look up prior context when the conversation calls for it (requires a named Context scope)</span></label><button id="apply-context" type="button" class="primary-button">Apply context choices</button></section><label class="field-label" for="profile">What should your copilot know about you?</label><textarea id="profile" rows="3" maxlength="6000" placeholder="Your role, relevant experience, communication preferences…"></textarea><button id="save-profile" class="secondary-button">Save preferences for this session</button><p id="connection-result" class="connection-result" aria-live="polite"></p><div class="setup-note"><strong>No secret is shown again after saving.</strong><p>The key is stored in an encrypted local file protected by macOS secure storage. Live provider traffic still follows each provider's data handling.</p><p id="model-labels"></p><p>Model checks use metadata only. They do not prove inference, billing, audio capture, or call quality. API usage is billed separately from ChatGPT.</p></div></dialog>
-<dialog id="context-dialog"><form method="dialog" class="dialog-top"><div><div class="eyebrow">GIVE IT THE RIGHT CONTEXT</div><h2>Add a source</h2></div><button class="icon-button" aria-label="Close context dialog">×</button></form><p class="muted">Add only context appropriate for this call. Sources stay in this session unless you export.</p><form id="context-form"><label class="field-label" for="context-title">Title</label><input id="context-title" required maxlength="200" placeholder="Discovery call notes"><label class="field-label" for="context-url">Original link (optional)</label><input id="context-url" type="url" placeholder="https://…"><label class="field-label" for="context-text">Notes, brief, or transcript</label><textarea id="context-text" rows="8" required maxlength="250000" placeholder="Paste useful context here…"></textarea><div class="dialog-actions"><button type="button" id="import-file" class="secondary-button">Import text files</button><button class="primary-button">Add source</button></div></form></dialog><dialog id="source-dialog"><form method="dialog" class="dialog-top"><h2 id="source-title">Source</h2><button class="icon-button" aria-label="Close source">×</button></form><pre id="source-text"></pre><button id="source-link" class="secondary-button" hidden>Open original ↗</button></dialog><dialog id="search-dialog"><form method="dialog" class="dialog-top"><h2>Find relevant context</h2><button class="icon-button" aria-label="Close context search">×</button></form><form id="search-form"><label class="field-label" for="context-query">Ask your selected context sources</label><input id="context-query" maxlength="1000" placeholder="What context would help right now?"><button class="primary-button">Search</button></form><form id="history-form"><label class="field-label" for="history-id">Or import a past Fireflies transcript</label><input id="history-id" maxlength="200" placeholder="Transcript ID"><button class="secondary-button">Import transcript</button></form><p id="search-result" class="connection-result" aria-live="polite"></p></dialog><div id="toast" class="toast" hidden></div><script type="module" src="./app.mjs"></script></body></html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>Callwise — Your thinking copilot</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./context.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">c</span>Callwise<span
+          class="version"
+          >0.2.2</span
+        >
+      </div>
+      <div class="top-status">
+        <span id="status-dot" class="dot"></span
+        ><span id="status-label">Ready when you are</span
+        ><time id="clock">00:00</time>
+      </div>
+      <button
+        id="compact"
+        class="icon-button"
+        title="Float beside your call"
+        aria-label="Float beside your call"
+        aria-pressed="false"
+      >
+        ↗
+      </button>
+    </header>
+    <main class="main-panel">
+      <section class="call-toolbar" aria-label="Session controls">
+        <div class="session-buttons">
+          <button id="start" class="primary-button">Start demo</button
+          ><button id="pause" class="secondary-button" hidden>Pause</button
+          ><button id="end" class="text-button" hidden>End</button>
+        </div>
+        <div class="view-buttons">
+          <button id="setup-open" class="text-button">Setup</button
+          ><button id="transcript-open" class="text-button">Transcript</button
+          ><button id="advice-history-open" class="text-button">
+            History <span id="advice-count">0</span>
+          </button>
+        </div>
+      </section>
+      <section id="prepare-summary" class="prepare-summary">
+        <div class="eyebrow">BEFORE YOU BEGIN</div>
+        <h1>A little room to think.</h1>
+        <p id="call-summary">
+          Try a practice conversation, or choose your call setup.
+        </p>
+        <button id="prepare-open" class="secondary-button">
+          Prepare your call
+        </button>
+      </section>
+      <div id="demo-notice" class="demo-notice">
+        <span class="pill">DEMO</span> Fictional conversation · scripted
+        suggestions · no recording
+      </div>
+      <section class="focus-lane" aria-labelledby="fast-title">
+        <div class="lane-heading">
+          <h2 id="fast-title">Your next move</h2>
+          <button id="next-fast" class="new-suggestion" disabled>
+            New suggestion
+          </button>
+        </div>
+        <p id="fast-status" class="lane-status" aria-live="off">
+          Listening for what matters
+        </p>
+        <div
+          id="fast-cards"
+          class="cards"
+          aria-label="Immediate coaching"
+        ></div>
+      </section>
+      <section class="strategy-lane" aria-labelledby="strategy-title">
+        <div class="lane-heading">
+          <h2 id="strategy-title">Worth considering</h2>
+          <button id="next-strategy" class="new-suggestion" disabled>
+            New insight
+          </button>
+        </div>
+        <span id="strategy-status" class="sr-only"></span>
+        <div
+          id="strategy-cards"
+          class="cards"
+          aria-label="Strategic coaching"
+        ></div>
+      </section>
+      <div class="ask-area">
+        <form id="ask-form">
+          <label class="sr-only" for="question">Ask Callwise</label
+          ><input
+            id="question"
+            placeholder="Ask Callwise…"
+            maxlength="3000"
+            autocomplete="off"
+          /><button
+            id="ask-submit"
+            class="send-button"
+            aria-label="Ask Callwise"
+            disabled
+          >
+            ↑
+          </button>
+        </form>
+        <div class="ask-footer">
+          <button
+            class="prompt-chip"
+            data-question="What is the best next question to ask?"
+          >
+            Suggest a question</button
+          ><button id="deep-think" class="prompt-chip">Think deeper</button>
+        </div>
+      </div>
+      <div id="error-box" class="error-box" role="alert" hidden></div>
+      <footer class="call-footer">
+        <span id="capture-summary">Nothing is being captured</span
+        ><span>Advice stays until you move on</span>
+      </footer>
+    </main>
+    <dialog id="setup-dialog" class="drawer">
+      <form method="dialog" class="dialog-top">
+        <div>
+          <div class="eyebrow">BEFORE THE CALL</div>
+          <h2>Call setup</h2>
+        </div>
+        <button class="icon-button" aria-label="Close call setup">×</button>
+      </form>
+      <label class="field-label" for="source">Conversation source</label
+      ><select id="source">
+        <option value="demo">Demo conversation</option>
+        <option value="audio">Microphone + computer</option>
+        <option value="fireflies">Fireflies live transcript</option>
+        <option value="manual">Paste conversation text</option>
+      </select>
+      <div id="live-consent" class="notice live-consent" hidden>
+        <label class="check"
+          ><input type="checkbox" id="consent" /><span
+            >AI assistance and transcription are permitted, and I have any
+            required participant consent.</span
+          ></label
+        >
+      </div>
+      <div id="fireflies-field" hidden>
+        <label class="field-label" for="fireflies-id"
+          >Active Fireflies transcript ID</label
+        ><input id="fireflies-id" placeholder="Meeting / transcript ID" />
+      </div>
+      <label class="sr-only" for="mode">Call type</label
+      ><select id="mode">
+        <option value="general">General conversation</option>
+        <option value="sales">Sales &amp; discovery</option>
+        <option value="strategy">Strategy &amp; consulting</option>
+        <option value="interview">Interview practice</option>
+        <option value="negotiation">Negotiation</option></select
+      ><label class="field-label" for="goal"
+        >What would make this call a win?</label
+      ><textarea id="goal" rows="4" maxlength="2000">
+Have a useful conversation and agree on clear next steps.</textarea
+      ><label class="field-label" for="project">Context scope</label
+      ><input id="project" placeholder="e.g. Northstar" maxlength="100" /><label
+        class="check quiet-check"
+        ><input type="checkbox" id="quiet" /><span
+          >Only help when I ask</span
+        ></label
+      >
+      <p class="muted micro">
+        Setup changes are saved automatically on this Mac and used for future calls. Review the goal and Context scope before each call. Participant consent is confirmed separately for each call.
+      </p>
+      <div class="side-divider"></div>
+      <div class="section-label">
+        CONTEXT IN THIS SESSION <span id="context-count">0</span>
+      </div>
+      <div id="context-list" class="context-list">
+        <p class="muted micro">
+          Add a brief, notes, or a past transcript. Suggestions can cite the
+          originals.
+        </p>
+      </div>
+      <button id="context-search-open" class="subtle-button">
+        Search connected context <span>↗</span>
+      </button>
+      <div class="lookup-state">
+        <p id="context-lookup-status" class="muted micro" aria-live="polite">
+          Connected context is off.
+        </p>
+        <small id="context-lookup-count"
+          >0 / 20 Codex lookups this session</small
+        ><button id="context-cancel" type="button" class="subtle-button" hidden>
+          Cancel lookup
+        </button>
+      </div>
+      <div class="dialog-actions">
+        <button id="add-context" class="secondary-button">Add context</button
+        ><button id="settings-open" class="secondary-button">
+          Connections &amp; preferences
+        </button>
+      </div>
+      <details class="session-details">
+        <summary>Session information</summary>
+        <p id="usage"></p>
+        <p id="retention"></p>
+        <button id="export" class="secondary-button">Export session</button>
+      </details>
+      <form method="dialog" class="dialog-bottom">
+        <button class="primary-button">Done</button>
+      </form>
+    </dialog>
+    <dialog id="transcript-dialog" class="drawer">
+      <form method="dialog" class="dialog-top">
+        <h2>Transcript <span id="transcript-count">0</span></h2>
+        <button class="icon-button" aria-label="Close transcript">×</button>
+      </form>
+      <div class="meters">
+        <div class="meter-row">
+          <span>You</span>
+          <div class="meter"><i id="meter-mic"></i></div>
+          <span id="mic-label">off</span>
+        </div>
+        <div class="meter-row">
+          <span>Others</span>
+          <div class="meter"><i id="meter-system"></i></div>
+          <span id="system-label">off</span>
+        </div>
+      </div>
+      <div id="transcript" class="transcript" aria-label="Live transcript">
+        <div class="transcript-empty">
+          <span>〰</span><strong>The conversation starts here.</strong>
+          <p>
+            Try the demo to watch context turn into useful questions and
+            strategic advice.
+          </p>
+        </div>
+      </div>
+      <form id="transcript-form" class="transcript-input">
+        <label class="sr-only" for="speaker">Speaker</label
+        ><select id="speaker">
+          <option>Other</option>
+          <option>You</option></select
+        ><label class="sr-only" for="transcript-text">Paste spoken text</label
+        ><textarea
+          id="transcript-text"
+          rows="2"
+          placeholder="Paste a line from the conversation…"
+          maxlength="10000"
+        ></textarea
+        ><button id="transcript-submit" class="secondary-button" disabled>
+          Add to conversation
+        </button>
+      </form>
+      <div class="transcript-foot">
+        <span class="dot small"></span
+        ><span id="transcript-footnote">Nothing is being captured</span>
+      </div>
+    </dialog>
+    <dialog id="advice-history-dialog" class="drawer">
+      <form method="dialog" class="dialog-top">
+        <div>
+          <div class="eyebrow">THIS SESSION</div>
+          <h2>Suggestion history</h2>
+        </div>
+        <button class="icon-button" aria-label="Close history">×</button>
+      </form>
+      <p class="muted">
+        Earlier suggestions stay here. Open one to read it again.
+      </p>
+      <div id="advice-history-list"></div>
+    </dialog>
+    <dialog id="settings-dialog">
+      <form method="dialog" class="dialog-top">
+        <div>
+          <div class="eyebrow">MAKE IT YOURS</div>
+          <h2>Connections &amp; preferences</h2>
+        </div>
+        <button class="icon-button" aria-label="Close connections">×</button>
+      </form>
+      <p class="muted">
+        Demo works without setup. For live coaching, add your API key here;
+        Callwise encrypts it using macOS secure storage.
+      </p>
+      <div class="connection-row">
+        <div class="connection-icon green">✦</div>
+        <div>
+          <strong>OpenAI API</strong>
+          <p>Fast coaching, strategy, and transcription</p>
+        </div>
+        <span id="openai-status" class="badge">Key needed</span>
+      </div>
+      <label class="field-label" for="openai-key">OpenAI API key</label
+      ><input
+        id="openai-key"
+        type="password"
+        autocomplete="off"
+        spellcheck="false"
+        placeholder="Paste key — saved encrypted on this Mac"
+      />
+      <div class="connection-row">
+        <div class="connection-icon purple">⌘</div>
+        <div>
+          <strong>Codex + ChatGPT</strong>
+          <p>Strategy and read-only context through your sign-in</p>
+        </div>
+        <button id="inspect-codex" class="secondary-button" type="button">
+          Find my apps
+        </button>
+      </div>
+      <div class="dialog-actions">
+        <button id="codex-signin" type="button" class="primary-button">
+          Sign in with ChatGPT</button
+        ><button
+          id="codex-cancel-signin"
+          type="button"
+          class="secondary-button"
+          hidden
+        >
+          Cancel sign-in
+        </button>
+      </div>
+      <p class="muted micro">
+        The Mac download includes the Codex helper. Sign-in opens the official
+        login page in your browser. Your password stays with OpenAI. Sign-in is saved; available apps refresh when you open Connections. Your preferences and selected apps are saved on this Mac until you change them.
+      </p>
+      <div class="connection-row">
+        <div class="connection-icon orange">≈</div>
+        <div>
+          <strong>Fireflies</strong>
+          <p>Optional live transcript and past meetings</p>
+        </div>
+        <span id="fireflies-status" class="badge">Optional</span>
+      </div>
+      <label class="field-label" for="fireflies-key"
+        >Fireflies API key (optional)</label
+      ><input
+        id="fireflies-key"
+        type="password"
+        autocomplete="off"
+        spellcheck="false"
+        placeholder="Leave blank to keep the saved key"
+      />
+      <div class="connection-row">
+        <div class="connection-icon blue">▤</div>
+        <div>
+          <strong>Read-only context search</strong>
+          <p>Optional configured MCP source</p>
+        </div>
+        <span id="mcp-status" class="badge">Not connected</span>
+      </div>
+      <label class="field-label" for="fast-model">Fast coaching model</label
+      ><input id="fast-model" value="gpt-5.6-luna" autocomplete="off" /><label
+        class="field-label"
+        for="strategy-model"
+        >Strategy model</label
+      ><input
+        id="strategy-model"
+        value="gpt-6-astra"
+        autocomplete="off"
+      /><label class="field-label" for="transcription-model"
+        >Transcription model</label
+      ><input
+        id="transcription-model"
+        value="gpt-live-transcribe"
+        autocomplete="off"
+      />
+      <div class="dialog-actions">
+        <button id="save-connections" type="button" class="primary-button">
+          Save encrypted connections</button
+        ><button id="check-connections" type="button" class="secondary-button">
+          Check model access
+        </button>
+      </div>
+      <label class="field-label" for="backend">Strategy engine</label
+      ><select id="backend">
+        <option value="openai">Astra via OpenAI API</option>
+        <option value="codex">Astra via Codex (experimental)</option>
+      </select>
+      <section
+        class="context-settings"
+        aria-labelledby="context-settings-title"
+      >
+        <div class="eyebrow">YOUR WORK, IN CONTEXT</div>
+        <h3 id="context-settings-title">Connected context</h3>
+        <p class="muted micro">
+          Uses apps available to your Codex ChatGPT sign-in, not ChatGPT memory
+          or chat history. Global app settings are not changed.
+        </p>
+        <label class="field-label" for="context-backend">Where to look</label
+        ><select id="context-backend">
+          <option value="off">Off — only context I add myself</option>
+          <option value="codex">My connected apps through Codex</option>
+          <option value="mcp">My configured read-only MCP source</option>
+        </select>
+        <div
+          class="context-apps"
+          id="codex-apps"
+          aria-label="Choose saved apps"
+        ></div>
+        <label class="check quiet-check"
+          ><input type="checkbox" id="context-consent" /><span
+            >Allow selected read-only sources for this and future calls. Relevant call
+            excerpts may be used as search queries.</span
+          ></label
+        ><label class="check quiet-check"
+          ><input type="checkbox" id="auto-search" /><span
+            >Look up prior context when the conversation calls for it (requires
+            a named Context scope)</span
+          ></label
+        ><button id="apply-context" type="button" class="primary-button">
+          Save context preferences
+        </button>
+      </section>
+      <label class="field-label" for="profile"
+        >What should your copilot know about you?</label
+      ><textarea
+        id="profile"
+        rows="3"
+        maxlength="6000"
+        placeholder="Your role, relevant experience, communication preferences…"
+      ></textarea
+      ><button id="save-profile" class="secondary-button">
+        Save preferences
+      </button>
+      <p
+        id="connection-result"
+        class="connection-result"
+        aria-live="polite"
+      ></p>
+      <div class="setup-note">
+        <strong>No secret is shown again after saving.</strong>
+        <p>
+          The key is stored in an encrypted local file protected by macOS secure
+          storage. Live provider traffic still follows each provider's data
+          handling.
+        </p>
+        <p id="model-labels"></p>
+        <p>
+          Model checks use metadata only. They do not prove inference, billing,
+          audio capture, or call quality. API usage is billed separately from
+          ChatGPT.
+        </p>
+      </div>
+    </dialog>
+    <dialog id="context-dialog">
+      <form method="dialog" class="dialog-top">
+        <div>
+          <div class="eyebrow">GIVE IT THE RIGHT CONTEXT</div>
+          <h2>Add a source</h2>
+        </div>
+        <button class="icon-button" aria-label="Close context dialog">×</button>
+      </form>
+      <p class="muted">
+        Add only context appropriate for this call. Sources stay in this session
+        unless you export.
+      </p>
+      <form id="context-form">
+        <label class="field-label" for="context-title">Title</label
+        ><input
+          id="context-title"
+          required
+          maxlength="200"
+          placeholder="Discovery call notes"
+        /><label class="field-label" for="context-url"
+          >Original link (optional)</label
+        ><input id="context-url" type="url" placeholder="https://…" /><label
+          class="field-label"
+          for="context-text"
+          >Notes, brief, or transcript</label
+        ><textarea
+          id="context-text"
+          rows="8"
+          required
+          maxlength="250000"
+          placeholder="Paste useful context here…"
+        ></textarea>
+        <div class="dialog-actions">
+          <button type="button" id="import-file" class="secondary-button">
+            Import text files</button
+          ><button class="primary-button">Add source</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="source-dialog">
+      <form method="dialog" class="dialog-top">
+        <h2 id="source-title">Source</h2>
+        <button class="icon-button" aria-label="Close source">×</button>
+      </form>
+      <pre id="source-text"></pre>
+      <button id="source-link" class="secondary-button" hidden>
+        Open original ↗
+      </button>
+    </dialog>
+    <dialog id="search-dialog">
+      <form method="dialog" class="dialog-top">
+        <h2>Find relevant context</h2>
+        <button class="icon-button" aria-label="Close context search">×</button>
+      </form>
+      <form id="search-form">
+        <label class="field-label" for="context-query"
+          >Ask your selected context sources</label
+        ><input
+          id="context-query"
+          maxlength="1000"
+          placeholder="What context would help right now?"
+        /><button class="primary-button">Search</button>
+      </form>
+      <form id="history-form">
+        <label class="field-label" for="history-id"
+          >Or import a past Fireflies transcript</label
+        ><input
+          id="history-id"
+          maxlength="200"
+          placeholder="Transcript ID"
+        /><button class="secondary-button">Import transcript</button>
+      </form>
+      <p id="search-result" class="connection-result" aria-live="polite"></p>
+    </dialog>
+    <div id="toast" class="toast" hidden></div>
+    <script type="module" src="./app.mjs"></script>
+  </body>
+</html>

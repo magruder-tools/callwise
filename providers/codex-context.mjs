@@ -333,12 +333,14 @@ export class CodexContextProvider {
     cwd,
     rpc,
     timeoutMs = 45000,
+    discoveryTimeoutMs = 90000,
     maxToolCalls = 8,
   } = {}) {
     this.rpc = rpc || new CodexRpc({ bin, cwd });
     this.model = model;
     this.cwd = cwd;
     this.timeoutMs = timeoutMs;
+    this.discoveryTimeoutMs = discoveryTimeoutMs;
     this.maxToolCalls = maxToolCalls;
     this.busy = false;
     this.operation = null;
@@ -367,7 +369,7 @@ export class CodexContextProvider {
       const page = await this.rpc.request(
         "app/list",
         { cursor, limit: 100, forceRefetch: force && !cursor },
-        15000,
+        45000,
         signal,
       );
       if (!Array.isArray(page.data))
@@ -376,7 +378,7 @@ export class CodexContextProvider {
         );
       apps.push(...page.data.filter((a) => appIdOK(a.id)));
       cursor = page.nextCursor || null;
-      if (cursor && (cursors.has(cursor) || cursors.size >= 20))
+      if (cursor && (cursors.has(cursor) || cursors.size >= 100))
         throw new Error("Codex app discovery did not finish. Try again.");
       if (cursor) cursors.add(cursor);
     } while (cursor);
@@ -392,7 +394,7 @@ export class CodexContextProvider {
     this.operation = request;
     const combined = AbortSignal.any([
       request.signal,
-      AbortSignal.timeout(this.timeoutMs),
+      AbortSignal.timeout(this.discoveryTimeoutMs),
       ...(signal ? [signal] : []),
     ]);
     const stop = () => this.rpc.close();

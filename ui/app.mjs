@@ -1,5 +1,7 @@
-import { AudioCapture } from "./capture.mjs";
+import { AudioCapture, describeAudioCapture } from "./capture.mjs";
 import { connectionControls } from "./connections.mjs";
+import { SuggestionFocus } from "./suggestion-focus.mjs";
+const focus = new SuggestionFocus();
 const $ = (id) => document.getElementById(id);
 const esc = (value) =>
   String(value ?? "").replace(
@@ -76,67 +78,127 @@ const connections = connectionControls(bridge, { toast, showError });
 const timestamp = (ms) =>
   `${String(Math.floor(ms / 60000)).padStart(2, "0")}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
 
+function cardAge(card) {
+  const earlier = card.expiresAt <= Date.now();
+  return earlier
+    ? "Earlier · check relevance"
+    : "From this conversation";
+}
 function drawCards(lane) {
-  const all = state.cards.filter(
-    (c) => c.lane === lane && c.status !== "dismissed",
-  );
-  const cards = all
-    .filter((c) => c.status === "accepted" || c.expiresAt > Date.now())
-    .slice(-2)
-    .reverse();
-  const signature = JSON.stringify(cards.map((c) => [c.id, c.status]));
-  if ((lane === "fast" ? fastSignature : strategySignature) === signature)
-    return;
-  if (lane === "fast") fastSignature = signature;
-  else strategySignature = signature;
+  const card = focus.current?.[lane];
+  const pending = focus.pending(lane).length;
+  const next = $(`next-${lane}`);
+  next.disabled = !pending;
+  next.textContent = pending
+    ? `${pending} new ${lane === "fast" ? (pending === 1 ? "suggestion" : "suggestions") : pending === 1 ? "insight" : "insights"}`
+    : lane === "fast"
+      ? "New suggestion"
+      : "New insight";
   const container = $(`${lane}-cards`);
-  container.replaceChildren();
-  if (!cards.length) {
-    container.innerHTML = `<div class="empty-card ${lane === "strategy" ? "strategy" : ""}"><span class="empty-symbol" aria-hidden="true">${lane === "fast" ? "✧" : "⌘"}</span><div><strong>${lane === "fast" ? "The right thought, at the right time." : "A second perspective, working in the background."}</strong><p>${lane === "fast" ? "Useful questions, relevant facts, and words you can make your own." : "Space to notice assumptions, connect context, and think a few steps ahead."}</p></div></div>`;
-    return;
-  }
-  for (const card of cards) {
+  // Keep the same DOM node while reading: selection, scroll and Details survive.
+  if (container.dataset.cardId !== (card?.id || "empty")) {
+    container.dataset.cardId = card?.id || "empty";
+    container.replaceChildren();
+    if (!card) {
+      const empty = document.createElement("div");
+      empty.className = "empty-card";
+      empty.innerHTML = `<span class="empty-mark" aria-hidden="true">${lane === "fast" ? "✦" : "·"}</span><p>${lane === "fast" ? "Stay with the conversation." : "Space for a bigger thought."}</p><small>${lane === "fast" ? "A useful suggestion will appear here. It stays until you move on." : "Deeper advice will wait here when it adds something."}</small>`;
+      container.append(empty);
+      return;
+    }
     const article = document.createElement("article");
     article.className = `coaching-card ${lane === "strategy" ? "strategy" : ""}`;
-    article.innerHTML = `<div class="card-meta"><span>${card.demo ? "SCRIPTED DEMO · " : ""}${esc(card.kind)}</span><small>${(card.latencyMs / 1000).toFixed(1)}s · ${card.sources.length ? "SOURCE LINKED" : "SUGGESTION"}</small></div><h3>${esc(card.title)}</h3><p class="card-body">${esc(card.body)}</p>${card.say ? `<div class="say">“${esc(card.say)}”</div>` : ""}<div class="card-sources"></div><div class="card-actions"></div>`;
+    article.dataset.cardId = card.id;
+    const spoken = lane === "fast" && card.say;
+    const lead = spoken || card.title;
+    article.innerHTML = `<div class="card-scroll"><div class="card-meta"><span>${card.demo ? "DEMO · " : ""}${esc(card.kind)}</span><span class="card-age"></span></div><h3 class="card-lead">${esc(spoken ? `“${lead}”` : lead)}</h3><details class="advice-details"><summary>Details${card.sources.length ? ` · ${card.sources.length} ${card.sources.length === 1 ? "source" : "sources"}` : ""}</summary>${spoken ? `<h4>${esc(card.title)}</h4>` : ""}${lane === "strategy" && card.say ? `<p class="card-body">“${esc(card.say)}”</p>` : ""}<p class="card-body">${esc(card.body)}</p><p class="card-reason">${esc(card.reason)}</p><div class="card-sources"></div></details></div><div class="card-actions"><button class="keep-button" type="button">Keep</button><button class="dismiss-button" type="button">Dismiss</button></div>`;
     for (const source of card.sources) {
       const button = document.createElement("button");
       button.className = "source-chip";
-      button.textContent = `▤ ${source.title}`;
+      button.textContent = source.title;
       button.addEventListener("click", () =>
         openSource(source.id, source.excerpt),
       );
       article.querySelector(".card-sources").append(button);
     }
-    const actions = article.querySelector(".card-actions");
-    if (card.status === "accepted") {
-      const label = document.createElement("span");
-      label.className = "feedback-saved";
-      label.textContent = "✓ Marked useful";
-      actions.append(label);
-    } else
-      for (const [label, status] of [
-        ["✓ Useful", "accepted"],
-        ["Dismiss", "dismissed"],
-      ]) {
-        const button = document.createElement("button");
-        button.textContent = label;
-        button.addEventListener("click", () =>
-          act("feedback", { id: card.id, status }),
-        );
-        actions.append(button);
-      }
-    const why = document.createElement("button");
-    why.className = "why";
-    why.textContent = "Why this?";
-    why.addEventListener("click", () => toast(card.reason));
-    actions.append(why);
+    article
+      .querySelector(".keep-button")
+      .addEventListener("click", () =>
+        act("feedback", { id: card.id, status: "accepted" }),
+      );
+    article.querySelector(".dismiss-button").addEventListener("click", () => {
+      focus.dismiss(lane);
+      drawCards(lane);
+      if (card.status !== "accepted")
+        void act("feedback", { id: card.id, status: "dismissed" });
+    });
     container.append(article);
+  }
+  if (card) {
+    container.querySelector(".card-age").textContent = cardAge(card);
+    const keep = container.querySelector(".keep-button");
+    keep.textContent = card.status === "accepted" ? "✓ Kept" : "Keep";
+    keep.disabled = card.status === "accepted";
+  }
+}
+function drawHistory() {
+  const list = $("advice-history-list");
+  list.replaceChildren();
+  if (!state.cards.length) {
+    list.textContent =
+      "Your suggestions will be collected here during the call.";
+    return;
+  }
+  for (const card of [...state.cards].reverse()) {
+    const row = document.createElement("article");
+    row.className = "history-item";
+    row.innerHTML = `<div class="card-meta"><span>${card.lane === "fast" ? "Next move" : "Worth considering"} · ${card.status === "accepted" ? "Kept" : card.status === "dismissed" ? "Dismissed" : "Suggestion"}</span><span>${esc(cardAge(card))}</span></div><h3>${esc(card.say || card.title)}</h3><p>${esc(card.body)}</p>`;
+    if (card.status !== "dismissed") {
+      const open = document.createElement("button");
+      open.className = "secondary-button";
+      open.textContent = "Show in call";
+      open.addEventListener("click", () => {
+        focus.select(card.lane, card.id);
+        drawCards(card.lane);
+        $("advice-history-dialog").close();
+      });
+      row.append(open);
+    }
+    list.append(row);
   }
 }
 
 function render(next) {
+  const sessionChanged = state?.sessionId !== next.sessionId;
   state = next;
+  if (sessionChanged) {
+    $("source").value = state.preferences?.preferredSource || "demo";
+    $("backend").value = state.preferences?.preferredBackend || "openai";
+    $("consent").checked = false;
+  }
+  if (bridge.desktop) {
+    compact = !!state.preferences?.compact;
+    document.body.classList.toggle("compact", compact);
+    $("compact").setAttribute("aria-pressed", String(compact));
+  }
+  focus.sync(state.sessionId, state.cards);
+  if (sessionChanged) {
+    for (const lane of ["fast", "strategy"])
+      $(`${lane}-cards`).dataset.cardId = "";
+    $("error-box").hidden = true;
+    $("advice-history-dialog").close();
+  }
+  $("advice-count").textContent = state.cards.length;
+  $("prepare-summary").hidden = state.status !== "idle";
+  $("call-summary").textContent = state.settings.goal;
+  $("capture-summary").textContent =
+    state.status === "running"
+      ? state.source === "demo"
+        ? "Demo · no recording"
+        : state.source === "audio"
+          ? describeAudioCapture(state.capture)
+          : "Receiving conversation text"
+      : "Nothing is being captured";
   const running = state.status === "running",
     paused = state.status === "paused",
     ended = state.status === "ended";
@@ -161,6 +223,9 @@ function render(next) {
       : $("source").value === "demo"
         ? "▶ Start demo"
         : "▶ Start session";
+  $("start").hidden = running || state.connecting;
+  $("pause").hidden = !running && !state.connecting;
+  $("end").hidden = !running && !paused && !state.connecting;
   $("pause").disabled = !running && !state.connecting;
   $("end").disabled = !running && !paused && !state.connecting;
   for (const id of [
@@ -193,10 +258,10 @@ function render(next) {
   $("quiet").checked = state.settings.quiet;
 
   $("fast-status").textContent = state.thinking.fast
-    ? "Finding a useful next thought…"
+    ? "Considering the conversation…"
     : running
-      ? "Watching for what matters"
-      : "Ready for your conversation";
+      ? "Listening for a useful moment"
+      : "Suggestions stay until you move on";
   $("strategy-status").textContent = state.thinking.strategy
     ? "Thinking through the bigger picture…"
     : running
@@ -320,9 +385,11 @@ function configure() {
     project: $("project").value,
     quiet: $("quiet").checked,
     profile: $("profile").value,
+    preferredSource: $("source").value,
+    preferredBackend: $("backend").value,
   });
 }
-for (const id of ["mode", "goal", "project", "quiet"])
+for (const id of ["mode", "goal", "project", "quiet", "source", "backend"])
   $(id).addEventListener("change", configure);
 $("source").addEventListener("change", updateSource);
 $("start").addEventListener("click", async () => {
@@ -330,7 +397,6 @@ $("start").addEventListener("click", async () => {
   if (state.status === "ended") {
     const result = await act("new", { clearContext: state.source === "demo" });
     if (result) {
-      $("source").value = "demo";
       $("consent").checked = false;
       render(result);
     }
@@ -347,6 +413,7 @@ $("start").addEventListener("click", async () => {
   });
   if (result) {
     render(result);
+    if (result.status === "running") $("setup-dialog").close();
     if (source === "audio" && result.status === "running")
       try {
         await capture.start();
@@ -390,12 +457,15 @@ $("transcript-form").addEventListener("submit", async (event) => {
   const result = await act("transcript", { text, speaker: $("speaker").value });
   if (result) $("transcript-text").value = "";
 });
-$("settings-open").addEventListener("click", () =>
-  $("settings-dialog").showModal(),
-);
+$("settings-open").addEventListener("click", () => {
+  $("settings-dialog").showModal();
+  if (bridge.desktop && !state?.contextApps?.length &&
+      state?.status !== "running" && !state?.connecting)
+    $("inspect-codex").click();
+});
 $("save-profile").addEventListener("click", async () => {
   const result = await configure();
-  if (result) toast("Preferences saved for this session.");
+  if (result) toast(bridge.desktop ? "Preferences saved on this Mac." : "Preferences kept until this demo closes.");
 });
 $("add-context").addEventListener("click", () =>
   $("context-dialog").showModal(),
@@ -466,10 +536,27 @@ $("export").addEventListener("click", async () => {
 $("compact").addEventListener("click", async () => {
   compact = !compact;
   document.body.classList.toggle("compact", compact);
+  $("compact").setAttribute("aria-pressed", String(compact));
   if (bridge.desktop) await act("desktop.compact", { enabled: compact });
   else
     toast("Compact layout enabled. The desktop app can float above your call.");
 });
+
+for (const id of ["setup-open", "prepare-open"])
+  $(id).addEventListener("click", () => $("setup-dialog").showModal());
+$("transcript-open").addEventListener("click", () =>
+  $("transcript-dialog").showModal(),
+);
+$("advice-history-open").addEventListener("click", () => {
+  drawHistory();
+  $("advice-history-dialog").showModal();
+});
+for (const lane of ["fast", "strategy"])
+  $(`next-${lane}`).addEventListener("click", () => {
+    focus.advance(lane);
+    drawCards(lane);
+  });
+
 setInterval(() => {
   if (!state) return;
   $("clock").textContent = timestamp(

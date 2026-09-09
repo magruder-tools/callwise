@@ -1,5 +1,20 @@
 /* Floating focus: presentation only. Full tools remain in the secondary dialogs. */
-:root { --bg:#171b1e; --surface:#22282c; --raised:#293136; --border:#343e44; --text:#f4f6f7; --muted:#aab3ba; --accent:#97e4cc; --accent-ink:#10271f; }
+/* Palette sampled from the selected Floating focus mockup. */
+:root { --bg:#171b1f; --surface:#202429; --raised:#2a2f34; --border:#3c4249; --text:#f6f7f9; --muted:#b0b5be; --accent:#79f5d2; --accent-ink:#142723; }
+body { background:linear-gradient(135deg,#181d20,var(--bg)); }
+button:hover:not(:disabled) { background:#32383e; }
+input, select, textarea { background:#1a1e23; }
+.primary-button, .secondary-button { background:linear-gradient(#2b3036,#262b31); color:var(--text); border-color:#343a41; }
+.primary-button:hover:not(:disabled), .secondary-button:hover:not(:disabled) { background:#353b42; }
+.dot { background:#858d96; }
+.dot.running { background:var(--accent); }
+.coaching-card, .new-suggestion, .pill { border-color:var(--border); }
+.new-suggestion, .pill, .card-body { color:#d0d4db; }
+.strategy-lane .coaching-card { background:var(--bg); }
+.empty-card p { color:var(--text); }
+.meter { background:#343c42; }
+.icon-button[aria-pressed="true"] { border-color:#52676a; }
+
 html, body { height:100%; overflow:hidden; }
 body { display:flex; flex-direction:column; }
 .topbar { height:72px; flex:0 0 72px; gap:14px; padding:0 24px; border-color:var(--border); }
@@ -12,55 +27,56 @@ body { display:flex; flex-direction:column; }
 #more-open { margin-left:auto; color:var(--muted); font-size:15px; letter-spacing:1px; }
 .session-buttons { gap:8px; }
 .session-buttons button { min-height:38px; padding:8px 15px; font-size:13px; }
-.end-button { background:#ce3c40; color:white; }
-.end-button:hover:not(:disabled) { background:#e0484c; }
+.end-button { background:#e63936; color:white; }
+.end-button:hover:not(:disabled) { background:#f04a46; }
 .main-panel { display:flex; flex-direction:column; flex:1; min-height:0; width:100%; max-width:none; margin:0; padding:0 24px; }
 .focus-lane { flex:1; min-height:0; position:relative; display:flex; flex-direction:column; }
 .focus-lane .lane-heading { height:0; }
 .focus-lane .lane-heading h2, #fast-status { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
-#next-fast { position:absolute; bottom:13px; left:100px; z-index:1; border:1px solid #35413f; border-radius:24px; padding:8px 14px; min-height:36px; font-size:13px; background:#263431; }
+#next-fast { position:absolute; bottom:13px; left:100px; z-index:1; border:1px solid #343b42; border-radius:24px; padding:8px 14px; min-height:36px; font-size:13px; background:#282d33; }
 .focus-lane .cards { height:100%; min-height:0; }
 .focus-lane .coaching-card { height:100%; background:transparent; border:0; border-radius:0; }
 .focus-lane .card-scroll { padding:22px 2px 8px; min-height:0; scrollbar-gutter:stable; }
 .focus-lane .card-meta { margin-bottom:8px; font-size:10px; }
 .focus-lane .card-meta > span:first-child { display:none; }
-.focus-lane .card-age { text-align:left; max-width:none; color:#87929a; }
+.focus-lane .card-age { text-align:left; max-width:none; color:#9ba3ad; }
 .focus-lane .card-lead { font-size:clamp(25px,4.3vw,34px); font-weight:600; line-height:1.23; letter-spacing:-.65px; max-width:38ch; }
 .card-summary { margin-top:13px; color:var(--muted); font-size:16px; line-height:1.5; }
 .focus-lane .advice-details { margin-top:10px; }
 .focus-lane .card-actions { height:60px; min-height:60px; padding:10px 0 14px; gap:12px; }
-.focus-lane .card-actions .keep-button { min-height:36px; padding:8px 18px; background:#283d36; color:#d2f4e7; border-radius:24px; font-size:13px; }
+.focus-lane .card-actions .keep-button { min-height:36px; padding:8px 18px; background:#2a3838; color:#f0f4f5; border-radius:24px; font-size:13px; }
 .focus-lane .dismiss-button { margin-left:auto; font-size:12px; }
 .focus-lane .empty-card { height:100%; border:0; border-radius:0; background:transparent; align-items:flex-start; text-align:left; padding:22px 2px; }
 .focus-lane .empty-mark { display:none; }
 .focus-lane .empty-card p { color:var(--text); font-size:30px; letter-spacing:-.6px; font-weight:550; }
 .focus-lane .empty-card small { font-size:15px; max-width:45ch; line-height:1.6; }
 .ask-area { display:flex; gap:10px; margin-top:0; padding:0 0 16px; flex:0 0 auto; }
-.ask-area form { flex:1; min-width:0; padding:4px; background:#1d2327; border-color:#3d474e; border-radius:10px; }
+.ask-area form { flex:1; min-width:0; padding:4px; background:#202429; border-color:#3c4249; border-radius:10px; }
 .ask-area input { padding:7px 10px; font-size:15px; }
-.send-button { background:transparent; color:#94aaa4; }
-.transcript-trigger { padding:10px 14px; background:#20262a; border-color:#3d474e; font-size:13px; }
+.send-button { background:transparent; color:#b3bcc6; }
+.transcript-trigger { padding:10px 14px; background:#202429; border-color:#3c4249; font-size:13px; }
 .call-footer { border-top:1px solid var(--border); margin:0 -24px; padding:0 24px; min-height:48px; flex:0 0 48px; align-items:center; font-size:12px; }
 #capture-summary { white-space:normal; font-size:11px; }
 #insights-open { padding:5px 0 5px 12px; font-size:12px; }
 #insights-count { color:var(--accent); }
 .demo-notice { flex:0 0 auto; margin:10px 0 0; min-height:24px; }
 .error-box { max-height:80px; overflow:auto; flex-shrink:0; margin:0 0 10px; padding:8px 12px; }
-dialog { background:#20262a; width:min(620px,calc(100vw - 32px)); max-height:calc(100vh - 32px); padding:22px; border-color:#414c53; border-radius:14px; }
+dialog { background:#202429; width:min(620px,calc(100vw - 32px)); max-height:calc(100vh - 32px); padding:22px; border-color:#3c4249; border-radius:14px; }
 dialog::backdrop { background:#080b0dbb; }
-.dialog-bottom { background:#20262a; bottom:-22px; }
+.dialog-bottom { background:#202429; bottom:-22px; }
 .more-dialog { width:300px; margin:72px 18px auto auto; padding:14px; max-height:calc(100vh - 88px); }
 .more-dialog .dialog-top { margin-bottom:8px; align-items:center; }
 .more-dialog h2 { font-size:15px; }
 .menu-option { display:flex; justify-content:space-between; width:100%; text-align:left; white-space:normal; padding:11px 10px; font-size:13px; border-radius:7px; }
-.menu-option[aria-pressed="true"] { color:var(--accent); background:#2a3a34; }
+.menu-option[aria-pressed="true"] { color:var(--accent); background:#2a3838; }
 .more-dialog p { padding:12px 10px 2px; border-top:1px solid var(--border); margin-top:8px; font-size:10px; }
 #insights-dialog .strategy-lane { margin:0 0 15px; }
 #insights-dialog .coaching-card { height:240px; }
 #insights-dialog .empty-card { height:170px; }
 #insights-dialog .card-summary { font-size:13px; }
 #insights-dialog .card-lead { font-size:23px; }
-.toast { bottom:55px; }
+.call-footer { color:var(--muted); }
+.toast { bottom:55px; background:#282e34; border-color:#49545e; }
 @media (max-width:660px) {
  .topbar { gap:8px; padding-right:16px; padding-left:16px; }
  .desktop .topbar { padding-left:86px; }

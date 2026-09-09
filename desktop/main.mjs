@@ -30,7 +30,7 @@ import { CodexProvider } from "../providers/codex.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const smoke = process.argv.includes("--smoke");
-let win, controller, normalBounds;
+let win, controller;
 const page = path.join(root, "ui", "index.html");
 const trustedFrame = (frame) =>
   !!frame && frame.url.split("?")[0] === pathToFileURL(page).href;
@@ -94,10 +94,11 @@ async function boot() {
   if (vaultWarning) controller.engine.error(vaultWarning);
   if (preferencesWarning) controller.engine.error(preferencesWarning);
   win = new BrowserWindow({
-    width: 680,
-    height: 850,
-    minWidth: 420,
-    minHeight: 640,
+    width: 740,
+    height: 480,
+    minWidth: 600,
+    minHeight: 420,
+    ...(process.platform === "darwin" ? {titleBarStyle: "hiddenInset", trafficLightPosition: {x:16, y:25}} : {}),
     backgroundColor: "#101319",
     title: "Callwise",
     show: false,
@@ -112,8 +113,6 @@ async function boot() {
     },
   });
   if (controller.preferences.compact) {
-    normalBounds = win.getBounds();
-    win.setSize(460, 800);
     win.setAlwaysOnTop(true, "floating");
   }
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
@@ -225,15 +224,7 @@ async function boot() {
       return checkModelAccess(controller.config);
     if (name === "desktop.compact") {
       controller.rememberPreferences({ compact: !!payload.enabled });
-      if (payload.enabled) {
-        normalBounds = win.getBounds();
-        win.setMinimumSize(420, 640);
-        win.setSize(460, 800);
-        win.setAlwaysOnTop(true, "floating");
-      } else {
-        win.setAlwaysOnTop(false);
-        if (normalBounds) win.setBounds(normalBounds);
-      }
+      win.setAlwaysOnTop(!!payload.enabled, "floating");
       controller.engine.emitState();
       return { compact: !!payload.enabled };
     }
@@ -364,7 +355,7 @@ async function boot() {
       path.join(artifacts, "desktop-preview.png"),
       (await win.webContents.capturePage()).toPNG(),
     );
-    win.setSize(440, 720);
+    win.setSize(600, 420);
     await new Promise((r) => setTimeout(r, 500));
     writeFileSync(
       path.join(artifacts, "narrow-preview.png"),

@@ -36,6 +36,7 @@ test(
         "connections.mjs",
         "context.css",
         "styles.css",
+        "focus.css",
         "capture.mjs",
       ])
         assert.equal((await fetch(`${root}/${asset}`)).status, 200, asset);

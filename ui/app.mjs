@@ -94,6 +94,7 @@ function drawCards(lane) {
     : lane === "fast"
       ? "New suggestion"
       : "New insight";
+  if (lane === "fast") next.textContent = pending ? `${pending} new` : "New suggestion";
   const container = $(`${lane}-cards`);
   // Keep the same DOM node while reading: selection, scroll and Details survive.
   if (container.dataset.cardId !== (card?.id || "empty")) {
@@ -111,7 +112,7 @@ function drawCards(lane) {
     article.dataset.cardId = card.id;
     const spoken = lane === "fast" && card.say;
     const lead = spoken || card.title;
-    article.innerHTML = `<div class="card-scroll"><div class="card-meta"><span>${card.demo ? "DEMO · " : ""}${esc(card.kind)}</span><span class="card-age"></span></div><h3 class="card-lead">${esc(spoken ? `“${lead}”` : lead)}</h3><details class="advice-details"><summary>Details${card.sources.length ? ` · ${card.sources.length} ${card.sources.length === 1 ? "source" : "sources"}` : ""}</summary>${spoken ? `<h4>${esc(card.title)}</h4>` : ""}${lane === "strategy" && card.say ? `<p class="card-body">“${esc(card.say)}”</p>` : ""}<p class="card-body">${esc(card.body)}</p><p class="card-reason">${esc(card.reason)}</p><div class="card-sources"></div></details></div><div class="card-actions"><button class="keep-button" type="button">Keep</button><button class="dismiss-button" type="button">Dismiss</button></div>`;
+    article.innerHTML = `<div class="card-scroll"><div class="card-meta"><span>${card.demo ? "DEMO · " : ""}${esc(card.kind)}</span><span class="card-age"></span></div><h3 class="card-lead">${esc(lead)}</h3><p class="card-summary">${esc(card.reason)}</p><details class="advice-details"><summary>Details${card.sources.length ? ` · ${card.sources.length} ${card.sources.length === 1 ? "source" : "sources"}` : ""}</summary>${spoken ? `<h4>${esc(card.title)}</h4>` : ""}${lane === "strategy" && card.say ? `<p class="card-body">“${esc(card.say)}”</p>` : ""}<p class="card-body">${esc(card.body)}</p><div class="card-sources"></div></details></div><div class="card-actions"><button class="keep-button" type="button">Keep</button><button class="dismiss-button" type="button">Dismiss</button></div>`;
     for (const source of card.sources) {
       const button = document.createElement("button");
       button.className = "source-chip";
@@ -161,6 +162,7 @@ function drawHistory() {
         focus.select(card.lane, card.id);
         drawCards(card.lane);
         $("advice-history-dialog").close();
+        if (card.lane === "strategy") $("insights-dialog").showModal();
       });
       row.append(open);
     }
@@ -171,6 +173,7 @@ function drawHistory() {
 function render(next) {
   const sessionChanged = state?.sessionId !== next.sessionId;
   state = next;
+  document.body.classList.toggle("desktop", !!bridge.desktop);
   if (sessionChanged) {
     $("source").value = state.preferences?.preferredSource || "demo";
     $("backend").value = state.preferences?.preferredBackend || "openai";
@@ -189,8 +192,8 @@ function render(next) {
     $("advice-history-dialog").close();
   }
   $("advice-count").textContent = state.cards.length;
-  $("prepare-summary").hidden = state.status !== "idle";
-  $("call-summary").textContent = state.settings.goal;
+  const insights = state.cards.filter(c => c.lane === "strategy" && c.status !== "dismissed").length;
+  $("insights-count").textContent = insights ? `· ${insights}` : "";
   $("capture-summary").textContent =
     state.status === "running"
       ? state.source === "demo"
@@ -402,6 +405,11 @@ $("start").addEventListener("click", async () => {
     }
     return;
   }
+  if ($("source").value !== "demo" && !$("consent").checked) {
+    $("setup-dialog").showModal();
+    toast("Confirm participant consent in call setup, then start when ready.");
+    return;
+  }
   if (!(await configure())) return;
   const source = $("source").value;
   $("start").disabled = true;
@@ -542,7 +550,14 @@ $("compact").addEventListener("click", async () => {
     toast("Compact layout enabled. The desktop app can float above your call.");
 });
 
-for (const id of ["setup-open", "prepare-open"])
+$("more-open").addEventListener("click", () => $("more-dialog").showModal());
+for (const button of $("more-dialog").querySelectorAll("button"))
+  button.addEventListener("click", () => $("more-dialog").close());
+$("connections-shortcut").addEventListener("click", () => $("settings-open").click());
+$("export-shortcut").addEventListener("click", () => $("export").click());
+$("insights-open").addEventListener("click", () => $("insights-dialog").showModal());
+
+for (const id of ["setup-open"])
   $(id).addEventListener("click", () => $("setup-dialog").showModal());
 $("transcript-open").addEventListener("click", () =>
   $("transcript-dialog").showModal(),

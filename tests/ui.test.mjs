@@ -95,11 +95,18 @@ test("renderer runs against the real controller: start, source-linked cards, fee
   const c = new CallController({ demoOnly: true });
   const tracked = [];
   const originalInterval = globalThis.setInterval;
+  const originalTimeout = globalThis.setTimeout;
+  const timeouts = [];
   globalThis.window = window;
   globalThis.document = document;
   globalThis.setInterval = (...args) => {
     const id = originalInterval(...args);
     tracked.push(id);
+    return id;
+  };
+  globalThis.setTimeout = (...args) => {
+    const id = originalTimeout(...args);
+    timeouts.push(id);
     return id;
   };
   window.callwise = {
@@ -136,6 +143,21 @@ test("renderer runs against the real controller: start, source-linked cards, fee
   try {
     await import("../ui/app.mjs");
     assert.equal(byId("status-label").textContent, "Ready when you are");
+    assert.equal(byId("strategy-cards").closest("dialog").id, "insights-dialog");
+    click(byId("more-open"));
+    assert.equal(byId("more-dialog").hasAttribute("open"), true);
+    click(byId("setup-open"));
+    assert.equal(byId("more-dialog").hasAttribute("open"), false);
+    assert.equal(byId("setup-dialog").hasAttribute("open"), true);
+    byId("setup-dialog").close();
+    click(byId("more-open"));
+    click(byId("connections-shortcut"));
+    assert.equal(byId("settings-dialog").hasAttribute("open"), true);
+    assert.equal(byId("more-dialog").hasAttribute("open"), false);
+    byId("settings-dialog").close();
+    click(byId("insights-open"));
+    assert.equal(byId("insights-dialog").hasAttribute("open"), true);
+    byId("insights-dialog").close();
     click(byId("start"));
     await wait(25);
     assert.equal(c.engine.status, "running");
@@ -182,7 +204,7 @@ test("renderer runs against the real controller: start, source-linked cards, fee
     assert.equal(details.hasAttribute("open"), true);
     assert.equal(readingNode.querySelector(".card-scroll").scrollTop, 55);
     assert.match(byId("fast-cards").textContent, /Earlier · check relevance/);
-    assert.match(byId("next-fast").textContent, /1 new suggestion/);
+    assert.match(byId("next-fast").textContent, /1 new/);
     click(byId("transcript-open"));
     assert.equal(byId("transcript-dialog").hasAttribute("open"), true);
     assert.equal(byId("fast-cards").firstElementChild, readingNode);
@@ -213,10 +235,18 @@ test("renderer runs against the real controller: start, source-linked cards, fee
     assert.equal(byId("transcript-count").textContent, "0");
     assert.equal(byId("advice-count").textContent, "0");
     assert.equal(byId("fast-cards").querySelector(".coaching-card"), null);
+    byId("source").value = "audio";
+    byId("consent").checked = false;
+    click(byId("start"));
+    await wait(5);
+    assert.equal(byId("setup-dialog").hasAttribute("open"), true);
+    assert.equal(c.engine.status, "idle", "consent review must not start capture");
   } finally {
     c.close();
     for (const id of tracked) clearInterval(id);
+    for (const id of timeouts) clearTimeout(id);
     globalThis.setInterval = originalInterval;
+    globalThis.setTimeout = originalTimeout;
     delete globalThis.window;
     delete globalThis.document;
   }

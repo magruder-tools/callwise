@@ -10,13 +10,14 @@
     <title>Callwise — Your thinking copilot</title>
     <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="./context.css" />
+    <link rel="stylesheet" href="./focus.css" />
   </head>
   <body>
     <header class="topbar">
       <div class="brand">
         <span class="brand-mark" aria-hidden="true">c</span>Callwise<span
           class="version"
-          >0.2.2</span
+          >0.3.0</span
         >
       </div>
       <div class="top-status">
@@ -24,41 +25,15 @@
         ><span id="status-label">Ready when you are</span
         ><time id="clock">00:00</time>
       </div>
-      <button
-        id="compact"
-        class="icon-button"
-        title="Float beside your call"
-        aria-label="Float beside your call"
-        aria-pressed="false"
-      >
-        ↗
-      </button>
+      <button id="more-open" class="icon-button" aria-label="More options" title="More options">•••</button>
+      <div class="session-buttons" aria-label="Session controls">
+        <button id="start" class="primary-button">Start session</button>
+        <button id="pause" class="secondary-button" hidden>Ⅱ Pause</button>
+        <button id="end" class="end-button" hidden>■ End</button>
+      </div>
     </header>
     <main class="main-panel">
-      <section class="call-toolbar" aria-label="Session controls">
-        <div class="session-buttons">
-          <button id="start" class="primary-button">Start demo</button
-          ><button id="pause" class="secondary-button" hidden>Pause</button
-          ><button id="end" class="text-button" hidden>End</button>
-        </div>
-        <div class="view-buttons">
-          <button id="setup-open" class="text-button">Setup</button
-          ><button id="transcript-open" class="text-button">Transcript</button
-          ><button id="advice-history-open" class="text-button">
-            History <span id="advice-count">0</span>
-          </button>
-        </div>
-      </section>
-      <section id="prepare-summary" class="prepare-summary">
-        <div class="eyebrow">BEFORE YOU BEGIN</div>
-        <h1>A little room to think.</h1>
-        <p id="call-summary">
-          Try a practice conversation, or choose your call setup.
-        </p>
-        <button id="prepare-open" class="secondary-button">
-          Prepare your call
-        </button>
-      </section>
+
       <div id="demo-notice" class="demo-notice">
         <span class="pill">DEMO</span> Fictional conversation · scripted
         suggestions · no recording
@@ -79,20 +54,7 @@
           aria-label="Immediate coaching"
         ></div>
       </section>
-      <section class="strategy-lane" aria-labelledby="strategy-title">
-        <div class="lane-heading">
-          <h2 id="strategy-title">Worth considering</h2>
-          <button id="next-strategy" class="new-suggestion" disabled>
-            New insight
-          </button>
-        </div>
-        <span id="strategy-status" class="sr-only"></span>
-        <div
-          id="strategy-cards"
-          class="cards"
-          aria-label="Strategic coaching"
-        ></div>
-      </section>
+
       <div class="ask-area">
         <form id="ask-form">
           <label class="sr-only" for="question">Ask Callwise</label
@@ -110,21 +72,42 @@
             ↑
           </button>
         </form>
-        <div class="ask-footer">
-          <button
-            class="prompt-chip"
-            data-question="What is the best next question to ask?"
-          >
-            Suggest a question</button
-          ><button id="deep-think" class="prompt-chip">Think deeper</button>
-        </div>
+        <button id="transcript-open" class="secondary-button transcript-trigger">Transcript</button>
       </div>
       <div id="error-box" class="error-box" role="alert" hidden></div>
       <footer class="call-footer">
         <span id="capture-summary">Nothing is being captured</span
-        ><span>Advice stays until you move on</span>
+        ><button id="insights-open" class="text-button">Insights <span id="insights-count"></span></button>
       </footer>
     </main>
+    <dialog id="more-dialog" class="more-dialog" aria-label="More options">
+      <form method="dialog" class="dialog-top"><h2>Callwise</h2><button class="icon-button" aria-label="Close more options">×</button></form>
+      <button id="setup-open" class="menu-option">Call setup</button>
+      <button id="advice-history-open" class="menu-option">Suggestion history <span id="advice-count">0</span></button>
+      <button id="connections-shortcut" class="menu-option">Connections &amp; preferences</button>
+      <button id="compact" class="menu-option" aria-label="Float above other apps" aria-pressed="false">Float above other apps <span aria-hidden="true">↗</span></button>
+      <button class="menu-option prompt-chip" data-question="What is the best next question to ask?">Suggest a question</button>
+      <button id="export-shortcut" class="menu-option">Export session</button>
+      <p class="muted micro">Callwise 0.3.0 · Floating focus</p>
+    </dialog>
+    <dialog id="insights-dialog" class="drawer" aria-label="Deeper insights">
+      <form method="dialog" class="dialog-top"><h2>Deeper insights</h2><button class="icon-button" aria-label="Close insights">×</button></form>
+      <section class="strategy-lane" aria-labelledby="strategy-title">
+        <div class="lane-heading">
+          <h2 id="strategy-title">Worth considering</h2>
+          <button id="next-strategy" class="new-suggestion" disabled>
+            New insight
+          </button>
+        </div>
+        <span id="strategy-status" class="sr-only"></span>
+        <div
+          id="strategy-cards"
+          class="cards"
+          aria-label="Strategic coaching"
+        ></div>
+      </section>
+      <button id="deep-think" class="secondary-button">Think deeper</button>
+    </dialog>
     <dialog id="setup-dialog" class="drawer">
       <form method="dialog" class="dialog-top">
         <div>

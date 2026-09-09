@@ -4,7 +4,7 @@
 
 ## What it does
 
-Callwise can discover the apps available to your local Codex ChatGPT sign-in, let you choose sources for this session, and ask a separate Codex process to retrieve evidence. That evidence is added to the same context store the coach already uses. The fast coaching lane does not wait for connector searches.
+Callwise can discover the apps available to your local Codex ChatGPT sign-in, let you choose saved sources for future calls, and ask a separate Codex process to retrieve evidence. That evidence is added to the same context store the coach already uses. The fast coaching lane does not wait for connector searches.
 
 This does **not** mean every app visible in ChatGPT will necessarily be callable through your installed Codex version. Discovery checks accessibility, enabled state, read-only tool metadata, and installed runtime availability. A lookup rechecks availability for its restricted thread. No ChatGPT memory or past-chat import is implemented.
 
@@ -13,7 +13,7 @@ This does **not** mean every app visible in ChatGPT will necessarily be callable
 1. Use the latest source in `magruder-tools/callwise`, not the earlier unsigned development ZIP. In the Callwise folder, run `npm ci` and `npm start`.
 2. Codex CLI must be installed and signed in with the same ChatGPT account that has your apps. The tested CLI version is **0.153.4**. Installation/update: `npm install -g @openai/codex@0.153.4`, followed by `codex login`. Being signed into the Codex desktop app alone does not prove that the `codex` command is available to Callwise. A nonstandard CLI location can be set with `CALLWISE_CODEX_BIN` in the existing private `.env.local` configuration.
 3. After trying the demo, click **End**, then **New session**. Set a descriptive **Context scope**, such as a client or project name. Open **Connections** and click **Find my apps**.
-4. Under **Connected context**, choose **My connected apps through Codex**. Select the ready apps appropriate for this call. Check **Allow selected read-only sources for this session**, then **Apply context choices**. Nothing is selected or authorized automatically.
+4. Under **Connected context**, choose **My connected apps through Codex**. Select the ready apps appropriate for this call. Check **Allow selected read-only sources for this and future calls**, then **Save context preferences**. Nothing is selected or authorized automatically.
 5. Start with **Search connected context** in the sidebar. Ask a question whose answer you already know, such as “What did we agree in the last call about the campaign transition?” Open the returned source excerpt. Use **Open original** when an associated original link is available.
 6. Once that works, optionally enable **Look up prior context when the conversation calls for it** and apply the choices. Then choose **Microphone + computer**, confirm permitted transcription/assistance, and use a practice call. Your regular OpenAI API key is still needed for live transcription and fast coaching; the standalone Codex context lookup does not require a new OpenAI key.
 
@@ -54,3 +54,4 @@ The remaining live gate: sign into Codex on Matthew's Mac; discover his actual a
 - OpenAI Codex App Server: https://developers.openai.com/codex/app-server
 - OpenAI Codex configuration reference: https://developers.openai.com/codex/config-reference
 - Inspected CLI: `codex-cli 0.153.4`, public package `@openai/codex@0.153.4`, September 6, 2026.
+

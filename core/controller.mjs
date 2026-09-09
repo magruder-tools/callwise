@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { ContextRetrieval, shouldSearch } from "./retrieval.mjs";
 import { CoachEngine } from "./engine.mjs";
 import { publicConfig } from "./config.mjs";
+import { sanitizePreferences } from "./preferences.mjs";
 import { DemoProvider } from "../providers/demo.mjs";
 import { OpenAIProvider } from "../providers/openai.mjs";
 import { FirefliesClient } from "../providers/fireflies.mjs";
@@ -15,9 +16,13 @@ export class CallController extends EventEmitter {
     demoOnly = false,
     codexProvider = null,
     contextProvider = null,
+    preferences = {},
+    onPreferences = () => {},
   } = {}) {
     super();
     this.config = config;
+    this.preferences = sanitizePreferences(preferences);
+    this.onPreferences = onPreferences;
     this.demoOnly = demoOnly;
     this.codex = codexProvider;
     this.contextProvider = contextProvider;
@@ -31,6 +36,7 @@ export class CallController extends EventEmitter {
     this.generation = 0;
     this.pendingSearch = null;
     this.engine = new CoachEngine();
+    this.engine.configure(this.preferences);
     this.lastEngineStatus = this.engine.status;
     this.engine.on("state", () => {
       const wasRunning = this.lastEngineStatus === "running";
@@ -142,6 +148,8 @@ export class CallController extends EventEmitter {
       this.engine.settings.contextApps,
       this.engine.settings.contextConsent,
     ]);
+    // Persist only explicit user edits, so demo fixtures cannot become defaults.
+    this.rememberPreferences(payload);
     this.engine.configure(payload);
     const next = JSON.stringify([
       this.engine.settings.project,
@@ -159,6 +167,11 @@ export class CallController extends EventEmitter {
     this.engine.emitState();
     return this.snapshot();
   }
+  rememberPreferences(patch) {
+    const next = sanitizePreferences(patch, this.preferences);
+    this.onPreferences(next);
+    this.preferences = next;
+  }
   async searchConnected(query) {
     const settings = this.engine.settings;
     if (
@@ -172,7 +185,7 @@ export class CallController extends EventEmitter {
       throw new Error("Create a new session before searching.");
     if (!settings.contextConsent)
       throw new Error(
-        "Allow selected context sources for this session in Connections first.",
+        "Allow selected context sources in Connections first.",
       );
     if (settings.contextBackend === "mcp") return this.searchMcp(query);
     if (settings.contextBackend !== "codex")
@@ -201,6 +214,7 @@ export class CallController extends EventEmitter {
   snapshot() {
     return {
       ...this.engine.snapshot(),
+      preferences: structuredClone(this.preferences),
       config: publicConfig(this.config),
       demoOnly: this.demoOnly,
       backend: this.strategyBackend,
@@ -227,6 +241,7 @@ export class CallController extends EventEmitter {
         this.mode = "demo";
         this.retrieval.reset();
         this.engine.reset();
+        this.engine.configure(this.preferences);
         if (payload.clearContext || wasDemo) this.engine.context.clear();
         else
           for (const [id, doc] of this.engine.context.docs)

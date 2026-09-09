@@ -153,3 +153,19 @@ test("browser demo disables account actions and live session locks permissions",
     u.close();
   }
 });
+
+
+test('saved app choices reappear when the first catalog arrives after restart', async () => {
+  const t = await setup();
+  try {
+    t.c.preferences = {contextApps:['real-id'], contextConsent:true, contextBackend:'codex'};
+    t.c.engine.configure(t.c.preferences);
+    t.click('inspect-codex');
+    await wait(10);
+    assert.equal(t.byId('codex-apps').querySelector('input').checked, true);
+    assert.equal(t.byId('context-consent').checked, true);
+    await t.c.command('new');
+    assert.equal(t.byId('codex-apps').querySelector('input').checked, true);
+    assert.equal(t.byId('context-backend').value, 'codex');
+  } finally { t.close(); }
+});

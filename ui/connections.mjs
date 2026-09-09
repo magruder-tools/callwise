@@ -73,6 +73,7 @@ export function connectionControls(bridge, { toast, showError }) {
     const catalogKey = JSON.stringify(apps);
     if (catalogSignature !== catalogKey) {
       const previouslySelected = selected();
+      const hadCatalog = $("codex-apps").querySelectorAll("input").length > 0;
       catalogSignature = catalogKey;
       $("codex-apps").replaceChildren();
       if (!apps.length) {
@@ -91,7 +92,7 @@ export function connectionControls(bridge, { toast, showError }) {
         input.dataset.appId = app.id;
         input.dataset.ready = String(!!app.ready);
         input.checked = (
-          changed ? settings.contextApps || [] : previouslySelected
+          changed || !hadCatalog ? settings.contextApps || [] : previouslySelected
         ).includes(app.id);
         const text = document.createElement("span");
         const name = document.createElement("strong");
@@ -142,7 +143,7 @@ export function connectionControls(bridge, { toast, showError }) {
     run("codex-signin", async () => {
       $("connection-result").textContent = "Complete ChatGPT sign-in in your browser. No password or API key is sent to Callwise.";
       await bridge.command("desktop.codex.signin");
-      $("connection-result").textContent = "Codex is signed in. Click Find my apps to choose sources for this call.";
+      $("connection-result").textContent = "Codex is signed in. Click Find my apps to choose your saved sources.";
       toast("Codex sign-in complete.");
     }),
   );
@@ -156,7 +157,7 @@ export function connectionControls(bridge, { toast, showError }) {
       const result = await bridge.command("context.discover");
       const ready = result.apps.filter((a) => a.ready).length;
       $("connection-result").textContent =
-        `${ready} of ${result.apps.length} accessible apps are ready. Select only the sources appropriate for this call. ${result.note || ""}`;
+        `${ready} of ${result.apps.length} accessible apps are ready. Your saved selections apply to future calls until you change them. ${result.note || ""}`;
     }),
   );
   $("apply-context").addEventListener("click", () =>
@@ -174,7 +175,7 @@ export function connectionControls(bridge, { toast, showError }) {
         (!consent || !snapshot.settings.project.trim())
       )
         throw new Error(
-          "Automatic context needs a named Context scope and your session permission.",
+          "Automatic context needs a named Context scope and permission to use selected sources.",
         );
       await bridge.command("configure", {
         contextBackend: backend,
@@ -185,8 +186,8 @@ export function connectionControls(bridge, { toast, showError }) {
       $("connection-result").textContent =
         backend === "off"
           ? "Connected searches are off. Previously retrieved connector sources were cleared."
-          : "Context choices applied for this session. Try Search connected context before starting a call.";
-      toast("Context preferences applied.");
+          : "Context preferences saved on this Mac for future calls. Try Search connected context before starting a call.";
+      toast("Context preferences saved.");
     }),
   );
   $("context-cancel").addEventListener("click", () =>
@@ -205,7 +206,7 @@ export function connectionControls(bridge, { toast, showError }) {
           transcriptionModel: $("transcription-model").value,
         });
         $("connection-result").textContent =
-          "Connections saved encrypted on this computer. Refresh and reselect Codex context apps if needed. No live inference was tested.";
+          "Connections saved encrypted on this computer. Your context preferences are kept. No live inference was tested.";
         toast("Connections saved.");
       } finally {
         $("openai-key").value = "";

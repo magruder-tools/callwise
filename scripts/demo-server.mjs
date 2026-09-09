@@ -81,9 +81,11 @@ const server = http.createServer(async (req, res) => {
     ![
       "index.html",
       "app.mjs",
+      "suggestion-focus.mjs",
       "connections.mjs",
       "context.css",
       "styles.css",
+      "focus.css",
       "capture.mjs",
       "audio-worklet.js",
     ].includes(filename)

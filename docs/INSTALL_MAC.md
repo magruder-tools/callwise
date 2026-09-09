@@ -24,9 +24,9 @@ The standalone Codex context lookup can be tested before adding an API key. The 
 
 In Connections, click Sign in with ChatGPT. Complete the official browser sign-in using the ChatGPT account that has your connected apps. Existing local Codex ChatGPT sign-in is reused. Tokens remain with the official Codex helper, and its sign-in may be shared with your other local Codex tools. Callwise will not silently replace an API-key-only Codex login.
 
-Click Find my apps. Under Connected context choose My connected apps through Codex, select only ready apps appropriate for the call, allow those read-only sources for this session, and Apply context choices. App availability depends on your account and Codex; it is not a promise that every ChatGPT connector is callable. ChatGPT memory and past chats are not imported.
+Click Find my apps. Under Connected context choose My connected apps through Codex, select only ready apps appropriate for the call, allow those read-only sources for this and future calls, and Save context preferences. App availability depends on your account and Codex; it is not a promise that every ChatGPT connector is callable. ChatGPT memory and past chats are not imported.
 
-Set Context scope to the client/project name. Use Search connected context and ask a question whose answer you know. Inspect the excerpt and original link when available. Only after that succeeds, turn on optional automatic lookups. Source choices are per-session and reset for a new session.
+Set Context scope to the client/project name. Use Search connected context and ask a question whose answer you know. Inspect the excerpt and original link when available. Only after that succeeds, turn on optional automatic lookups. Source choices, context permission, and automatic lookup preferences are saved encrypted on this Mac and restored for new sessions and restarts. Availability and read-only tools are checked again before every search.
 
 Context scope steers retrieval but is not an account permission boundary. A selected app may access the entire connected account. Relevant call excerpts may become search queries, and retrieved excerpts may go to the configured coaching provider. Only use content appropriate to the call.
 
@@ -54,3 +54,4 @@ OpenAI Codex authentication: https://developers.openai.com/codex/auth
 OpenAI App Server: https://developers.openai.com/codex/app-server
 OpenAI models: https://developers.openai.com/api/docs/models
 Apple app safety: https://support.apple.com/102445
+

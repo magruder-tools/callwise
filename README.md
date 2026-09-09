@@ -87,8 +87,10 @@ unsigned downloaded application from launching.
 
 ## Data handling
 
-Callwise holds transcripts, context, and settings in memory by default. Closing
-the app clears that application state. Explicit exports create a file you choose.
+Callwise holds transcripts and loaded call context in memory by default. Closing
+the app clears those. Desktop preferences, including your profile, call setup defaults,
+selected apps, and context permission, are saved encrypted on this Mac until changed.
+Participant consent is confirmed for each new call. Explicit exports create a file you choose.
 Live audio/text/context go to whichever providers you enable. Providers and Codex
 have their own data handling; in-memory storage here is not a promise of zero
 provider retention. See [docs/PRIVACY.md](docs/PRIVACY.md).
@@ -112,3 +114,4 @@ GPL-3.0-or-later. The AudioWorklet adapts a small component from Cue; the rest o
 the coaching architecture and UI were written for this project. Glass was
 reviewed as a reference, and no Glass code or binaries are included. Exact source
 revisions and modifications are recorded in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+

@@ -36,7 +36,12 @@ documents and transcripts are treated as untrusted model input, not commands.
 
 ## Retention
 
-Callwise itself keeps session data in memory unless you export. Text can remain
+Callwise keeps transcripts and loaded call context in memory unless you export.
+Desktop preferences are stored separately in encrypted preferences.bin under the
+Callwise application-support folder. These include your profile, goal, Context scope,
+input and strategy choices, selected apps, context permission, automatic lookup
+setting, quiet mode, and floating-window preference. They persist until changed.
+They do not include participant consent, transcripts, retrieved documents, or audio. Text can remain
 in OS memory, crash artifacts, or explicit exports; this is not secure erasure.
 Provider retention, network logs, and Codex's local/account behavior remain
 governed by those services and their settings. `store:false` and an ephemeral
@@ -46,3 +51,4 @@ Keys live in a private, Git-ignored `.env.local` file. They remain in main-proce
 memory and are not returned through the UI bridge. Credentials are never part
 of exports. Source archive scripts include tracked project files and Git history,
 so secrets must never be committed in the first place.
+

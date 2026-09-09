@@ -23,12 +23,14 @@ import {
 import { safeUrl } from "../core/context.mjs";
 import { CallController } from "../core/controller.mjs";
 import { CodexLogin } from "./codex-login.mjs";
+import { installDisplayCapture } from "./display-capture.mjs";
+import { readPreferences, savePreferences } from "../core/preferences.mjs";
 import { CodexContextProvider } from "../providers/codex-context.mjs";
 import { CodexProvider } from "../providers/codex.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const smoke = process.argv.includes("--smoke");
-let win, controller, normalBounds;
+let win, controller;
 const page = path.join(root, "ui", "index.html");
 const trustedFrame = (frame) =>
   !!frame && frame.url.split("?")[0] === pathToFileURL(page).href;
@@ -39,6 +41,10 @@ async function boot() {
     workDir = path.join(dataDir, "codex-work");
   mkdirSync(workDir, { recursive: true });
   const vault = path.join(dataDir, "connections.bin");
+  const preferencesFile = path.join(dataDir, "preferences.bin");
+  let preferences = {}, preferencesWarning = "";
+  if (!smoke) try { preferences = readPreferences(preferencesFile, safeStorage); }
+  catch (error) { preferencesWarning = error.message; }
   const baseConfig = smoke
     ? {
         fastModel: "gpt-5.6-luna",
@@ -60,6 +66,8 @@ async function boot() {
   const makeController = (config) =>
     new CallController({
       config,
+      preferences,
+      onPreferences: smoke ? () => {} : (next) => savePreferences(preferencesFile, safeStorage, next),
       contextProvider: smoke
         ? null
         : new CodexContextProvider({
@@ -78,13 +86,19 @@ async function boot() {
           }),
     });
   controller = makeController(controllerConfig(baseConfig, saved));
-  const codexLogin = new CodexLogin({ bin: controller.config.codexBin, cwd: workDir, openBrowser: (url) => shell.openExternal(url) });
+  const codexLogin = new CodexLogin({
+    bin: controller.config.codexBin,
+    cwd: workDir,
+    openBrowser: (url) => shell.openExternal(url),
+  });
   if (vaultWarning) controller.engine.error(vaultWarning);
+  if (preferencesWarning) controller.engine.error(preferencesWarning);
   win = new BrowserWindow({
-    width: 1250,
-    height: 850,
-    minWidth: 390,
-    minHeight: 540,
+    width: 740,
+    height: 480,
+    minWidth: 600,
+    minHeight: 420,
+    ...(process.platform === "darwin" ? {titleBarStyle: "hiddenInset", trafficLightPosition: {x:16, y:25}} : {}),
     backgroundColor: "#101319",
     title: "Callwise",
     show: false,
@@ -98,6 +112,9 @@ async function boot() {
       backgroundThrottling: false,
     },
   });
+  if (controller.preferences.compact) {
+    win.setAlwaysOnTop(true, "floating");
+  }
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", (event, url) => {
     if (url.split("?")[0] !== pathToFileURL(page).href) event.preventDefault();
@@ -134,27 +151,9 @@ async function boot() {
       controller.engine.status === "running" &&
       ["media", "display-capture"].includes(permission),
   );
-  session.defaultSession.setDisplayMediaRequestHandler(
-    async (request, callback) => {
-      if (
-        !trustedFrame(request.frame) ||
-        controller.mode !== "audio" ||
-        controller.engine.status !== "running"
-      )
-        return callback({});
-      try {
-        const screens = await desktopCapturer.getSources({
-          types: ["screen"],
-          thumbnailSize: { width: 0, height: 0 },
-        });
-        callback(
-          screens.length ? { video: screens[0], audio: "loopback" } : {},
-        );
-      } catch {
-        callback({});
-      }
-    },
-    { useSystemPicker: true },
+  installDisplayCapture(session.defaultSession, desktopCapturer, (frame) =>
+    trustedFrame(frame) && controller.mode === "audio" &&
+    controller.engine.status === "running",
   );
   const send = (name, data) => {
     if (win && !win.isDestroyed()) win.webContents.send(name, data);
@@ -167,15 +166,26 @@ async function boot() {
     if (typeof name !== "string" || JSON.stringify(payload).length > 300000)
       throw new Error("Invalid request.");
     if (name === "desktop.codex.signin") {
-      if (smoke || controller.engine.status === "running" || controller.connecting)
+      if (
+        smoke ||
+        controller.engine.status === "running" ||
+        controller.connecting
+      )
         throw new Error("Pause the live session before signing into Codex.");
       return codexLogin.signIn();
     }
-    if (name === "desktop.codex.cancel") { codexLogin.cancel(); return {}; }
+    if (name === "desktop.codex.cancel") {
+      codexLogin.cancel();
+      return {};
+    }
     if (["pause", "end", "new"].includes(name)) codexLogin.cancel();
-    if (name === "start" && codexLogin.busy) throw new Error("Finish or cancel Codex sign-in first.");
+    if (name === "start" && codexLogin.busy)
+      throw new Error("Finish or cancel Codex sign-in first.");
     if (name === "desktop.connections.save") {
-      if (codexLogin.busy) throw new Error("Finish or cancel Codex sign-in before changing connections.");
+      if (codexLogin.busy)
+        throw new Error(
+          "Finish or cancel Codex sign-in before changing connections.",
+        );
       if (controller.engine.status === "running" || controller.connecting)
         throw new Error("Pause the session before changing connections.");
       saved = saveConnections(vault, safeStorage, payload);
@@ -198,8 +208,6 @@ async function boot() {
       });
       controller.retrieval.provider = controller.contextProvider;
       controller.contextApps = [];
-      controller.engine.settings.contextApps = [];
-      controller.engine.settings.contextConsent = false;
       controller.retrieval.invalidate();
       controller.setProviders();
       controller.engine.emitState();
@@ -215,15 +223,9 @@ async function boot() {
     if (name === "desktop.connections.check")
       return checkModelAccess(controller.config);
     if (name === "desktop.compact") {
-      if (payload.enabled) {
-        normalBounds = win.getBounds();
-        win.setMinimumSize(390, 540);
-        win.setSize(440, 720);
-        win.setAlwaysOnTop(true, "floating");
-      } else {
-        win.setAlwaysOnTop(false);
-        if (normalBounds) win.setBounds(normalBounds);
-      }
+      controller.rememberPreferences({ compact: !!payload.enabled });
+      win.setAlwaysOnTop(!!payload.enabled, "floating");
+      controller.engine.emitState();
       return { compact: !!payload.enabled };
     }
     if (name === "desktop.openLink") {
@@ -310,13 +312,17 @@ async function boot() {
   globalShortcut.register("CommandOrControl+Shift+P", () => {
     void controller.command("pause");
   });
-  for (const event of ["suspend", "lock-screen"]) powerMonitor.on(event, () => {
-    codexLogin.cancel();
-    if (controller.engine.status === "running") {
-      controller.stopInputs(); controller.engine.pause();
-      controller.engine.error("Callwise paused because this Mac slept or locked. Resume when you are ready.");
-    }
-  });
+  for (const event of ["suspend", "lock-screen"])
+    powerMonitor.on(event, () => {
+      codexLogin.cancel();
+      if (controller.engine.status === "running") {
+        controller.stopInputs();
+        controller.engine.pause();
+        controller.engine.error(
+          "Callwise paused because this Mac slept or locked. Resume when you are ready.",
+        );
+      }
+    });
   app.on("will-quit", () => {
     codexLogin.close();
     globalShortcut.unregisterAll();
@@ -325,7 +331,11 @@ async function boot() {
   app.on("window-all-closed", () => app.quit());
   await win.loadFile(page);
   if (smoke) {
-    const artifacts = process.env.CALLWISE_SMOKE_DIR || (app.isPackaged ? path.join(app.getPath("temp"), "callwise-smoke") : path.join(root, "artifacts"));
+    const artifacts =
+      process.env.CALLWISE_SMOKE_DIR ||
+      (app.isPackaged
+        ? path.join(app.getPath("temp"), "callwise-smoke")
+        : path.join(root, "artifacts"));
     mkdirSync(artifacts, { recursive: true });
     const { DEMO_TRANSCRIPT } = await import("../fixtures/demo.mjs");
     await controller.command("start", { source: "demo" });
@@ -345,7 +355,7 @@ async function boot() {
       path.join(artifacts, "desktop-preview.png"),
       (await win.webContents.capturePage()).toPNG(),
     );
-    win.setSize(440, 720);
+    win.setSize(600, 420);
     await new Promise((r) => setTimeout(r, 500));
     writeFileSync(
       path.join(artifacts, "narrow-preview.png"),
@@ -359,10 +369,15 @@ async function boot() {
 }
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
-app.on("second-instance", () => { if (win) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); } });
-void boot().catch((error) => {
-  console.error(`Callwise startup failed: ${error.message}`);
-  app.exit(1);
-});
-
+  app.on("second-instance", () => {
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+    }
+  });
+  void boot().catch((error) => {
+    console.error(`Callwise startup failed: ${error.message}`);
+    app.exit(1);
+  });
 }

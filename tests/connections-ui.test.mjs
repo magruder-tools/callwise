@@ -46,6 +46,8 @@ async function setup(desktop = true) {
     desktop,
     command: async (name, payload) => {
       calls.push({ name, payload });
+      if (name === "desktop.codex.signin")
+        return { signedIn: true, reused: true };
       if (name === "desktop.connections.save") return { saved: true };
       if (name === "desktop.connections.check")
         return [{ ok: true, label: "Fast", detail: "Metadata only." }];
@@ -68,7 +70,7 @@ async function setup(desktop = true) {
   };
   return { c, controls, byId, click, calls, errors, close };
 }
-test("connection screen discovers actual IDs, requires selection and applies per-session permissions", async () => {
+test("connection screen discovers actual IDs, enables selected apps in one explicit action", async () => {
   const t = await setup();
   try {
     await t.c.command("configure", { project: "Test client" });
@@ -76,11 +78,13 @@ test("connection screen discovers actual IDs, requires selection and applies per
     await wait(5);
     const inputs = t.byId("codex-apps").querySelectorAll("input");
     assert.equal(inputs.length, 2);
-    assert.equal(inputs[1].disabled, true);
+    assert.equal(
+      [...inputs].find((i) => i.dataset.appId === "not-ready").disabled,
+      true,
+    );
     assert.equal(inputs[0].checked, false);
-    inputs[0].checked = true;
+    [...inputs].find((i) => i.dataset.appId === "real-id").checked = true;
     t.byId("context-backend").value = "codex";
-    t.byId("context-consent").checked = true;
     t.click("apply-context");
     await wait(5);
     assert.deepEqual(t.c.engine.settings.contextApps, ["real-id"]);
@@ -110,11 +114,10 @@ test("connection UI rejects automatic lookup without a named scope", async () =>
     await wait(5);
     t.byId("codex-apps").querySelector("input").checked = true;
     t.byId("context-backend").value = "codex";
-    t.byId("context-consent").checked = true;
     t.byId("auto-search").checked = true;
     t.click("apply-context");
     await wait(5);
-    assert.match(t.errors[0], /named Context scope/);
+    assert.match(t.errors[0], /client or project/);
     assert.equal(t.c.engine.settings.contextConsent, false);
   } finally {
     t.close();
@@ -154,18 +157,91 @@ test("browser demo disables account actions and live session locks permissions",
   }
 });
 
-
-test('saved app choices reappear when the first catalog arrives after restart', async () => {
+test("saved app choices reappear when the first catalog arrives after restart", async () => {
   const t = await setup();
   try {
-    t.c.preferences = {contextApps:['real-id'], contextConsent:true, contextBackend:'codex'};
+    t.c.preferences = {
+      contextApps: ["real-id"],
+      contextConsent: true,
+      contextBackend: "codex",
+    };
     t.c.engine.configure(t.c.preferences);
-    t.click('inspect-codex');
+    t.click("inspect-codex");
     await wait(10);
-    assert.equal(t.byId('codex-apps').querySelector('input').checked, true);
-    assert.equal(t.byId('context-consent').checked, true);
-    await t.c.command('new');
-    assert.equal(t.byId('codex-apps').querySelector('input').checked, true);
-    assert.equal(t.byId('context-backend').value, 'codex');
-  } finally { t.close(); }
+    assert.equal(t.byId("codex-apps").querySelector("input").checked, true);
+    assert.match(t.byId("codex-status-title").textContent, /1 app enabled/);
+    await t.c.command("new");
+    assert.equal(t.byId("codex-apps").querySelector("input").checked, true);
+    assert.equal(t.byId("context-backend").value, "codex");
+  } finally {
+    t.close();
+  }
+});
+
+test("saved choices are visibly off until one enable action, then remain enabled after restart", async () => {
+  const t = await setup();
+  try {
+    t.c.engine.configure({
+      contextBackend: "codex",
+      contextApps: ["real-id"],
+      contextConsent: false,
+    });
+    t.click("inspect-codex");
+    await wait(5);
+    assert.match(t.byId("codex-status-title").textContent, /app access is off/);
+    assert.equal(t.byId("codex-search-open").disabled, true);
+    t.click("apply-context");
+    await wait(5);
+    assert.equal(t.c.preferences.contextConsent, true);
+    assert.equal(t.byId("codex-search-open").disabled, false);
+    assert.match(t.byId("codex-status-title").textContent, /1 app enabled/);
+    const restarted = new CallController({ preferences: t.c.preferences });
+    try {
+      assert.deepEqual(restarted.snapshot().settings.contextApps, ["real-id"]);
+      assert.equal(restarted.snapshot().settings.contextConsent, true);
+      assert.equal(restarted.snapshot().status, "idle");
+    } finally {
+      restarted.close();
+    }
+    t.click("codex-disable");
+    await wait(5);
+    assert.equal(t.c.preferences.contextConsent, false);
+    assert.deepEqual(t.c.preferences.contextApps, ["real-id"]);
+    assert.equal(t.byId("codex-search-open").disabled, true);
+  } finally {
+    t.close();
+  }
+});
+test("Connect reuses sign-in and discovers apps without a second button", async () => {
+  const t = await setup();
+  try {
+    t.click("codex-signin");
+    await wait(5);
+    assert.deepEqual(
+      t.calls.slice(0, 2).map((c) => c.name),
+      ["desktop.codex.signin", "context.discover"],
+    );
+    assert.equal(t.byId("codex-signin").hidden, true);
+    assert.equal(
+      t.c.engine.settings.contextConsent,
+      false,
+      "discovery alone must not grant access",
+    );
+  } finally {
+    t.close();
+  }
+});
+test("an unrelated refresh preserves unsaved choices and cannot silently enable them", async () => {
+  const t = await setup();
+  try {
+    t.click("inspect-codex");
+    await wait(5);
+    t.byId("codex-apps").querySelector("input").checked = true;
+    t.click("inspect-codex");
+    await wait(5);
+    assert.equal(t.byId("codex-apps").querySelector("input").checked, true);
+    assert.equal(t.c.engine.settings.contextConsent, false);
+  } finally {
+    t.close();
+  }
 });

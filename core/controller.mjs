@@ -27,6 +27,11 @@ export class CallController extends EventEmitter {
     this.codex = codexProvider;
     this.contextProvider = contextProvider;
     this.contextApps = [];
+    this.contextConnection = {
+      status: "unknown",
+      signedIn: false,
+      checkedAt: 0,
+    };
     this.retrieval = new ContextRetrieval({ provider: contextProvider });
     this.retrieval.on("state", () => this.engine?.emitState());
     this.demoTimers = [];
@@ -108,16 +113,62 @@ export class CallController extends EventEmitter {
       argumentsTemplate: this.config.mcpSearchArguments,
     });
   }
-  async discoverContext() {
+  discoverContext({ force = false } = {}) {
     if (this.demoOnly || !this.contextProvider)
-      throw new Error("Open the desktop app to discover Codex apps.");
+      throw new Error("Open the desktop app to connect Codex apps.");
+    if (this.discovery) return this.discovery;
+    if (
+      !force &&
+      this.contextConnection.status === "connected" &&
+      Date.now() - this.contextConnection.checkedAt < 120000
+    )
+      return Promise.resolve({ signedIn: true, apps: this.contextApps });
     const generation = this.generation;
-    const result = await this.contextProvider.inspect();
-    if (generation !== this.generation)
-      throw new Error("App discovery cancelled because the session changed.");
-    this.contextApps = result.apps;
+    this.contextConnection = {
+      ...this.contextConnection,
+      status: "checking",
+      stage: "Checking Codex sign-in…",
+      error: "",
+    };
     this.engine.emitState();
-    return result;
+    this.discovery = (async () => {
+      try {
+        const result = await this.contextProvider.inspect({
+          force,
+          onStatus: (stage) => {
+            if (generation !== this.generation) return;
+            this.contextConnection = { ...this.contextConnection, stage };
+            this.engine.emitState();
+          },
+        });
+        if (generation !== this.generation)
+          throw new Error(
+            "App check stopped because the call changed. Try again.",
+          );
+        this.contextApps = result.apps;
+        this.contextConnection = {
+          status: "connected",
+          signedIn: result.signedIn !== false,
+          checkedAt: Date.now(),
+          stage: "",
+          error: "",
+        };
+        this.engine.emitState();
+        return result;
+      } catch (error) {
+        this.contextConnection = {
+          ...this.contextConnection,
+          status: "error",
+          stage: "",
+          error: error.message,
+        };
+        this.engine.emitState();
+        throw error;
+      } finally {
+        this.discovery = null;
+      }
+    })();
+    return this.discovery;
   }
   configureContext(payload) {
     if (this.engine.status === "running")
@@ -184,9 +235,7 @@ export class CallController extends EventEmitter {
     if (this.engine.status === "ended")
       throw new Error("Create a new session before searching.");
     if (!settings.contextConsent)
-      throw new Error(
-        "Allow selected context sources in Connections first.",
-      );
+      throw new Error("Allow selected context sources in Connections first.");
     if (settings.contextBackend === "mcp") return this.searchMcp(query);
     if (settings.contextBackend !== "codex")
       throw new Error("Choose Codex connected apps in Connections first.");
@@ -220,6 +269,7 @@ export class CallController extends EventEmitter {
       backend: this.strategyBackend,
       capture: { ...this.capture },
       connecting: !!this.connecting,
+      contextConnection: { ...this.contextConnection },
       contextApps: this.contextApps.map((a) => ({ ...a })),
       retrieval: this.retrieval.snapshot(),
     };
@@ -308,7 +358,7 @@ export class CallController extends EventEmitter {
           project: this.engine.settings.project,
         });
       case "context.discover":
-        return this.discoverContext();
+        return this.discoverContext({ force: payload.force === true });
       case "context.connected":
         return this.searchConnected(payload.query);
       case "context.cancel":

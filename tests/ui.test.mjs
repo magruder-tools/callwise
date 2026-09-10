@@ -155,6 +155,9 @@ test("renderer runs against the real controller: start, source-linked cards, fee
     assert.equal(byId("settings-dialog").hasAttribute("open"), true);
     assert.equal(byId("more-dialog").hasAttribute("open"), false);
     byId("settings-dialog").close();
+    click(byId("context-search-open"));
+    assert.equal(byId("codex-dialog").hasAttribute("open"), true, "search with access off must open the setup action");
+    byId("codex-dialog").close();
     click(byId("insights-open"));
     assert.equal(byId("insights-dialog").hasAttribute("open"), true);
     byId("insights-dialog").close();

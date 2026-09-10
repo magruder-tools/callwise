@@ -1,5 +1,5 @@
 import { AudioCapture, describeAudioCapture } from "./capture.mjs";
-import { connectionControls } from "./connections.mjs";
+import { connectionControls, connectionError } from "./connections.mjs";
 import { SuggestionFocus } from "./suggestion-focus.mjs";
 const focus = new SuggestionFocus();
 const $ = (id) => document.getElementById(id);
@@ -42,7 +42,8 @@ let state,
   transcriptSignature = "",
   contextSignature = "",
   compact = false,
-  sourceUrl = "";
+  sourceUrl = "",
+  connectedSearchBusy = false;
 const capture = new AudioCapture(
   bridge,
   (channel, rms) => {
@@ -55,6 +56,7 @@ const capture = new AudioCapture(
 );
 bridge.onStopCapture(() => capture.stop());
 function showError(message) {
+  message = connectionError(message);
   $("error-box").textContent = message;
   $("error-box").hidden = false;
   toast(message, true);
@@ -74,15 +76,16 @@ async function act(name, payload = {}) {
     return null;
   }
 }
-const connections = connectionControls(bridge, { toast, showError });
+const connections = connectionControls(bridge, {
+  toast,
+  showError: (message) => toast(message, true),
+});
 const timestamp = (ms) =>
   `${String(Math.floor(ms / 60000)).padStart(2, "0")}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
 
 function cardAge(card) {
   const earlier = card.expiresAt <= Date.now();
-  return earlier
-    ? "Earlier · check relevance"
-    : "From this conversation";
+  return earlier ? "Earlier · check relevance" : "From this conversation";
 }
 function drawCards(lane) {
   const card = focus.current?.[lane];
@@ -94,7 +97,8 @@ function drawCards(lane) {
     : lane === "fast"
       ? "New suggestion"
       : "New insight";
-  if (lane === "fast") next.textContent = pending ? `${pending} new` : "New suggestion";
+  if (lane === "fast")
+    next.textContent = pending ? `${pending} new` : "New suggestion";
   const container = $(`${lane}-cards`);
   // Keep the same DOM node while reading: selection, scroll and Details survive.
   if (container.dataset.cardId !== (card?.id || "empty")) {
@@ -192,7 +196,9 @@ function render(next) {
     $("advice-history-dialog").close();
   }
   $("advice-count").textContent = state.cards.length;
-  const insights = state.cards.filter(c => c.lane === "strategy" && c.status !== "dismissed").length;
+  const insights = state.cards.filter(
+    (c) => c.lane === "strategy" && c.status !== "dismissed",
+  ).length;
   $("insights-count").textContent = insights ? `· ${insights}` : "";
   $("capture-summary").textContent =
     state.status === "running"
@@ -347,6 +353,13 @@ function render(next) {
     `Fast: ${state.config.fastModel || "gpt-5.6-luna"} · Strategy: ${state.config.strategyModel || "gpt-6-astra"}`;
   $("import-file").disabled = !bridge.desktop;
   connections.sync(state);
+  const searchingApps = state.retrieval?.status === "searching";
+  $("connected-search-submit").disabled =
+    connectedSearchBusy || searchingApps || !connections.enabled();
+  $("search-cancel").hidden = !searchingApps;
+  if (searchingApps)
+    $("search-result").textContent =
+      state.retrieval.detail || "Searching your selected apps…";
   if (state.errors.length) {
     $("error-box").textContent = state.errors.at(-1).message;
     $("error-box").hidden = false;
@@ -465,15 +478,29 @@ $("transcript-form").addEventListener("submit", async (event) => {
   const result = await act("transcript", { text, speaker: $("speaker").value });
   if (result) $("transcript-text").value = "";
 });
-$("settings-open").addEventListener("click", () => {
-  $("settings-dialog").showModal();
-  if (bridge.desktop && !state?.contextApps?.length &&
-      state?.status !== "running" && !state?.connecting)
-    $("inspect-codex").click();
+$("settings-open").addEventListener("click", () =>
+  $("settings-dialog").showModal(),
+);
+function openCodex() {
+  $("more-dialog").close();
+  $("codex-dialog").showModal();
+  if (bridge.desktop && state?.status !== "running" && !state?.connecting)
+    void connections.open();
+}
+$("codex-open").addEventListener("click", openCodex);
+$("codex-settings-open").addEventListener("click", openCodex);
+$("codex-search-open").addEventListener("click", () => {
+  $("codex-dialog").close();
+  $("search-dialog").showModal();
 });
 $("save-profile").addEventListener("click", async () => {
   const result = await configure();
-  if (result) toast(bridge.desktop ? "Preferences saved on this Mac." : "Preferences kept until this demo closes.");
+  if (result)
+    toast(
+      bridge.desktop
+        ? "Preferences saved on this Mac."
+        : "Preferences kept until this demo closes.",
+    );
 });
 $("add-context").addEventListener("click", () =>
   $("context-dialog").showModal(),
@@ -499,21 +526,34 @@ $("import-file").addEventListener("click", async () => {
     toast(`${result.imported} source(s) added.`);
   }
 });
-$("context-search-open").addEventListener("click", () =>
-  $("search-dialog").showModal(),
-);
+$("context-search-open").addEventListener("click", () => {
+  if (!connections.enabled()) return openCodex();
+  $("search-dialog").showModal();
+});
 $("search-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  $("search-result").textContent = "Searching…";
-  const result = await act("context.connected", {
-    query: $("context-query").value,
-  });
-  $("search-result").textContent = result
-    ? result.added !== undefined
-      ? `${result.added} verified source(s) added. ${result.retrieval?.detail || ""}`
-      : "Results added as a source for this session."
-    : "Search unavailable. Check your connections.";
+  if (connectedSearchBusy) return;
+  connectedSearchBusy = true;
+  $("connected-search-submit").disabled = true;
+  $("search-result").textContent = "Searching your selected apps…";
+  try {
+    const result = await bridge.command("context.connected", {
+      query: $("context-query").value,
+    });
+    $("error-box").hidden = true;
+    $("search-result").textContent =
+      result.added !== undefined
+        ? `${result.added} verified source(s) added. ${result.retrieval?.detail || ""}`
+        : "Results added as a source for this call.";
+  } catch (error) {
+    $("search-result").textContent = connectionError(error);
+  } finally {
+    connectedSearchBusy = false;
+    $("connected-search-submit").disabled = !connections.enabled();
+    $("search-cancel").hidden = true;
+  }
 });
+$("search-cancel").addEventListener("click", () => act("context.cancel"));
 $("history-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   $("search-result").textContent = "Importing…";
@@ -553,9 +593,13 @@ $("compact").addEventListener("click", async () => {
 $("more-open").addEventListener("click", () => $("more-dialog").showModal());
 for (const button of $("more-dialog").querySelectorAll("button"))
   button.addEventListener("click", () => $("more-dialog").close());
-$("connections-shortcut").addEventListener("click", () => $("settings-open").click());
+$("connections-shortcut").addEventListener("click", () =>
+  $("settings-open").click(),
+);
 $("export-shortcut").addEventListener("click", () => $("export").click());
-$("insights-open").addEventListener("click", () => $("insights-dialog").showModal());
+$("insights-open").addEventListener("click", () =>
+  $("insights-dialog").showModal(),
+);
 
 for (const id of ["setup-open"])
   $(id).addEventListener("click", () => $("setup-dialog").showModal());

@@ -32,8 +32,9 @@ export function connectionControls(bridge, { toast, showError }) {
         : hasSelection && !showAll && !input.checked;
     $("codex-show-all").textContent = showAll ? "Show selected" : "Add apps";
     $("codex-show-all").hidden = !inputs.length;
-    $("codex-selection-count").textContent =
-      `${selected().length} selected · choose up to 12 apps`;
+    $("codex-selection-count").textContent = inputs.length
+      ? `${selected().length} selected · choose up to 12 apps`
+      : `${snapshot?.settings.contextApps?.length || 0} saved · checking availability`;
   }
   function disable() {
     const discovering =
@@ -107,6 +108,11 @@ export function connectionControls(bridge, { toast, showError }) {
         ? "Saved on this Mac for future calls. You can search now or change your selection below."
         : "Choose Use selected apps below to let Callwise search your saved selection.";
       short = enabled() ? `${count} enabled` : "App access off";
+    } else if (count > 0) {
+      title = `${count} apps saved`;
+      detail =
+        "Your app choices are saved on this Mac. Open this screen to check availability.";
+      short = `${count} saved`;
     } else {
       title = "Connect your Codex apps";
       detail =
@@ -169,7 +175,7 @@ export function connectionControls(bridge, { toast, showError }) {
     }
     const apps = state.contextApps || [];
     const catalogKey = JSON.stringify(apps);
-    if (catalogSignature !== catalogKey) {
+    if (catalogSignature !== catalogKey || changed) {
       const previous = selected(),
         hadCatalog = $("codex-apps").querySelectorAll("input").length > 0;
       const choices =
@@ -180,7 +186,7 @@ export function connectionControls(bridge, { toast, showError }) {
         const p = document.createElement("p");
         p.className = "muted micro";
         p.textContent = (settings.contextApps || []).length
-          ? "Your saved choices will appear here when the check finishes."
+          ? `${settings.contextApps.length} saved apps. Their names will appear when Codex finishes checking availability.`
           : "Connect to Codex to see available apps.";
         $("codex-apps").append(p);
       }

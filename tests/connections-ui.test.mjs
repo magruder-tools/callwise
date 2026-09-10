@@ -245,3 +245,24 @@ test("an unrelated refresh preserves unsaved choices and cannot silently enable 
     t.close();
   }
 });
+
+test("saved apps remain visible as saved before discovery completes", async () => {
+  const t = await setup();
+  try {
+    const state = t.c.snapshot();
+    state.settings = {
+      ...state.settings,
+      contextBackend: "codex",
+      contextApps: ["saved-a", "saved-b"],
+      contextConsent: true,
+    };
+    state.contextApps = [];
+    state.contextConnection = { status: "idle" };
+    t.controls.sync(state);
+    assert.equal(t.byId("codex-status-short").textContent, "2 saved");
+    assert.match(t.byId("codex-selection-count").textContent, /2 saved/);
+    assert.match(t.byId("codex-apps").textContent, /2 saved apps/);
+  } finally {
+    t.close();
+  }
+});

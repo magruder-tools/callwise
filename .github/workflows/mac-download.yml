@@ -28,7 +28,7 @@ jobs:
           path: |
             Callwise-source.zip
             BUILD_COMMIT.txt
-          retention-days: 14
+          retention-days: 7
   mac:
     runs-on: macos-15
     timeout-minutes: 15
@@ -75,7 +75,7 @@ jobs:
             release/*.zip
             release/BUILD_COMMIT.txt
             release/SHA256SUMS.txt
-          retention-days: 30
+          retention-days: 7
           compression-level: 0
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
@@ -92,5 +92,5 @@ jobs:
             bundled-codex.log
             packaged-smoke.log
             artifacts/**/*.png
-          retention-days: 30
+          retention-days: 7
           if-no-files-found: ignore

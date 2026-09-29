@@ -17,7 +17,7 @@
       <div class="brand">
         <span class="brand-mark" aria-hidden="true">c</span>Callwise<span
           class="version"
-          >0.3.0</span
+          >0.4.0</span
         >
       </div>
       <div class="top-status">
@@ -25,22 +25,23 @@
         ><span id="status-label">Ready when you are</span
         ><time id="clock">00:00</time>
       </div>
-      <button id="more-open" class="icon-button" aria-label="More options" title="More options">•••</button>
-      <div class="session-buttons" aria-label="Session controls">
-        <button id="start" class="primary-button">Start session</button>
-        <button id="pause" class="secondary-button" hidden>Ⅱ Pause</button>
-        <button id="end" class="end-button" hidden>■ End</button>
-      </div>
+      <button
+        id="more-open"
+        class="icon-button"
+        aria-label="More options"
+        title="Settings and connections"
+      >
+        ⚙
+      </button>
     </header>
     <main class="main-panel">
-
       <div id="demo-notice" class="demo-notice">
         <span class="pill">DEMO</span> Fictional conversation · scripted
         suggestions · no recording
       </div>
       <section class="focus-lane" aria-labelledby="fast-title">
         <div class="lane-heading">
-          <h2 id="fast-title">Your next move</h2>
+          <h2 id="fast-title">Your next question</h2>
           <button id="next-fast" class="new-suggestion" disabled>
             New suggestion
           </button>
@@ -55,6 +56,15 @@
         ></div>
       </section>
 
+      <button id="insights-open" class="insights-trigger">
+        <svg class="small-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M9 18h6m-5 3h4M8 14a7 7 0 1 1 8 0c-1 1-1 2-1 4H9c0-2 0-3-1-4Z"
+          />
+        </svg>
+        Worth considering <span id="insights-count"></span
+        ><span aria-hidden="true">⌄</span>
+      </button>
       <div class="ask-area">
         <form id="ask-form">
           <label class="sr-only" for="question">Ask Callwise</label
@@ -72,26 +82,60 @@
             ↑
           </button>
         </form>
-        <button id="transcript-open" class="secondary-button transcript-trigger">Transcript</button>
+      </div>
+      <div class="reading-tools">
+        <button id="transcript-open" class="text-button transcript-trigger">
+          ▤ &nbsp; Transcript
+        </button>
+        <button id="advice-history-open" class="text-button">
+          History <span id="advice-count">0</span>
+        </button>
       </div>
       <div id="error-box" class="error-box" role="alert" hidden></div>
       <footer class="call-footer">
-        <span id="capture-summary">Nothing is being captured</span
-        ><button id="insights-open" class="text-button">Insights <span id="insights-count"></span></button>
+        <span id="capture-summary">Nothing is being captured</span>
+        <div class="session-buttons" aria-label="Session controls">
+          <button id="start" class="primary-button">Start session</button>
+          <button id="pause" class="secondary-button" hidden>Ⅱ Pause</button>
+          <button id="end" class="end-button" hidden>■ End</button>
+        </div>
       </footer>
     </main>
     <dialog id="more-dialog" class="more-dialog" aria-label="More options">
-      <form method="dialog" class="dialog-top"><h2>Callwise</h2><button class="icon-button" aria-label="Close more options">×</button></form>
+      <form method="dialog" class="dialog-top">
+        <h2>Callwise</h2>
+        <button class="icon-button" aria-label="Close more options">×</button>
+      </form>
+      <button id="codex-open" class="menu-option">
+        Codex apps <span id="codex-status-short">Check connection</span>
+      </button>
       <button id="setup-open" class="menu-option">Call setup</button>
-      <button id="advice-history-open" class="menu-option">Suggestion history <span id="advice-count">0</span></button>
-      <button id="connections-shortcut" class="menu-option">Connections &amp; preferences</button>
-      <button id="compact" class="menu-option" aria-label="Float above other apps" aria-pressed="false">Float above other apps <span aria-hidden="true">↗</span></button>
-      <button class="menu-option prompt-chip" data-question="What is the best next question to ask?">Suggest a question</button>
+
+      <button id="connections-shortcut" class="menu-option">
+        AI &amp; preferences
+      </button>
+      <button
+        id="compact"
+        class="menu-option"
+        aria-label="Float above other apps"
+        aria-pressed="false"
+      >
+        Float above other apps <span aria-hidden="true">↗</span>
+      </button>
+      <button
+        class="menu-option prompt-chip"
+        data-question="What is the best next question to ask?"
+      >
+        Suggest a question
+      </button>
       <button id="export-shortcut" class="menu-option">Export session</button>
-      <p class="muted micro">Callwise 0.3.0 · Floating focus</p>
+      <p class="muted micro">Callwise 0.4.0 · Calm sidebar</p>
     </dialog>
     <dialog id="insights-dialog" class="drawer" aria-label="Deeper insights">
-      <form method="dialog" class="dialog-top"><h2>Deeper insights</h2><button class="icon-button" aria-label="Close insights">×</button></form>
+      <form method="dialog" class="dialog-top">
+        <h2>Deeper insights</h2>
+        <button class="icon-button" aria-label="Close insights">×</button>
+      </form>
       <section class="strategy-lane" aria-labelledby="strategy-title">
         <div class="lane-heading">
           <h2 id="strategy-title">Worth considering</h2>
@@ -155,7 +199,9 @@ Have a useful conversation and agree on clear next steps.</textarea
         ></label
       >
       <p class="muted micro">
-        Setup changes are saved automatically on this Mac and used for future calls. Review the goal and Context scope before each call. Participant consent is confirmed separately for each call.
+        Setup changes are saved automatically on this Mac and used for future
+        calls. Review the goal and Context scope before each call. Participant
+        consent is confirmed separately for each call.
       </p>
       <div class="side-divider"></div>
       <div class="section-label">
@@ -183,7 +229,7 @@ Have a useful conversation and agree on clear next steps.</textarea
       <div class="dialog-actions">
         <button id="add-context" class="secondary-button">Add context</button
         ><button id="settings-open" class="secondary-button">
-          Connections &amp; preferences
+          AI &amp; preferences
         </button>
       </div>
       <details class="session-details">
@@ -256,14 +302,128 @@ Have a useful conversation and agree on clear next steps.</textarea
       </p>
       <div id="advice-history-list"></div>
     </dialog>
+    <dialog id="codex-dialog" aria-labelledby="codex-title">
+      <form method="dialog" class="dialog-top">
+        <h2 id="codex-title">Your Codex apps</h2>
+        <button class="icon-button" aria-label="Close Codex apps">×</button>
+      </form>
+      <section class="codex-status-card" aria-live="polite">
+        <strong id="codex-status-title">Check your Codex connection</strong>
+        <p id="codex-status-detail" class="muted">
+          Callwise can reuse the ChatGPT sign-in already saved in Codex.
+        </p>
+      </section>
+      <div class="dialog-actions">
+        <button id="codex-signin" type="button" class="primary-button">
+          Connect to Codex
+        </button>
+        <button id="inspect-codex" type="button" class="secondary-button">
+          Refresh apps
+        </button>
+        <button
+          id="codex-cancel-signin"
+          type="button"
+          class="text-button"
+          hidden
+        >
+          Cancel sign-in
+        </button>
+        <button
+          id="codex-cancel-discovery"
+          type="button"
+          class="text-button"
+          hidden
+        >
+          Cancel
+        </button>
+      </div>
+      <p id="codex-result" class="connection-result" aria-live="polite"></p>
+      <div class="app-list-heading">
+        <h3>Choose apps</h3>
+        <button id="codex-show-all" class="text-button" type="button">
+          Show all apps
+        </button>
+      </div>
+      <label class="sr-only" for="codex-filter">Find an app</label
+      ><input
+        id="codex-filter"
+        type="search"
+        placeholder="Find an app…"
+        autocomplete="off"
+      />
+      <div
+        id="codex-apps"
+        class="context-apps"
+        aria-label="Choose saved apps"
+      ></div>
+      <p id="codex-selection-count" class="muted micro"></p>
+      <details class="codex-advanced">
+        <summary>Automatic lookup &amp; other options</summary>
+        <label class="check quiet-check"
+          ><input type="checkbox" id="auto-search" /><span
+            >Automatically find relevant context during calls</span
+          ></label
+        >
+        <label class="field-label" for="context-project"
+          >Client or project to search</label
+        ><input
+          id="context-project"
+          maxlength="100"
+          placeholder="For example: Riley Home"
+        />
+        <p class="muted micro">
+          Automatic lookup searches within this client or project. You can
+          always search manually.
+        </p>
+        <label class="field-label" for="context-backend">Connection type</label
+        ><select id="context-backend">
+          <option value="codex">Codex apps</option>
+          <option value="mcp">Configured read-only MCP source</option>
+        </select>
+      </details>
+      <details class="codex-advanced">
+        <summary>Which plugins can I use?</summary>
+        <p class="muted micro">
+          This list includes connected apps exposed by your Codex ChatGPT
+          sign-in. Plugins that only provide instructions, local tools, or
+          computer controls are not supported here. Add or connect other apps in
+          Codex, then choose Refresh apps here.
+        </p>
+      </details>
+      <div class="codex-save-bar">
+        <p class="muted micro">
+          Use selected apps allows Callwise to send search questions and
+          relevant call excerpts to these apps through Codex. Access is
+          read-only and stays enabled until you turn it off.
+        </p>
+        <div class="dialog-actions">
+          <button id="apply-context" class="primary-button" type="button">
+            Use selected apps</button
+          ><button id="codex-disable" class="text-button" type="button" hidden>
+            Turn off app access
+          </button>
+        </div>
+        <button
+          id="codex-search-open"
+          class="secondary-button"
+          type="button"
+          disabled
+        >
+          Search my apps
+        </button>
+      </div>
+    </dialog>
     <dialog id="settings-dialog">
       <form method="dialog" class="dialog-top">
         <div>
           <div class="eyebrow">MAKE IT YOURS</div>
-          <h2>Connections &amp; preferences</h2>
+          <h2>AI &amp; preferences</h2>
         </div>
         <button class="icon-button" aria-label="Close connections">×</button>
       </form>
+      <button id="codex-settings-open" class="secondary-button">
+        Manage Codex apps
+      </button>
       <p class="muted">
         Demo works without setup. For live coaching, add your API key here;
         Callwise encrypts it using macOS secure storage.
@@ -284,32 +444,6 @@ Have a useful conversation and agree on clear next steps.</textarea
         spellcheck="false"
         placeholder="Paste key — saved encrypted on this Mac"
       />
-      <div class="connection-row">
-        <div class="connection-icon purple">⌘</div>
-        <div>
-          <strong>Codex + ChatGPT</strong>
-          <p>Strategy and read-only context through your sign-in</p>
-        </div>
-        <button id="inspect-codex" class="secondary-button" type="button">
-          Find my apps
-        </button>
-      </div>
-      <div class="dialog-actions">
-        <button id="codex-signin" type="button" class="primary-button">
-          Sign in with ChatGPT</button
-        ><button
-          id="codex-cancel-signin"
-          type="button"
-          class="secondary-button"
-          hidden
-        >
-          Cancel sign-in
-        </button>
-      </div>
-      <p class="muted micro">
-        The Mac download includes the Codex helper. Sign-in opens the official
-        login page in your browser. Your password stays with OpenAI. Sign-in is saved; available apps refresh when you open Connections. Your preferences and selected apps are saved on this Mac until you change them.
-      </p>
       <div class="connection-row">
         <div class="connection-icon orange">≈</div>
         <div>
@@ -363,41 +497,7 @@ Have a useful conversation and agree on clear next steps.</textarea
         <option value="openai">Astra via OpenAI API</option>
         <option value="codex">Astra via Codex (experimental)</option>
       </select>
-      <section
-        class="context-settings"
-        aria-labelledby="context-settings-title"
-      >
-        <div class="eyebrow">YOUR WORK, IN CONTEXT</div>
-        <h3 id="context-settings-title">Connected context</h3>
-        <p class="muted micro">
-          Uses apps available to your Codex ChatGPT sign-in, not ChatGPT memory
-          or chat history. Global app settings are not changed.
-        </p>
-        <label class="field-label" for="context-backend">Where to look</label
-        ><select id="context-backend">
-          <option value="off">Off — only context I add myself</option>
-          <option value="codex">My connected apps through Codex</option>
-          <option value="mcp">My configured read-only MCP source</option>
-        </select>
-        <div
-          class="context-apps"
-          id="codex-apps"
-          aria-label="Choose saved apps"
-        ></div>
-        <label class="check quiet-check"
-          ><input type="checkbox" id="context-consent" /><span
-            >Allow selected read-only sources for this and future calls. Relevant call
-            excerpts may be used as search queries.</span
-          ></label
-        ><label class="check quiet-check"
-          ><input type="checkbox" id="auto-search" /><span
-            >Look up prior context when the conversation calls for it (requires
-            a named Context scope)</span
-          ></label
-        ><button id="apply-context" type="button" class="primary-button">
-          Save context preferences
-        </button>
-      </section>
+
       <label class="field-label" for="profile"
         >What should your copilot know about you?</label
       ><textarea
@@ -485,22 +585,30 @@ Have a useful conversation and agree on clear next steps.</textarea
       </form>
       <form id="search-form">
         <label class="field-label" for="context-query"
-          >Ask your selected context sources</label
+          >Search your selected apps</label
         ><input
           id="context-query"
           maxlength="1000"
           placeholder="What context would help right now?"
-        /><button class="primary-button">Search</button>
+        /><button id="connected-search-submit" class="primary-button">
+          Search
+        </button>
+        <button id="search-cancel" class="text-button" type="button" hidden>
+          Cancel search
+        </button>
       </form>
-      <form id="history-form">
-        <label class="field-label" for="history-id"
-          >Or import a past Fireflies transcript</label
-        ><input
-          id="history-id"
-          maxlength="200"
-          placeholder="Transcript ID"
-        /><button class="secondary-button">Import transcript</button>
-      </form>
+      <details>
+        <summary>Import a Fireflies transcript</summary>
+        <form id="history-form">
+          <label class="field-label" for="history-id"
+            >Or import a past Fireflies transcript</label
+          ><input
+            id="history-id"
+            maxlength="200"
+            placeholder="Transcript ID"
+          /><button class="secondary-button">Import transcript</button>
+        </form>
+      </details>
       <p id="search-result" class="connection-result" aria-live="polite"></p>
     </dialog>
     <div id="toast" class="toast" hidden></div>

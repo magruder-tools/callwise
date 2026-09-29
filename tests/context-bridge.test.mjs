@@ -770,3 +770,128 @@ test("semantically selected context is not dropped by a second keyword-only filt
   assert.equal(seen[0].id, "semantic");
   e.end();
 });
+
+test("connection discovery publishes progress, shares an in-flight check, and caches only a successful check", async () => {
+  let count = 0,
+    release,
+    fail = false;
+  const c = new CallController({
+    contextProvider: {
+      cancel() {},
+      close() {},
+      async inspect({ onStatus }) {
+        count++;
+        onStatus("Codex connected · loading apps…");
+        if (fail) throw new Error("Offline — retry");
+        await new Promise((r) => {
+          release = r;
+        });
+        return {
+          signedIn: true,
+          apps: [{ id: "saved-app", name: "Saved app", ready: true }],
+        };
+      },
+    },
+  });
+  try {
+    const first = c.command("context.discover"),
+      second = c.command("context.discover");
+    assert.equal(count, 1);
+    assert.equal(c.snapshot().contextConnection.status, "checking");
+    assert.match(c.snapshot().contextConnection.stage, /loading apps/);
+    release();
+    await Promise.all([first, second]);
+    await c.command("context.discover");
+    assert.equal(count, 1);
+    fail = true;
+    await assert.rejects(
+      c.command("context.discover", { force: true }),
+      /Offline/,
+    );
+    assert.equal(c.snapshot().contextConnection.status, "error");
+    assert.equal(
+      c.snapshot().contextApps[0].id,
+      "saved-app",
+      "failed refresh must keep the visible catalog",
+    );
+    assert.equal(c.snapshot().settings.contextConsent, false);
+  } finally {
+    c.close();
+  }
+});
+
+for (const mode of ["no tool", "failed tool", "unselected tool"]) {
+  test(`empty response after ${mode} is a connection failure, not zero results`, async () => {
+    const rpc = new FakeRpc();
+    rpc.complete = function () {
+      if (mode !== "no tool")
+        this.notify(
+          "item/completed",
+          item(
+            mode === "failed tool"
+              ? { status: "failed", error: { message: "Unavailable" } }
+              : {
+                  appContext: {
+                    connectorId: "other",
+                    actionName: "search_email",
+                  },
+                },
+          ),
+        );
+      this.notify("item/completed", {
+        type: "agentMessage",
+        text: '{"sources":[]}',
+      });
+      this.emit("notification", {
+        method: "turn/completed",
+        params: {
+          threadId: "thread-1",
+          turn: { id: "turn-1", status: "completed", items: [] },
+        },
+      });
+    };
+    await assert.rejects(
+      provider(rpc).search(options),
+      /did not complete a verified app search/,
+    );
+  });
+}
+
+test("context lookup uses its compatible model and supplies exact app IDs", async () => {
+  const rpc = new FakeRpc(),
+    p = provider(rpc);
+  await p.search(options);
+  assert.equal(rpc.turn.model, "gpt-5.5");
+  assert.ok(
+    rpc.turn.input[0].text.includes(
+      JSON.stringify({ id: APP.id, name: APP.name }),
+    ),
+  );
+});
+
+test("a completed verified search can legitimately return no matches", async () => {
+  const rpc = new FakeRpc();
+  rpc.complete = function () {
+    this.notify(
+      "item/completed",
+      item({
+        result: {
+          content: [{ type: "text", text: "Action completed." }],
+          structuredContent: { results: [] },
+        },
+      }),
+    );
+    this.notify("item/completed", {
+      type: "agentMessage",
+      text: '{"sources":[]}',
+    });
+    this.emit("notification", {
+      method: "turn/completed",
+      params: {
+        threadId: "thread-1",
+        turn: { id: "turn-1", status: "completed", items: [] },
+      },
+    });
+  };
+  assert.deepEqual(await provider(rpc).search(options), []);
+});

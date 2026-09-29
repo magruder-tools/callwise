@@ -42,9 +42,14 @@ async function boot() {
   mkdirSync(workDir, { recursive: true });
   const vault = path.join(dataDir, "connections.bin");
   const preferencesFile = path.join(dataDir, "preferences.bin");
-  let preferences = {}, preferencesWarning = "";
-  if (!smoke) try { preferences = readPreferences(preferencesFile, safeStorage); }
-  catch (error) { preferencesWarning = error.message; }
+  let preferences = {},
+    preferencesWarning = "";
+  if (!smoke)
+    try {
+      preferences = readPreferences(preferencesFile, safeStorage);
+    } catch (error) {
+      preferencesWarning = error.message;
+    }
   const baseConfig = smoke
     ? {
         fastModel: "gpt-5.6-luna",
@@ -67,12 +72,13 @@ async function boot() {
     new CallController({
       config,
       preferences,
-      onPreferences: smoke ? () => {} : (next) => savePreferences(preferencesFile, safeStorage, next),
+      onPreferences: smoke
+        ? () => {}
+        : (next) => savePreferences(preferencesFile, safeStorage, next),
       contextProvider: smoke
         ? null
         : new CodexContextProvider({
             bin: config.codexBin,
-            model: config.strategyModel,
             cwd: workDir,
           }),
       demoOnly: smoke,
@@ -94,12 +100,14 @@ async function boot() {
   if (vaultWarning) controller.engine.error(vaultWarning);
   if (preferencesWarning) controller.engine.error(preferencesWarning);
   win = new BrowserWindow({
-    width: 740,
-    height: 480,
-    minWidth: 600,
-    minHeight: 420,
-    ...(process.platform === "darwin" ? {titleBarStyle: "hiddenInset", trafficLightPosition: {x:16, y:25}} : {}),
-    backgroundColor: "#101319",
+    width: 440,
+    height: 820,
+    minWidth: 380,
+    minHeight: 660,
+    ...(process.platform === "darwin"
+      ? { titleBarStyle: "hiddenInset", trafficLightPosition: { x: 16, y: 14 } }
+      : {}),
+    backgroundColor: "#fbfaf8",
     title: "Callwise",
     show: false,
     webPreferences: {
@@ -151,9 +159,13 @@ async function boot() {
       controller.engine.status === "running" &&
       ["media", "display-capture"].includes(permission),
   );
-  installDisplayCapture(session.defaultSession, desktopCapturer, (frame) =>
-    trustedFrame(frame) && controller.mode === "audio" &&
-    controller.engine.status === "running",
+  installDisplayCapture(
+    session.defaultSession,
+    desktopCapturer,
+    (frame) =>
+      trustedFrame(frame) &&
+      controller.mode === "audio" &&
+      controller.engine.status === "running",
   );
   const send = (name, data) => {
     if (win && !win.isDestroyed()) win.webContents.send(name, data);
@@ -203,7 +215,6 @@ async function boot() {
       controller.contextProvider?.close();
       controller.contextProvider = new CodexContextProvider({
         bin: next.codexBin,
-        model: next.strategyModel,
         cwd: workDir,
       });
       controller.retrieval.provider = controller.contextProvider;
@@ -330,6 +341,7 @@ async function boot() {
   });
   app.on("window-all-closed", () => app.quit());
   await win.loadFile(page);
+  if (!smoke) win.show();
   if (smoke) {
     const artifacts =
       process.env.CALLWISE_SMOKE_DIR ||
@@ -355,7 +367,7 @@ async function boot() {
       path.join(artifacts, "desktop-preview.png"),
       (await win.webContents.capturePage()).toPNG(),
     );
-    win.setSize(600, 420);
+    win.setSize(380, 660);
     await new Promise((r) => setTimeout(r, 500));
     writeFileSync(
       path.join(artifacts, "narrow-preview.png"),
@@ -369,13 +381,15 @@ async function boot() {
 }
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
-  app.on("second-instance", () => {
+  const revealWindow = () => {
     if (win) {
       if (win.isMinimized()) win.restore();
       win.show();
       win.focus();
     }
-  });
+  };
+  app.on("second-instance", revealWindow);
+  app.on("activate", revealWindow);
   void boot().catch((error) => {
     console.error(`Callwise startup failed: ${error.message}`);
     app.exit(1);

@@ -1,0 +1,48 @@
+name: Publish signed release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version tag already reviewed, for example v0.4.0"
+        required: true
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 25
+    env:
+      CALLWISE_RELEASE: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+          cache: npm
+      - run: npm ci
+      - name: Validate release version
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: node --input-type=module -e 'import fs from "node:fs"; const v=JSON.parse(fs.readFileSync("package.json")).version; if(process.env.RELEASE_TAG!==`v${v}`) throw new Error("Tag must match package version");'
+      - run: npm run check && npm test && npm run replay && npm audit --omit=dev --audit-level=high
+      - name: Import the persistent signing certificate
+        env:
+          CALLWISE_SIGNING_P12: ${{ secrets.CALLWISE_SIGNING_P12 }}
+          CALLWISE_SIGNING_PASSWORD: ${{ secrets.CALLWISE_SIGNING_PASSWORD }}
+        run: node scripts/import-signing-identity.mjs
+      - run: npm run dist:mac
+      - name: Verify the actual installed bundle
+        run: |
+          codesign --verify --deep --strict release/mac-arm64/Callwise.app
+          codesign -d -r- release/mac-arm64/Callwise.app 2> release/SIGNATURE.txt
+          CALLWISE_SMOKE_DIR="$PWD/artifacts/packaged" release/mac-arm64/Callwise.app/Contents/MacOS/Callwise --smoke
+          shasum -a 256 release/*.dmg release/*.zip > release/SHA256SUMS.txt
+          git rev-parse HEAD > release/BUILD_COMMIT.txt
+      - name: Publish installer and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: gh release create "$RELEASE_TAG" release/*.dmg release/*.zip release/SHA256SUMS.txt release/SIGNATURE.txt release/BUILD_COMMIT.txt --verify-tag --title "Callwise $RELEASE_TAG" --notes-file CHANGELOG.md

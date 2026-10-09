@@ -1,117 +1,49 @@
 # Callwise
 
-A personal thinking copilot for live conversations. Built for sales, strategy,
-discovery, interview practice, negotiation, and general calls.
+A quiet second thought for your calls. Callwise listens to your microphone and call audio, uses the notes you supply, and offers short words you can say, questions to ask, or facts from your materials. It stays quiet when there is nothing useful to add.
 
-**Status: working offline demo + implemented desktop/integration code. Live API
-and macOS audio validation are pending. This is not a claim of parity with or
-superiority to Final Round, Glass, Cue, or any commercial product.**
+## Install on your Mac
 
-**New: selected read-only ChatGPT apps through local Codex are now implemented.**
-See [Connected context setup and validation](docs/CODEX_CONTEXT.md). Actual account-specific
-retrieval still needs a practice test on your Mac. This feature does not import ChatGPT memory
-or guarantee that every ChatGPT app is available through Codex.
+Use the Apple Silicon DMG from [GitHub Releases](https://github.com/magruder-tools/callwise/releases). Requires macOS 14.2 or later. Drag Callwise to Applications and launch it from there. Personal self-signed builds may need **System Settings → Privacy & Security → Open Anyway**. Developer ID and notarization are optional for maintainers with an Apple Developer account.
 
-Start with [START_HERE.md](START_HERE.md). The specific setup tasks for the next
-session are in [NEXT_SESSION.md](NEXT_SESSION.md).
+Until a stable signing certificate is configured, development DMGs are available from the **Mac download** workflow's **Callwise-Apple-Silicon** artifact. These previews use an ad-hoc signature; upgrading them can require fresh permission approvals.
 
-## Try it without an account or API key
+Real calls are supported in the installed app. Terminal and IDE launches may produce silent call audio even when a stream exists. The app flags development launches and its sound check detects silence.
 
-Node.js 22.12 or newer is required. From this folder:
+## First run
 
-```sh
-npm run demo
-```
+1. Save your OpenAI API key and run the tiny, billed setup checks.
+2. Allow the microphone, pick your input and transcribe the test phrase.
+3. Run the call-audio sound check with output unmuted.
+4. Add your résumé or describe your experience and voice.
+5. Choose a call type, add materials, confirm everyone is comfortable with transcription and AI notes, and start listening.
 
-Open http://127.0.0.1:4173 and click **Start demo**. This server uses only Node's
-standard library; dependency installation is not required for the browser demo.
-The fictional Northstar call demonstrates both coaching lanes and source links.
-Its model responses are deliberately scripted and labeled. It never loads keys,
-captures audio, starts Codex, or calls external services.
+A sample call works without credentials or recording. During a real call the main window gives way to a floating panel; ending it opens the recap. Pin a suggestion, browse earlier ones, type a question, or use **Help me now**. The most recent suggestion appears automatically. Late suggestions stay in history.
 
-## Run the desktop app on your Mac
+Default global shortcuts, active while listening: Control + Option + Space for help; P to pause; [ / ] to browse; H to show or hide the panel. Resume from the panel. Shortcuts can be recorded in Settings. The panel is visible if you share your whole screen; share an individual meeting window to keep it outside that share.
+
+PDF, DOCX, Markdown, text, CSV, VTT, SRT and JSON materials are supported: 10 MB per file and 2 MB extracted text per call. Scanned PDFs need pasted text. The last five calls can be reused. Their setup and material text are encrypted locally. A recap is kept only when **Bring this recap into the next call** is checked. Transcripts remain temporary unless exported. [Privacy details](docs/PRIVACY.md).
+
+## Development and validation
+
+Node 22.12 or later:
 
 ```sh
 npm ci
-npm run doctor
-npm start
-```
-
-The same demo works inside the desktop app. Choose a live source only after keys
-and permissions are set up. An Apple Silicon development ZIP can also be built:
-
-```sh
-npm run dist:mac
-```
-
-The current package is unsigned and not notarized. A source launch is the
-recommended development path until signing is configured. macOS may prevent an
-unsigned downloaded application from launching.
-
-## Implemented
-
-- Electron 44 desktop shell; standard window and floating compact mode.
-- Independent microphone and computer-audio channels, a 24 kHz AudioWorklet,
-  live level meters, explicit start/pause/end, and no saved raw audio.
-- OpenAI live transcription adapter with bounded audio packets, silence
-  detection, utterance commits, and connection/backpressure handling.
-- OpenAI Responses adapter for fast coaching and Astra strategy, with structured
-  output, bounded prompts, request timeouts, and `store: false`.
-- Experimental Codex App Server adapter using the installed CLI/sign-in. It
-  negotiates JSON-lines messages, creates an ephemeral coaching thread, parses
-  final structured output, and interrupts cancelled turns.
-- Two independent coaching lanes with coalesced triggers, request caps, stale
-  response rejection, confidence filtering, deduplication, and useful/dismiss
-  feedback. Quiet mode supports assistance only when requested.
-- Text, Markdown, CSV, VTT, SRT, and JSON context import; scoped local retrieval;
-  preserved source excerpts; unknown source IDs rejected by the engine.
-- Optional read-only MCP search, manually or automatically before strategic
-  checks. A configured tool must advertise read-only behavior. User-approved,
-  trusted server configuration is still essential.
-- Fireflies live Socket.IO adapter and past-transcript GraphQL import.
-- Markdown session export, connection readiness UI, and safe setup diagnostics.
-- Offline tests for lifecycle, provider contracts, context scope, and controls.
-
-## Explicitly not finished
-
-- Live testing with your OpenAI key, Fireflies beta access, and Codex installation.
-- macOS capture and permissions across Zoom, Meet, Teams, FaceTime, and devices.
-- Live validation of your selected ChatGPT apps through Codex. The new separate
-  read-only context bridge is implemented and opt-in; account-specific access,
-  provider metadata, and actual retrieval quality still need validation.
-- ChatGPT memory/chat-history import; native Gmail/Drive OAuth onboarding.
-- PDF/Word extraction, speaker diarization beyond you/others for local audio,
-  local Whisper, screenshots for model input, and autonomous post-call actions.
-- A measured coaching-quality or latency comparison with Final Round.
-- Signed/notarized distribution, auto-updates, and production support.
-
-## Data handling
-
-Callwise holds transcripts and loaded call context in memory by default. Closing
-the app clears those. Desktop preferences, including your profile, call setup defaults,
-selected apps, and context permission, are saved encrypted on this Mac until changed.
-Participant consent is confirmed for each new call. Explicit exports create a file you choose.
-Live audio/text/context go to whichever providers you enable. Providers and Codex
-have their own data handling; in-memory storage here is not a promise of zero
-provider retention. See [docs/PRIVACY.md](docs/PRIVACY.md).
-
-## Development
-
-```sh
-npm test
 npm run check
-npm run doctor
+npm test
+npm run replay
+npm run demo
 ```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
-[docs/VALIDATION.md](docs/VALIDATION.md). No live provider calls are part of the
-tests. GitHub Actions is configured to check pushes and pull requests. No
-auto-publish job exists.
+The browser sample runs on loopback only and never loads credentials. `npm start` is a development launch. `npm run dist:mac` builds a DMG and ZIP, including the Codex helper. Windows is outside the current supported scope.
 
-## Provenance and license
+`npm run replay` measures turn triggers and first paint with a deterministic offline provider. For **billed live measurements**, explicitly use `OPENAI_API_KEY` in your private environment and run `npm run replay -- --live --compare`. This compares GPT-5.6 Luna and GPT-6 Luna. The default remains GPT-5.6 Luna until measured live timing and answer quality justify switching. Settings → Advanced exposes models, editable cost rates, timing diagnostics and optional Codex, Fireflies and read-only custom context connections. Connected-app research runs before a call or when explicitly asked.
 
-GPL-3.0-or-later. The AudioWorklet adapts a small component from Cue; the rest of
-the coaching architecture and UI were written for this project. Glass was
-reviewed as a reference, and no Glass code or binaries are included. Exact source
-revisions and modifications are recorded in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+## Persistent signing and releases
 
+Run `npm run signing:setup` once on your own Mac with a private `CALLWISE_SIGNING_PASSWORD` of at least 16 characters. The script stores a certificate outside the repository and refuses to overwrite an existing identity. Keep its private backup. Set repository Actions secrets **CALLWISE_SIGNING_P12** (base64 PKCS#12) and **CALLWISE_SIGNING_PASSWORD**. Reuse this exact certificate for every release.
+
+After reviewing and tagging a version, run **Publish signed release** with the matching tag. It checks the app, imports the certificate into a temporary CI keychain, builds the DMG/ZIP, verifies the actual signed bundle and publishes durable GitHub Release downloads and checksums. It fails closed if no persistent identity is configured. Private keys are never committed or uploaded as artifacts. Test build N then N+1 on a real Mac to verify permission continuity.
+
+[Architecture](docs/ARCHITECTURE.md) · [Validation and outstanding device checks](docs/VALIDATION.md) · [Changelog](CHANGELOG.md)

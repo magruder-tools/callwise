@@ -29,3 +29,11 @@ executable, version 0.153.4, from the public @openai/codex platform package.
 Callwise is distributed under GPL-3.0-or-later. Other dependencies retain their
 own licenses, available in the installed packages. This project is independent
 of Cue, Glass, OpenAI, Fireflies, and Final Round AI.
+
+## Material extraction
+
+PDF.js (pdfjs-dist), Apache-2.0: https://github.com/mozilla/pdf.js
+
+Mammoth, BSD-2-Clause: https://github.com/mwilliamson/mammoth.js
+
+Their license notices remain with installed dependencies. DOCX extraction uses raw text rather than HTML. The Mammoth CLI-only argparse dependency is overridden to 2.0.1 to avoid its old sprintf-js dependency.

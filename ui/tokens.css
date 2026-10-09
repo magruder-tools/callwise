@@ -1,0 +1,23 @@
+:root {
+  color-scheme: dark;
+  --bg: #101319;
+  --surface: #191e26;
+  --raised: #212832;
+  --line: #303844;
+  --text: #f2f4f6;
+  --muted: #a9b2c0;
+  --mint: #9ce8cb;
+  --amber: #efc585;
+  --coral: #ef9c9c;
+  --font-xs: 12px;
+  --font-sm: 13px;
+  --font-md: 15px;
+  --font-lg: 22px;
+  --space: 4px;
+  --radius: 12px;
+  --small-radius: 8px;
+  --motion: 160ms;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+}

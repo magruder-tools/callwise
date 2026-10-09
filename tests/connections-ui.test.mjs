@@ -1,25 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { setTimeout as wait } from "node:timers/promises";
 import { parseHTML } from "linkedom";
-import { connectionControls } from "../ui/connections.mjs";
+import { settings } from "../ui/views/settings.mjs";
 import { CallController } from "../core/controller.mjs";
-async function setup(desktop = true) {
-  const { window, document } = parseHTML(
-    await readFile(new URL("../ui/index.html", import.meta.url), "utf8"),
-  );
-  globalThis.document = document;
-  for (const select of document.querySelectorAll("select"))
-    Object.defineProperty(select, "value", {
-      configurable: true,
-      get() {
-        return this._v ?? this.querySelector("option")?.value ?? "";
-      },
-      set(v) {
-        this._v = v;
-      },
-    });
+import { runSelfTest } from "../desktop/self-test.mjs";
+const prefs = { tab: "Advanced", devices: [], testResults: [] };
+test("advanced connections only offer ready apps and preserve actual app IDs", async () => {
   const c = new CallController({
     contextProvider: {
       cancel() {},
@@ -27,145 +13,105 @@ async function setup(desktop = true) {
       async inspect() {
         return {
           apps: [
-            { id: "real-id", name: "Gmail", ready: true, readOnlyToolCount: 2 },
-            {
-              id: "not-ready",
-              name: "Unavailable app",
-              ready: false,
-              readOnlyToolCount: 0,
-            },
+            { id: "mail-id", name: "Mail", ready: true },
+            { id: "unavailable", name: "Unavailable", ready: false },
           ],
-          note: "Ready apps only.",
         };
       },
     },
   });
-  const calls = [],
-    errors = [];
-  const bridge = {
-    desktop,
-    command: async (name, payload) => {
-      calls.push({ name, payload });
-      if (name === "desktop.connections.save") return { saved: true };
-      if (name === "desktop.connections.check")
-        return [{ ok: true, label: "Fast", detail: "Metadata only." }];
-      return c.command(name, payload);
-    },
-  };
-  const controls = connectionControls(bridge, {
-    toast() {},
-    showError: (m) => errors.push(m),
-  });
-  c.on("state", (state) => controls.sync(state));
-  controls.sync(c.snapshot());
-  const byId = (id) => document.getElementById(id),
-    click = (id) =>
-      byId(id).dispatchEvent(new window.Event("click", { bubbles: true }));
-  const close = () => {
-    c.removeAllListeners();
+  try {
+    await c.command("context.discover");
+    await c.command("configure", {
+      contextBackend: "codex",
+      contextApps: ["mail-id"],
+      contextConsent: true,
+    });
+    const { document } = parseHTML(settings(c.snapshot(), prefs));
+    const mail = document.querySelector('[data-context-app="mail-id"]'),
+      unavailable = document.querySelector('[data-context-app="unavailable"]');
+    assert.ok(mail.hasAttribute("checked"));
+    assert.ok(unavailable.hasAttribute("disabled"));
+    assert.ok(document.querySelector('[data-model="fastModel"]'));
+    assert.ok(document.querySelector('[data-price="audioMinute"]'));
+    assert.ok(document.getElementById("fireflies-live-id"));
+    assert.doesNotMatch(document.body.textContent, /Apply models|Apply prices/);
+    await assert.rejects(
+      c.command("configure", { contextApps: ["unavailable"] }),
+      /ready/,
+    );
+  } finally {
     c.close();
-    delete globalThis.document;
-  };
-  return { c, controls, byId, click, calls, errors, close };
-}
-test("connection screen discovers actual IDs, requires selection and applies per-session permissions", async () => {
-  const t = await setup();
-  try {
-    await t.c.command("configure", { project: "Test client" });
-    t.click("inspect-codex");
-    await wait(5);
-    const inputs = t.byId("codex-apps").querySelectorAll("input");
-    assert.equal(inputs.length, 2);
-    assert.equal(inputs[1].disabled, true);
-    assert.equal(inputs[0].checked, false);
-    inputs[0].checked = true;
-    t.byId("context-backend").value = "codex";
-    t.byId("context-consent").checked = true;
-    t.click("apply-context");
-    await wait(5);
-    assert.deepEqual(t.c.engine.settings.contextApps, ["real-id"]);
-    assert.equal(t.c.engine.settings.contextConsent, true);
-    assert.equal(t.errors.length, 0);
-  } finally {
-    t.close();
   }
 });
-test("connection UI preserves a draft app selection across unrelated state updates", async () => {
-  const t = await setup();
+test("AI settings explain real tiny requests and never render credentials", () => {
+  const c = new CallController({
+    config: { openaiKey: "PRIVATE_TEST_KEY", fastModel: "gpt-5.6-luna" },
+  });
   try {
-    t.click("inspect-codex");
-    await wait(5);
-    const input = t.byId("codex-apps").querySelector("input");
-    input.checked = true;
-    t.c.engine.emitState();
-    assert.equal(input.checked, true);
+    const html = settings(c.snapshot(), { ...prefs, tab: "AI" });
+    assert.doesNotMatch(html, /PRIVATE_TEST_KEY/);
+    assert.match(html, /tiny billed/);
+    assert.match(html, /Save and test/);
+    assert.doesNotMatch(html, /Check model access/);
   } finally {
-    t.close();
+    c.close();
   }
 });
-test("connection UI rejects automatic lookup without a named scope", async () => {
-  const t = await setup();
-  try {
-    t.click("inspect-codex");
-    await wait(5);
-    t.byId("codex-apps").querySelector("input").checked = true;
-    t.byId("context-backend").value = "codex";
-    t.byId("context-consent").checked = true;
-    t.byId("auto-search").checked = true;
-    t.click("apply-context");
-    await wait(5);
-    assert.match(t.errors[0], /named Context scope/);
-    assert.equal(t.c.engine.settings.contextConsent, false);
-  } finally {
-    t.close();
-  }
+test("setup test performs inference and waits for transcription readiness without capturing audio", async () => {
+  let inference = 0,
+    connects = 0,
+    closes = 0;
+  const result = await runSelfTest(
+    {
+      openaiKey: "TEST_ONLY_KEY",
+      fastModel: "gpt-5.6-luna",
+      strategyModel: "gpt-6-astra",
+      transcriptionModel: "gpt-live-transcribe",
+    },
+    {
+      fetchImpl: async (url, options) => {
+        if (url.endsWith("/models")) return new Response("{}", { status: 200 });
+        const body = JSON.parse(options.body);
+        assert.equal(body.store, false);
+        assert.equal(body.stream, true);
+        inference++;
+        return new Response(JSON.stringify({ output_text: '{"ok":true}' }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+      transcriberFactory: () => ({
+        async connect() {
+          connects++;
+        },
+        close() {
+          closes++;
+        },
+        push() {
+          assert.fail("setup API test must not record");
+        },
+      }),
+    },
+  );
+  assert.equal(result.length, 4);
+  assert.ok(result.every((r) => r.ok));
+  assert.equal(inference, 2);
+  assert.equal(connects, 1);
+  assert.equal(closes, 1);
 });
-test("Save connections reaches the desktop handler and clears password inputs", async () => {
-  const t = await setup();
-  try {
-    t.byId("openai-key").value = "not-a-real-key-for-offline-test";
-    t.byId("fireflies-key").value = "not-a-real-fireflies-key";
-    t.click("save-connections");
-    await wait(5);
-    assert.ok(t.calls.some((c) => c.name === "desktop.connections.save"));
-    assert.equal(t.byId("openai-key").value, "");
-    assert.equal(t.byId("fireflies-key").value, "");
-    t.click("check-connections");
-    await wait(5);
-    assert.match(t.byId("connection-result").textContent, /Metadata only/);
-  } finally {
-    t.close();
-  }
-});
-test("browser demo disables account actions and live session locks permissions", async () => {
-  const t = await setup(false);
-  try {
-    assert.equal(t.byId("save-connections").disabled, true);
-    assert.equal(t.byId("inspect-codex").disabled, true);
-  } finally {
-    t.close();
-  }
-  const u = await setup();
-  try {
-    u.controls.sync({ ...u.c.snapshot(), status: "running" });
-    assert.equal(u.byId("apply-context").disabled, true);
-  } finally {
-    u.close();
-  }
-});
-
-
-test('saved app choices reappear when the first catalog arrives after restart', async () => {
-  const t = await setup();
-  try {
-    t.c.preferences = {contextApps:['real-id'], contextConsent:true, contextBackend:'codex'};
-    t.c.engine.configure(t.c.preferences);
-    t.click('inspect-codex');
-    await wait(10);
-    assert.equal(t.byId('codex-apps').querySelector('input').checked, true);
-    assert.equal(t.byId('context-consent').checked, true);
-    await t.c.command('new');
-    assert.equal(t.byId('codex-apps').querySelector('input').checked, true);
-    assert.equal(t.byId('context-backend').value, 'codex');
-  } finally { t.close(); }
+test("a rejected API key names the failure and avoids billable checks", async () => {
+  let calls = 0;
+  const result = await runSelfTest(
+    { openaiKey: "TEST_ONLY_KEY" },
+    {
+      fetchImpl: async () => {
+        calls++;
+        return new Response("{}", { status: 401 });
+      },
+      transcriberFactory: () => assert.fail("must not connect"),
+    },
+  );
+  assert.equal(calls, 1);
+  assert.equal(result[0].ok, false);
+  assert.match(result[0].detail, /didn't accept/);
 });

@@ -29,4 +29,4 @@ console.log(
 console.log(
   `Models: ${status.fastModel} / ${status.strategyModel} / ${status.transcriptionModel}`,
 );
-console.log("Next: npm run demo, or npm start on your Mac. See START_HERE.md.");
+console.log("Next: npm run demo, or npm start on your Mac. See README.md.");

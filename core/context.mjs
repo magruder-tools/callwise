@@ -31,11 +31,18 @@ export class ContextStore {
   add(input) {
     if (!input || typeof input.text !== "string" || !input.text.trim())
       throw new Error("Add a document with text.");
-    if (input.text.length > 250_000)
-      throw new Error("Keep each document below 250,000 characters.");
+    if (Buffer.byteLength(input.text) > 2 * 1024 * 1024)
+      throw new Error("Keep extracted material below 2 MB per call.");
     if (this.docs.size >= 150 && !this.docs.has(input.id))
       throw new Error("This session supports up to 150 context documents.");
     const id = input.id || randomUUID();
+    const total =
+      [...this.docs.values()]
+        .filter((d) => d.id !== id)
+        .reduce((n, d) => n + Buffer.byteLength(d.text), 0) +
+      Buffer.byteLength(input.text);
+    if (total > 2 * 1024 * 1024)
+      throw new Error("Keep extracted material below 2 MB per call.");
     const doc = {
       id,
       title: String(input.title || "Untitled note").slice(0, 200),

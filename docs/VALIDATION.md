@@ -1,59 +1,44 @@
-# Validation record
+# Validation
 
-Build date: September 6, 2026. Build host: Linux x64, Node 24.19.0.
+0.4.0 implements the remaining milestones from `CALLWISE_BRIEF.md` on top of the reliability work recorded in `CHECKPOINT_1.md`.
 
-## Verified
+## Completion audit — 9 October 2026
 
-- Offline demo server starts without dependency installation or API keys.
-- All 31 automated checks passed in the final source suite, including a simulated
-  DOM renderer test against the real session controller. No tests were skipped.
-- JavaScript syntax checks cover all source and test modules.
-- Production dependency audit reports zero known vulnerabilities after updating
-  the direct WebSocket dependency. This is not a comprehensive security audit.
-- Demo flow: start → load fictional context → ingest transcript → fast/source
-  cards → inspect source → mark useful → pause → end → new session.
-- Engine: stable transcript IDs, revisions, cancellation, independent lanes,
-  stale advice rejection, request caps, quiet mode, deduplication, project scope,
-  unknown-citation rejection, background-retrieval cancellation, and export.
-- Provider fixtures: OpenAI structured requests, safe errors, Fireflies event
-  mapping/history import, MCP read-only filtering, PCM silence handling, and
-  Codex streaming/final-answer handling.
-- Real Codex CLI 0.153.4: schema generation, JSON-lines initialization, and
-  account inspection completed without running model inference. A signed-in
-  account was reported in the build environment; this does not verify the
-  user's Mac or automatic access to its ChatGPT connections.
-- Electron builder produced an Apple Silicon development app bundle on Linux.
-  Source and package metadata include macOS audio permission descriptions.
+The existing full upgrade was recovered from PR #4 at `949ad2b` and reviewed against the attached brief. Additional regression coverage verifies preparation reuse/invalidation, import refresh, cancellation on Start, Fireflies recovery and meeting-ID reuse, wrap-up coverage, background backchannel silence, removal of interrupted streamed drafts, streamed pin/dismissal, first-paint lateness, deeper-request trigger visibility, specific setup fixes, encrypted custom server configuration and retained source provenance.
 
-## Not verified / environment limitations
+The full Node suite now has 183 passing tests. Syntax validation covers 81 JavaScript modules. All three deterministic offline fixtures pass (11 helped turns; approximately 51 ms median and 52 ms p90 to engine first paint). The production dependency audit has no vulnerabilities. No additional runtime dependency was introduced by the completion audit.
 
-- No OpenAI coaching or transcription request was made with a live API key.
-- No live Fireflies or MCP account was configured or tested.
-- No Codex inference turn was run. Model entitlement, behavior, latency, usage
-  limits, and tool restrictions still need a short real test after approval.
-  An attempted ephemeral thread startup timed out on the build host; end-to-end
-  Codex strategy remains experimental even though schema/account checks passed.
-- No microphone/computer audio was captured here. macOS permissions, device
-  switching, echo, dropouts, diarization, and app compatibility need Mac testing.
-- The cloud browser blocked the loopback demo URL. The headless Electron
-  renderer could not run under this host's socket/process restrictions. Thus
-  visual rendering and real desktop interaction were not verified; the DOM test
-  validates interface wiring, not pixel appearance or native UI behavior.
-- The macOS package is unsigned and unnotarized. It has not been launched on
-  macOS and should be treated as a development candidate.
-- Initial build environment could not create a GitHub repository. Matthew later
-  created private `magruder-tools/callwise`; its initial README and write access
-  were verified before preparing the source upload.
+Browser screenshot and native packaging validation run in GitHub Actions for the exact published commit. This workspace could not install the requested Chromium build because its download returned an invalid archive; that is a local tool limitation, not a claim that browser checks passed locally. The CI artifacts and PR record contain the resulting screenshots, packaged-app logs and installer.
 
-## First real-call gate
+Automated verification uses the real controller/engine with offline providers, fake Realtime sockets, encrypted-storage substitutes and rendered DOM. Replays cover interview, discovery and client calls, including own speech, backchannels, repeats and partial questions. The stub measures trigger/engine first paint only, not live network or transcription performance. It does not establish model answer quality.
 
-1. Run the offline demo in the actual desktop app.
-2. With chosen credentials, test a pasted conversation and verify source links.
-3. Test both audio channels in a permitted practice call with headphones.
-4. Pause during connection setup, during speech, and during strategic inference.
-5. Resume, disconnect a device/network, end, and start a separate session.
-6. Verify that no prior client's context appears in the next call.
-7. Assess actual useful/distracting advice, not just whether cards appear.
+The Mac workflow runs syntax, tests, production dependency audit, native Electron smoke, DMG/ZIP packaging, signature verification, bundled Codex verification and actual packaged-app smoke. Screenshots cover Ready, Recap and the live panel at 340, 440 and 640 px widths. CI checks that essential lead/point text is present and not clipped. It uses synthetic data, no permissions, audio or credentials.
 
-Performance targets are not measurements. A strong model and a working event
-pipeline do not yet establish that Callwise is better than Final Round.
+`npm run test:ui` uses Playwright against the shipped renderer with synthetic snapshots. Ready is checked at 720 × 560; Live at 340 × 240 (a short card), 440 × 320 (a full 16-word lead and three 12-word points), and 640 × 480. It verifies visible controls, horizontal overflow and the 12 px minimum type size, and saves screenshots for inspection. The default live size passed locally without scrolling. The narrower native panel grows when a full card needs more room.
+
+## Checks that need your Mac/account
+
+- Run the in-app API, microphone and call-audio tests; exercise a wrong key, revoked permission and muted output.
+- Install the app, test the floating panel over full-screen Zoom/Meet/FaceTime and confirm keyboard focus stays in the meeting.
+- Change the microphone and output device while listening; verify fallback/reacquisition and transcript continuity.
+- With the same persistent signing identity, install build N then N+1 over it and check permission continuity.
+- Use `npm run replay -- --live --compare` with a private API key to compare the two fast models. Targets: median first paint ≤2 seconds, p90 ≤4 seconds; evaluate factual correctness as well as timing. The app does not claim those targets have been measured here.
+- Spot-check preparation and recap against your original evidence. Citation IDs and recorded commitments are validated in code; factual prose still needs ordinary human review.
+
+No API key or signing certificate was supplied to this work session. No live request was made. The release workflow requires persistent signing secrets; preview CI can still build an ad-hoc DMG. The brief's companion HTML visual reference was not supplied, so the redesign follows its written layout, tokens and accessibility requirements.
+
+## Audio-only capture investigation
+
+The supported Electron loopback path grants a display source and audio. Chromium rejects display-media requests without a video source when video is requested, and the browser API does not expose audio-only display capture. Electron 39+ uses Core Audio taps internally. A separate process-tap helper would require native integration and real Mac permission/audio validation; shipping an unverified helper would reduce reliability. The permitted fallback retains the current path, never reads frames, explains macOS wording, and supplies an end-to-end sound check.
+
+## Five-minute Mac check
+
+After completing first-run setup in the installed app:
+
+1. Add a PDF or Word file, choose Client, enter a call goal and confirm consent. Start listening. In a permitted call, check that both meters move and their words appear in the caption.
+2. Ask a four-word-or-longer question from the other end. Check that the trigger appears immediately, the answer streams and its supporting points are visible. In the meeting's chat, keep typing while new cards arrive; the panel must not steal focus. Test a full-screen meeting too.
+3. Turn Wi-Fi off for ten seconds and restore it. The call should keep running, recover each channel, and show a gap if audio was actually lost. Switch microphones and check continued transcription.
+4. Type a question while a proactive answer is being written. Your question takes priority. Pin a card, ask another question, then try Not useful and history navigation.
+5. Pause and resume; the call clock must exclude the pause. End; the recap and email should appear automatically within 20 seconds. Copy the recap, opt into carrying it, choose Another call and reopen it from Recent. Verify the materials return and consent is unchecked.
+
+A real one-hour call and two upgrades signed with the same persistent certificate remain separate longer checks. CI simulates the socket handoff and validates encrypted reuse; it cannot grant or exercise your Mac's audio permissions.

@@ -64,3 +64,61 @@ test("a live session cannot be relabeled as demo after transcripts exist", async
   await assert.rejects(c.command("start", { source: "demo" }), /new session/);
   c.close();
 });
+
+test("a Fireflies transcript can be imported before starting a call but not during the fictional demo", async () => {
+  const c = new CallController({ config: { firefliesKey: "TEST_ONLY" } });
+  let imports = 0;
+  c.fireflies.importTranscript = async (id) => {
+    imports++;
+    return {
+      id,
+      title: "Past call",
+      text: "Verified past notes",
+      kind: "meeting",
+    };
+  };
+  try {
+    await c.command("context.fireflies", { id: "past" });
+    assert.equal(c.engine.context.list().length, 1);
+    assert.equal(imports, 1);
+    await c.command("start", { source: "demo" });
+    await assert.rejects(
+      c.command("context.fireflies", { id: "past" }),
+      /disabled/,
+    );
+    assert.equal(imports, 1);
+  } finally {
+    c.close();
+  }
+});
+test("typed questions stay in the main lane and help hotkeys bypass the proactive confidence gate", async () => {
+  const c = new CallController({ demoOnly: true });
+  try {
+    await c.command("configure", { quiet: true });
+    await c.command("start", { source: "demo" });
+    const generate = async ({ question }) => ({
+      cards: [
+        {
+          title: "Direct answer",
+          body: question,
+          say: "A useful answer",
+          kind: "answer",
+          confidence: 0.1,
+          sourceIds: [],
+          reason: "Requested",
+        },
+      ],
+    });
+    c.engine.providers = { fast: { generate }, strategy: { generate } };
+    await c.command("ask", { question: "What is next?", lane: "strategy" });
+    assert.equal(c.engine.cards.at(-1).lane, "fast");
+    assert.equal(c.engine.cards.at(-1).computedLane, "strategy");
+    assert.equal(c.engine.cards.at(-1).origin, "asked");
+    assert.equal(c.engine.cards.at(-1).question, "What is next?");
+    await c.command("nudge");
+    assert.equal(c.engine.cards.at(-1).origin, "hotkey");
+    assert.equal(c.engine.cards.length, 2);
+  } finally {
+    c.close();
+  }
+});

@@ -26,7 +26,12 @@ const row = (id, text = "Should we change the channel budget?") => ({
 const engine = (generate, config = {}) =>
   new CoachEngine({
     providers: { fast: { generate }, strategy: { generate } },
-    config: { fastDelay: 100000, strategyDelay: 100000, ...config },
+    config: {
+      autoCoach: false,
+      fastDelay: 100000,
+      strategyDelay: 100000,
+      ...config,
+    },
   });
 test("live input requires explicit consent, demo does not", () => {
   const e = engine(async () => advice());
@@ -119,7 +124,7 @@ test("fresh source-linked advice is accepted; invented citations are discarded",
   assert.equal(e.cards[0].sources[0].id, "real");
   e.end();
 });
-test("dismissal prevents repetition, and low-confidence proactive cards are withheld", async () => {
+test("dismissal prevents repetition, and subjective confidence no longer withholds useful help", async () => {
   let result = advice();
   const e = engine(async () => result);
   e.start();
@@ -134,7 +139,7 @@ test("dismissal prevents repetition, and low-confidence proactive cards are with
     confidence: 0.3,
   });
   await e.run();
-  assert.equal(e.cards.length, 1);
+  assert.equal(e.cards.length, 2);
   e.end();
 });
 test("per-session call caps block repeated billable requests", async () => {
@@ -227,14 +232,14 @@ test("export preserves transcript and provenance while omitting dismissed advice
   assert.doesNotMatch(e.exportMarkdown(), /### Check attribution/);
   e.end();
 });
-test("background retrieval feeds strategic advice but cannot add data after pause", async () => {
+test("asked retrieval feeds strategic advice but cannot add data after pause", async () => {
   let resolve;
   const e = engine(async () => advice({ sourceIds: ["retrieved"] }));
   e.retriever = () => new Promise((r) => (resolve = r));
   e.configure({ autoSearch: true });
   e.start();
   e.ingest(row("a", "We need attribution evidence."));
-  const task = e.run("strategy");
+  const task = e.run("strategy", "Find the attribution evidence");
   e.pause();
   resolve([
     {
@@ -248,7 +253,7 @@ test("background retrieval feeds strategic advice but cannot add data after paus
   assert.equal(e.cards.length, 0);
   e.end();
 });
-test("background retrieval is cited in the same strategic request", async () => {
+test("asked retrieval is cited in the same strategic request", async () => {
   let seen;
   const e = engine(async (args) => {
     seen = args.sources;
@@ -264,7 +269,7 @@ test("background retrieval is cited in the same strategic request", async () => 
   e.configure({ autoSearch: true });
   e.start();
   e.ingest(row("a", "We need attribution evidence."));
-  await e.run("strategy");
+  await e.run("strategy", "Find the attribution evidence");
   assert.equal(seen[0].id, "retrieved");
   assert.equal(e.cards[0].sources[0].id, "retrieved");
   e.end();
@@ -276,4 +281,89 @@ test("factual cards without a source are withheld", async () => {
   await e.run();
   assert.equal(e.cards.length, 0);
   e.end();
+});
+
+test("active call time and transcript timestamps exclude pauses, including multiple resumes", () => {
+  let now = 0;
+  const e = new CoachEngine({
+    clock: () => now,
+    config: { autoCoach: false, fastDelay: 100000, strategyDelay: 100000 },
+  });
+  try {
+    e.start();
+    now = 10000;
+    e.ingest(row("a"));
+    e.pause();
+    now = 110000;
+    assert.equal(e.snapshot().activeTimeMs, 10000);
+    e.start();
+    now = 120000;
+    e.ingest(row("b"));
+    e.pause();
+    assert.equal(e.transcript.get("b").startMs, 20000);
+    now = 220000;
+    e.start();
+    now = 225000;
+    e.end();
+    assert.equal(e.snapshot().activeTimeMs, 25000);
+  } finally {
+    e.end();
+  }
+});
+test("two active hours warn without pausing; four active hours end the call", () => {
+  let now = 0;
+  const e = new CoachEngine({
+    clock: () => now,
+    config: { autoCoach: false, fastDelay: 100000, strategyDelay: 100000 },
+  });
+  try {
+    e.start();
+    now = 2 * 60 * 60 * 1000;
+    e.ingest(row("a"));
+    assert.equal(e.status, "running");
+    assert.equal(e.errors.at(-1).severity, "warning");
+    e.ingest(row("b"));
+    assert.equal(e.errors.length, 1);
+    now = 4 * 60 * 60 * 1000;
+    assert.equal(e.ingest(row("c")), false);
+    assert.equal(e.status, "ended");
+  } finally {
+    e.end();
+  }
+});
+test("errors have IDs, expire or dismiss, and connection errors clear on a successful resume", () => {
+  let now = 0;
+  const e = new CoachEngine({ clock: () => now });
+  try {
+    e.start();
+    e.error("Connection failed", {
+      condition: "connection:mic",
+      lifetimeMs: null,
+    });
+    const id = e.snapshot().errors[0].id;
+    assert.ok(id);
+    e.pause();
+    e.start();
+    assert.equal(e.snapshot().errors.length, 0);
+    e.error("Try again");
+    now = 30001;
+    assert.equal(e.snapshot().errors.length, 0);
+    e.error("Dismiss this");
+    e.clearErrors({ id: e.errors.at(-1).id });
+    assert.equal(e.snapshot().errors.length, 0);
+  } finally {
+    e.end();
+  }
+});
+test("explicit asks still explain missing evidence when the model chooses silence", async () => {
+  const e = engine(async () => ({ cards: [] }));
+  try {
+    e.start();
+    await e.run("fast", "What should I say?");
+    assert.equal(e.cards.length, 1);
+    assert.equal(e.cards[0].origin, "asked");
+    assert.match(e.cards[0].body, /verified context/);
+  } finally {
+    e.end();
+  }
 });

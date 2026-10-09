@@ -375,17 +375,17 @@ small,
   font-size: var(--font-sm);
 }
 .live-view {
-  padding: 12px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 2px;
   min-height: 100vh;
 }
 .live-status {
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 28px;
+  height: 24px;
   flex: none;
   -webkit-app-region: drag;
   font-size: var(--font-xs);
@@ -416,6 +416,11 @@ small,
   gap: 0;
   margin-left: auto;
 }
+.live-actions .icon-button {
+  height: 24px;
+  min-height: 24px;
+  padding: 2px 6px;
+}
 .meters {
   display: flex;
   gap: 8px;
@@ -445,7 +450,7 @@ small,
 }
 .coach-card {
   position: relative;
-  padding: 12px 16px;
+  padding: 4px 12px;
   border: 1px solid var(--line);
   background: var(--surface);
   border-radius: var(--radius);
@@ -458,11 +463,19 @@ small,
 .trigger {
   color: var(--muted);
   font-size: var(--font-xs);
-  line-height: 1.5;
+  line-height: 1.25;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-bottom: 8px;
+  margin: 0;
+  min-width: 0;
+  flex: 1;
+}
+.card-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
 }
 .trigger span {
   font-weight: 600;
@@ -474,35 +487,36 @@ small,
   display: flex;
   gap: 8px;
   align-items: center;
-  margin-bottom: 4px;
+  flex: none;
+  margin: 0;
 }
 .kind.warning {
   color: var(--amber);
 }
 .lead {
   font-size: 22px;
-  margin: 0 0 12px;
-  line-height: 1.28;
+  margin: 0 0 4px;
+  line-height: 1.1;
   overflow-wrap: anywhere;
 }
 .points {
   list-style: none;
-  margin: 0 0 12px;
+  margin: 0 0 4px;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
   font-size: var(--font-sm);
-  line-height: 1.4;
+  line-height: 1.15;
 }
 .points li {
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
-  gap: 8px;
+  display: block;
+  overflow-wrap: anywhere;
 }
 .points strong {
   font-weight: 500;
   color: var(--muted);
+  margin-right: 8px;
 }
 .quiet {
   min-height: 148px;
@@ -536,12 +550,13 @@ small,
 .card-nav button {
   font-size: var(--font-xs);
   padding: 4px 6px;
-  min-height: 28px;
+  min-height: 24px;
 }
 .card-nav .icon-button {
   width: 24px;
   min-width: 24px;
   padding: 2px;
+  height: 24px;
 }
 .card-nav .text-button {
   margin-left: 4px;
@@ -550,7 +565,10 @@ small,
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  width: 100%;
+  max-width: 100%;
+}
+.sources:empty {
+  display: none;
 }
 .sources summary {
   font-size: var(--font-xs);
@@ -570,7 +588,15 @@ small,
 .bigger-picture {
   font-size: var(--font-xs);
   color: var(--muted);
-  margin: 12px 0;
+  margin: 4px 0;
+}
+.bigger-picture summary {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bigger-picture[open] summary {
+  white-space: normal;
 }
 .bigger-picture summary {
   cursor: pointer;
@@ -589,8 +615,8 @@ small,
   color: var(--muted);
   border: 0;
   background: none;
-  min-height: 24px;
-  padding: 4px;
+  min-height: 18px;
+  padding: 0 4px;
 }
 .caption span {
   font-weight: 600;
@@ -601,17 +627,17 @@ small,
   gap: 8px;
   align-items: center;
   margin-top: auto;
-  padding-top: 4px;
+  padding-top: 0;
 }
 .ask-row input {
   font-size: var(--font-sm);
-  height: 36px;
+  height: 32px;
   min-width: 0;
   padding: 8px;
 }
 .help-now {
   white-space: nowrap;
-  min-height: 36px;
+  min-height: 32px;
   font-size: var(--font-xs);
 }
 .transcript-inline {
@@ -973,11 +999,8 @@ form label {
   .points li {
     grid-template-columns: 60px minmax(0, 1fr);
   }
-  .live-view {
-    padding: 8px;
-  }
   .coach-card {
-    padding: 12px;
+    padding: 4px 12px;
   }
   .card-nav .text-button {
     margin-left: 0;
@@ -1019,4 +1042,42 @@ form label {
 
 body.mac:not(.panel) .banner:first-child {
   padding-left: 92px;
+}
+
+@media (max-height: 640px) {
+  .ready-view {
+    padding: 16px 24px;
+  }
+  .ready-view .intro {
+    display: none;
+  }
+  .ready-view .section {
+    margin-bottom: 16px;
+  }
+  .ready-view h2 {
+    margin-bottom: 8px;
+  }
+  .ready-view .help {
+    margin-bottom: 8px;
+  }
+  .ready-view .drop-zone {
+    padding: 8px 12px;
+    margin: 8px 0;
+  }
+  .ready-view .start-area {
+    padding-top: 12px;
+  }
+  .ready-view .start-area .row {
+    margin-top: 12px;
+  }
+  .ready-footer {
+    margin-top: 12px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    align-items: center;
+  }
+  .ready-footer button {
+    min-height: 28px;
+  }
 }

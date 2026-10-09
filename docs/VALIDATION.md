@@ -6,6 +6,8 @@ Automated verification uses the real controller/engine with offline providers, f
 
 The Mac workflow runs syntax, tests, production dependency audit, native Electron smoke, DMG/ZIP packaging, signature verification, bundled Codex verification and actual packaged-app smoke. Screenshots cover Ready, Recap and the live panel at 340, 440 and 640 px widths. CI checks that essential lead/point text is present and not clipped. It uses synthetic data, no permissions, audio or credentials.
 
+`npm run test:ui` uses Playwright against the shipped renderer with synthetic snapshots. Ready is checked at 720 × 560; Live at 340 × 240 (a short card), 440 × 320 (a full 16-word lead and three 12-word points), and 640 × 480. It verifies visible controls, horizontal overflow and the 12 px minimum type size, and saves screenshots for inspection. The default live size passed locally without scrolling. The narrower native panel grows when a full card needs more room.
+
 ## Checks that need your Mac/account
 
 - Run the in-app API, microphone and call-audio tests; exercise a wrong key, revoked permission and muted output.

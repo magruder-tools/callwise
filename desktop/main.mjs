@@ -172,7 +172,6 @@ async function boot() {
       nodeIntegration: false,
       sandbox: true,
       webSecurity: true,
-      offscreen: smoke,
       backgroundThrottling: false,
     },
   });
@@ -214,7 +213,6 @@ async function boot() {
       nodeIntegration: false,
       sandbox: true,
       webSecurity: true,
-      offscreen: smoke,
       backgroundThrottling: false,
     },
   });
@@ -859,6 +857,9 @@ async function boot() {
       controller.engine.emitState();
     });
   if (smoke) {
+    // Native panels need a visible compositor surface for reliable capturePage.
+    // These synthetic tests never initialize audio, permissions or credentials.
+    panel.showInactive();
     const artifacts =
       process.env.CALLWISE_SMOKE_DIR ||
       (app.isPackaged
@@ -947,6 +948,7 @@ async function boot() {
     }
     await controller.command("end");
     console.log("Smoke: automatic recap completed.");
+    win.showInactive();
     await new Promise((r) => setTimeout(r, 350));
     writeFileSync(
       path.join(artifacts, "recap.png"),

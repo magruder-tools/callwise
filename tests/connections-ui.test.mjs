@@ -32,6 +32,10 @@ test("advanced connections only offer ready apps and preserve actual app IDs", a
       unavailable = document.querySelector('[data-context-app="unavailable"]');
     assert.ok(mail.hasAttribute("checked"));
     assert.ok(unavailable.hasAttribute("disabled"));
+    assert.ok(document.querySelector('[data-model="fastModel"]'));
+    assert.ok(document.querySelector('[data-price="audioMinute"]'));
+    assert.ok(document.getElementById("fireflies-live-id"));
+    assert.doesNotMatch(document.body.textContent, /Apply models|Apply prices/);
     await assert.rejects(
       c.command("configure", { contextApps: ["unavailable"] }),
       /ready/,

@@ -91,7 +91,7 @@ export async function checkModelAccess(
       {
         label: "OpenAI key",
         ok: false,
-        detail: "Add your key in Connections first.",
+        detail: "Add your key in Settings first.",
       },
     ];
   const timeout = AbortSignal.timeout(12000);
@@ -118,7 +118,7 @@ export async function checkModelAccess(
         const detail = response.ok
           ? `${model}: visible to this API key. Live inference and billing still need a practice test.`
           : response.status === 401
-            ? "The key was rejected. Replace it in Connections."
+            ? "The key was rejected. Replace it in Settings."
             : response.status === 403 || response.status === 404
               ? `${model}: this key cannot access the model metadata. Check model access and key permissions.`
               : response.status === 429

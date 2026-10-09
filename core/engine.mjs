@@ -931,8 +931,14 @@ export class CoachEngine extends EventEmitter {
       lines.push(
         "",
         `### ${c.title}`,
-        c.body,
-        c.say ? `Suggested wording: ${c.say}` : "",
+        c.lead || c.body,
+        c.trigger?.text
+          ? `Responding to ${c.trigger.speaker || "the call"}: ${c.trigger.text}`
+          : "",
+        ...(c.points || []).map((p) => `- ${p.label}: ${p.text}`),
+        c.more && c.more !== c.lead ? c.more : "",
+        c.legacyShape && c.say ? `Suggested wording: ${c.say}` : "",
+        c.late ? "Late suggestion — kept in history." : "",
         ...c.sources.map(
           (src) =>
             `Source: ${src.title}${src.url ? ` — ${src.url}` : ""}${src.provenance ? ` | Retrieved via ${src.provenance.appName} / ${src.provenance.action} at ${src.retrievedAt}` : ""}`,

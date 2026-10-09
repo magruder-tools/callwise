@@ -92,7 +92,19 @@ export function localRecap(rows, commitments, type) {
     stillOpen: rows.some((r) => r.gap)
       ? ["Some audio was missed. Check details with the participants."]
       : [],
-    email: "",
+    email: finals.length
+      ? [
+          type === "interview"
+            ? "Thanks for taking the time to speak with me."
+            : "Thanks for the conversation.",
+          "",
+          "Here are the recorded notes from our discussion:",
+          "",
+          ...finals.slice(-5).map((r) => `- ${r.speaker}: “${r.text}”`),
+          "",
+          "Please let me know if I missed anything.",
+        ].join("\n")
+      : "",
     interview:
       type === "interview"
         ? finals

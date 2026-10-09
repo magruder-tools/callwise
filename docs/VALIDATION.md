@@ -22,3 +22,15 @@ No API key or signing certificate was supplied to this work session. No live req
 ## Audio-only capture investigation
 
 The supported Electron loopback path grants a display source and audio. Chromium rejects display-media requests without a video source when video is requested, and the browser API does not expose audio-only display capture. Electron 39+ uses Core Audio taps internally. A separate process-tap helper would require native integration and real Mac permission/audio validation; shipping an unverified helper would reduce reliability. The permitted fallback retains the current path, never reads frames, explains macOS wording, and supplies an end-to-end sound check.
+
+## Five-minute Mac check
+
+After completing first-run setup in the installed app:
+
+1. Add a PDF or Word file, choose Client, enter a call goal and confirm consent. Start listening. In a permitted call, check that both meters move and their words appear in the caption.
+2. Ask a four-word-or-longer question from the other end. Check that the trigger appears immediately, the answer streams and its supporting points are visible. In the meeting's chat, keep typing while new cards arrive; the panel must not steal focus. Test a full-screen meeting too.
+3. Turn Wi-Fi off for ten seconds and restore it. The call should keep running, recover each channel, and show a gap if audio was actually lost. Switch microphones and check continued transcription.
+4. Type a question while a proactive answer is being written. Your question takes priority. Pin a card, ask another question, then try Not useful and history navigation.
+5. Pause and resume; the call clock must exclude the pause. End; the recap and email should appear automatically within 20 seconds. Copy the recap, opt into carrying it, choose Another call and reopen it from Recent. Verify the materials return and consent is unchecked.
+
+A real one-hour call and two upgrades signed with the same persistent certificate remain separate longer checks. CI simulates the socket handoff and validates encrypted reuse; it cannot grant or exercise your Mac's audio permissions.

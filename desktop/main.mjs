@@ -156,8 +156,8 @@ async function boot() {
   if (vaultWarning) controller.engine.error(vaultWarning);
   if (preferencesWarning) controller.engine.error(preferencesWarning);
   win = new BrowserWindow({
-    width: 780,
-    height: 740,
+    width: 720,
+    height: 560,
     minWidth: 580,
     minHeight: 480,
     ...(process.platform === "darwin"

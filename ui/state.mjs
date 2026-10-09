@@ -28,5 +28,6 @@ export const viewState = {
   checking: false,
   testChannel: null,
   testText: "",
+  firefliesLiveId: "",
   welcomeStep: 0,
 };

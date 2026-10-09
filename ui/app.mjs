@@ -148,6 +148,11 @@ function render() {
     selection = active?.selectionStart,
     value = active?.value,
     scroll = root.scrollTop;
+  const openDetails = new Set(
+    [...root.querySelectorAll("details[data-detail-key][open]")].map(
+      (n) => n.dataset.detailKey,
+    ),
+  );
   const preserved = {};
   for (const id of [
     "question",
@@ -183,6 +188,8 @@ function render() {
       ? banner(ui.notice, "dismiss-notice", "Dismiss")
       : "");
   root.innerHTML = notices + content;
+  for (const node of root.querySelectorAll("details[data-detail-key]"))
+    if (openDetails.has(node.dataset.detailKey)) node.open = true;
   for (const [id, text] of Object.entries(preserved))
     if (document.getElementById(id)) document.getElementById(id).value = text;
   const replacement = focus && document.getElementById(focus);
@@ -199,6 +206,9 @@ function render() {
   clock();
   for (const [channel, rms] of Object.entries(latestMeters))
     meterLocal(channel, rms);
+  fitPanel();
+}
+function fitPanel() {
   if (panel && bridge.desktop)
     requestAnimationFrame(() =>
       run("desktop.panel.fit", {
@@ -209,6 +219,7 @@ function render() {
       }),
     );
 }
+root.addEventListener("toggle", fitPanel, true);
 function meterLocal(channel, rms) {
   const node =
     document.getElementById(`meter-${channel}`) ||
@@ -318,13 +329,14 @@ async function act(action, node) {
       break;
     case "start":
       if (!ui.consent) return;
+      await flushEdits();
       await command("start", {
         source: bridge.desktop
           ? s.preferences.preferredSource || "audio"
           : "audio",
         backend: s.preferences.preferredBackend || "openai",
         consent: true,
-        transcriptId: field("fireflies-id"),
+        transcriptId: ui.firefliesLiveId || "",
       });
       break;
     case "resume":
@@ -503,37 +515,12 @@ async function act(action, node) {
       ui.notice = "Diagnostics copied.";
       render();
       break;
-    case "save-models":
-      await command(
-        "desktop.connections.save",
-        Object.fromEntries(
-          ["fastModel", "strategyModel", "transcriptionModel"].map((k) => [
-            k,
-            field(k),
-          ]),
-        ),
-      );
-      break;
     case "reset-models":
       await command("desktop.connections.save", {
         fastModel: "gpt-5.6-luna",
         strategyModel: "gpt-6-astra",
         transcriptionModel: "gpt-live-transcribe",
       });
-      break;
-    case "save-prices":
-      await patch(
-        "prices",
-        Object.fromEntries(
-          [
-            "fastInput",
-            "fastOutput",
-            "deepInput",
-            "deepOutput",
-            "audioMinute",
-          ].map((k) => [k, Number(field(k))]),
-        ),
-      );
       break;
     case "save-fireflies":
       await command("desktop.connections.save", {
@@ -606,6 +593,10 @@ root.addEventListener("click", (e) => {
 });
 root.addEventListener("change", (e) => {
   const node = e.target;
+  if (node.dataset.pref) {
+    clearTimeout(edits.get(node.dataset.pref)?.timer);
+    edits.delete(node.dataset.pref);
+  }
   if (node.dataset.action && node.type === "checkbox")
     void act(node.dataset.action, node).catch(report);
   else if (node.dataset.pref)
@@ -619,21 +610,40 @@ root.addEventListener("change", (e) => {
       (n) => n.dataset.contextApp,
     );
     void patch("contextApps", ids).catch(() => {});
+  } else if (node.dataset.model) {
+    void command("desktop.connections.save", {
+      [node.dataset.model]: node.value,
+    }).catch(() => {});
+  } else if (node.dataset.price) {
+    void patch("prices", {
+      ...state.get().preferences.prices,
+      [node.dataset.price]: Number(node.value),
+    }).catch(() => {});
+  } else if (node.id === "fireflies-live-id") {
+    ui.firefliesLiveId = node.value;
   }
 });
 const edits = new Map();
+async function flushEdits() {
+  const pending = [...edits.entries()];
+  edits.clear();
+  for (const [key, edit] of pending) {
+    clearTimeout(edit.timer);
+    await patch(key, edit.value);
+  }
+}
 root.addEventListener("input", (e) => {
   const key = e.target.dataset.pref;
   if (!key || e.target.tagName === "SELECT") return;
-  clearTimeout(edits.get(key));
+  clearTimeout(edits.get(key)?.timer);
   const value = e.target.value;
-  edits.set(
-    key,
-    setTimeout(() => {
+  edits.set(key, {
+    value,
+    timer: setTimeout(() => {
       edits.delete(key);
       void patch(key, value).catch(() => {});
     }, 180),
-  );
+  });
 });
 root.addEventListener("submit", (e) => {
   e.preventDefault();
@@ -718,12 +728,7 @@ window.addEventListener("keydown", (e) => {
   }
   if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && ui.screen === "ready") {
     e.preventDefault();
-    for (const timer of edits.values()) clearTimeout(timer);
-    edits.clear();
-    const goal = field("goal");
-    void patch("goal", goal)
-      .then(() => act("start", {}))
-      .catch(report);
+    void act("start", {}).catch(report);
   }
   if (
     e.ctrlKey &&

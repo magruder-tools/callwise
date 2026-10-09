@@ -51,6 +51,19 @@ try {
     await page.locator("main").waitFor();
     await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(200);
+    if (name === "live-640") {
+      await page.locator(".source summary").click();
+      await page.evaluate(async () => {
+        const { state } = await import("/state.mjs");
+        state.set(state.get());
+      });
+      await page.waitForTimeout(200);
+      assert.equal(
+        await page.locator(".source").evaluate((n) => n.open),
+        true,
+        "Source excerpts must stay open across transcript updates",
+      );
+    }
     await page.screenshot({ path: `${artifacts}/${name}.png` });
     const layout = await page.evaluate(() => {
       const visible = [...document.querySelectorAll("main *")].filter(
@@ -136,6 +149,15 @@ try {
       s.cards[0].lead = "I can explain the measured result.";
       s.cards[0].points = [];
     }
+    if (width === 640)
+      s.cards[0].sources = [
+        {
+          id: "source-1",
+          title: "Approved example",
+          excerpt:
+            "Synthetic notes for this preview. The recorded result belongs to the supplied evidence.",
+        },
+      ];
     await screen(name, width, height, s, "panel");
   }
   await screen("recap", 720, 560, {

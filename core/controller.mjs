@@ -481,7 +481,7 @@ export class CallController extends EventEmitter {
       );
     if (source !== "demo" && !this.config.openaiKey)
       throw new Error(
-        "Open Connections and save an OpenAI API key, or use Demo first.",
+        "Open Settings and save your OpenAI API key. Practice works without a key.",
       );
     if (backend === "codex" && source !== "demo" && !this.codex)
       throw new Error("Codex requires the desktop app.");

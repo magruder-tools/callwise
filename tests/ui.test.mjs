@@ -54,17 +54,34 @@ test("renderer follows real controller through setup, sample, immediate explicit
     await wait(30);
     assert.equal(document.getElementById("goal").value, "My real call");
     assert.ok(document.getElementById("start").hasAttribute("disabled"));
+    const goal = document.getElementById("goal");
+    goal.value = "My latest call goal";
+    goal.dispatchEvent(new window.Event("input", { bubbles: true }));
+    const consent = document.getElementById("consent");
+    consent.checked = true;
+    consent.dispatchEvent(new window.Event("change", { bubbles: true }));
+    click('[data-action="start"]');
+    await wait(30);
+    assert.equal(c.preferences.goal, "My latest call goal");
+    assert.deepEqual(
+      calls.filter((x) => x.name === "configure").at(-1).payload,
+      { goal: "My latest call goal" },
+    );
+    assert.match(document.body.textContent, /browser demo does not connect/);
     assert.equal(document.querySelectorAll("dialog").length, 0);
     click('[data-action="call-type"][data-value="client"]');
     await wait(30);
-    assert.deepEqual(calls.find((x) => x.name === "configure").payload, {
-      mode: "client",
-    });
-    assert.equal(c.preferences.goal, "My real call");
+    assert.deepEqual(
+      calls.filter((x) => x.name === "configure").at(-1).payload,
+      {
+        mode: "client",
+      },
+    );
+    assert.equal(c.preferences.goal, "My latest call goal");
     click('[data-action="practice"]');
     await wait(40);
     assert.match(document.body.textContent, /Sample call/);
-    assert.equal(c.preferences.goal, "My real call");
+    assert.equal(c.preferences.goal, "My latest call goal");
     c.engine.settings.quiet = true;
     c.engine.ingest({
       id: "question",
@@ -73,7 +90,14 @@ test("renderer follows real controller through setup, sample, immediate explicit
       text: "What should we focus on next?",
       final: true,
     });
-    await c.command("ask", { question: "How should I answer?" });
+    const answer = c.command("ask", { question: "How should I answer?" });
+    await wait(30);
+    assert.match(
+      document.querySelector(".trigger").textContent,
+      /How should I answer/,
+    );
+    assert.ok(document.querySelector(".thinking"));
+    await answer;
     await wait(30);
     assert.match(document.querySelector(".lead").textContent, /./);
     assert.match(document.querySelector(".trigger").textContent, /You asked/);
@@ -92,7 +116,7 @@ test("renderer follows real controller through setup, sample, immediate explicit
     assert.match(document.body.textContent, /Still open/);
     click('[data-action="new"]');
     await wait(30);
-    assert.equal(document.getElementById("goal").value, "My real call");
+    assert.equal(document.getElementById("goal").value, "My latest call goal");
     assert.ok(document.getElementById("start").hasAttribute("disabled"));
   } finally {
     c.removeAllListeners();

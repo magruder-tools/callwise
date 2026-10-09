@@ -9,7 +9,7 @@ import {
   editRatio,
   echoMatch,
 } from "../core/triggers.mjs";
-import { OpenAIProvider } from "../providers/openai.mjs";
+import { modelOptions, OpenAIProvider } from "../providers/openai.mjs";
 import { partialAdvice } from "../providers/stream-json.mjs";
 import { makePrompt } from "../core/prompts.mjs";
 import { DEMO_TRANSCRIPT } from "../fixtures/demo.mjs";
@@ -426,4 +426,10 @@ test("a transient server failure retries once; authentication failures never ret
   };
   await assert.rejects(p.generate({ prompt: {} }), (e) => e.status === 401);
   assert.equal(calls, 1);
+});
+
+test("Astra setup uses its supported lowest effort, while Luna can use none", () => {
+  assert.equal(modelOptions("gpt-6-astra").reasoning.effort, "low");
+  assert.equal(modelOptions("gpt-6-luna").reasoning.effort, "none");
+  assert.equal(modelOptions("gpt-5.6-luna").reasoning.effort, "none");
 });

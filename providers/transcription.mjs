@@ -21,6 +21,7 @@ export class LiveTranscriber {
     onSegment,
     onStatus,
     onDiscard = () => {},
+    onAudioSent = () => {},
     diagnostics = () => {},
     WebSocketClass = WebSocket,
     connectTimeoutMs = 12000,
@@ -45,6 +46,7 @@ export class LiveTranscriber {
       onSegment,
       onStatus,
       onDiscard,
+      onAudioSent,
       diagnostics,
       WS: WebSocketClass,
       connectTimeoutMs,
@@ -71,6 +73,7 @@ export class LiveTranscriber {
       onSegment,
       onStatus,
       onDiscard,
+      onAudioSent,
       diagnostics,
       WebSocketClass,
       connectTimeoutMs,
@@ -521,7 +524,10 @@ export class LiveTranscriber {
       type: "input_audio_buffer.append",
       audio: data.toString("base64"),
     });
-    if (sent) this.sentMs += data.length / 48;
+    if (sent) {
+      this.sentMs += data.length / 48;
+      this.onAudioSent(data.length / 48);
+    }
     return sent;
   }
   send(message) {

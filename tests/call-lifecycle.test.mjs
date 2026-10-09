@@ -309,3 +309,13 @@ test("rolling memory updates from new transcript and ignores completion after pa
     c.close();
   }
 });
+
+test("closing the controller twice is idempotent and emits no state against destroyed windows", () => {
+  const c = new CallController();
+  let states = 0;
+  c.on("state", () => states++);
+  c.close();
+  const first = states;
+  c.close();
+  assert.equal(states, first);
+});

@@ -63,7 +63,7 @@ export async function runSelfTest(
       const result = await provider.generate({
         lane,
         schema: TEST_SCHEMA,
-        maxTokens: 40,
+        maxTokens: lane === "fast" ? 40 : 512,
         prompt: {
           instructions: 'Return exactly {"ok":true} matching the schema.',
           input: "Callwise setup check.",

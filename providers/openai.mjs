@@ -2,6 +2,11 @@ import { COACH_SCHEMA, SLOW_SCHEMA } from "../core/prompts.mjs";
 import { partialAdvice, sseEvents } from "./stream-json.mjs";
 import { providerError, httpProviderError } from "./errors.mjs";
 export function modelOptions(model, effort = "none") {
+  if (/^gpt-6-astra(?:-|$)/.test(model || ""))
+    return {
+      reasoning: { effort: effort === "none" ? "low" : effort },
+      verbosity: "low",
+    };
   // Known families support none and low verbosity; custom models receive no unsupported options.
   if (/^gpt-(?:5\.[56]|6)(?:[.-]|$)/.test(model || ""))
     return { reasoning: { effort }, verbosity: "low" };

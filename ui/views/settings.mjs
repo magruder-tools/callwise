@@ -49,8 +49,8 @@ function content(s, ui) {
       p.prices || {
         fastInput: 0.2,
         fastOutput: 1.2,
-        deepInput: 5,
-        deepOutput: 30,
+        deepInput: 10,
+        deepOutput: 50,
         audioMinute: 0.017,
       },
     )

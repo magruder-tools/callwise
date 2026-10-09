@@ -537,6 +537,9 @@ export class CallController extends EventEmitter {
                 if (generation === this.generation) this.engine.ingest(row);
               },
               diagnostics: this.diagnostics,
+              onAudioSent: (ms) => {
+                if (generation === this.generation) this.usage.audioMs += ms;
+              },
               onDiscard: (ids) => {
                 if (generation !== this.generation) return;
                 for (const id of ids)
@@ -628,7 +631,6 @@ export class CallController extends EventEmitter {
   }
   audio(channel, buffer) {
     if (this.mode !== "audio" || this.engine.status !== "running") return;
-    this.usage.audioMs += buffer.length / 48;
     this.transcribers.get(channel)?.push(buffer, this.engine.activeTimeMs());
   }
   captureStatus(channel, status) {
@@ -987,6 +989,7 @@ export class CallController extends EventEmitter {
     this.prepJob = this.recapJob = this.summaryJob = null;
   }
   close() {
+    if (this.closing) return;
     this.closing = true;
     this.cancelDocuments();
     this.stopInputs();

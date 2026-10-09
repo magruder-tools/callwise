@@ -1,9 +1,10 @@
+// Pricing references: developers.openai.com/api/docs/models/gpt-5.6-luna, gpt-6-astra, gpt-live-transcribe
 // USD estimates at Standard rates, checked 2026-10-09. Editable; not a billing report.
 export const DEFAULT_PRICES = {
   fastInput: 0.2,
   fastOutput: 1.2,
-  deepInput: 5,
-  deepOutput: 30,
+  deepInput: 10,
+  deepOutput: 50,
   audioMinute: 0.017,
 };
 export function sanitizePrices(patch = {}) {

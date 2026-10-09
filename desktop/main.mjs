@@ -50,6 +50,11 @@ import { importFiles, extractFile } from "./import-files.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const smoke = process.argv.includes("--smoke");
+if (smoke)
+  setTimeout(() => {
+    console.error("Desktop smoke timed out after 60 seconds.");
+    app.exit(1);
+  }, 60_000).unref();
 let win, panel, controller, soundCheck, soundTimer;
 const page = path.join(root, "ui", "index.html");
 const trustedFrame = (frame) =>
@@ -287,9 +292,9 @@ async function boot() {
     controller.engine.pause();
   });
   win.on("closed", () => {
+    app.isQuitting = true;
     codexLogin.close();
     controller.close();
-    app.isQuitting = true;
     panel?.destroy();
     win = null;
   });
@@ -356,6 +361,7 @@ async function boot() {
   );
   let windowStatus = "idle";
   controller.on("state", (state) => {
+    if (app.isQuitting) return;
     refreshDesktop();
     send("callwise:state", { ...state, desktop: controller.desktopState });
     shortcuts.configure?.(state.preferences.hotkeys);
@@ -846,6 +852,7 @@ async function boot() {
     win.loadFile(page),
     panel.loadFile(page, { query: { surface: "panel" } }),
   ]);
+  if (smoke) console.log("Smoke: main and live pages loaded.");
   if (!smoke)
     void checkForUpdate(app.getVersion()).then((update) => {
       controller.desktopState.update = update;
@@ -871,11 +878,13 @@ async function boot() {
       controller.engine.run("fast"),
       controller.engine.run("strategy"),
     ]);
+    console.log("Smoke: synthetic coaching requests completed.");
     await new Promise((r) => setTimeout(r, 800));
     writeFileSync(
       path.join(artifacts, "desktop-preview.png"),
       (await panel.webContents.capturePage()).toPNG(),
     );
+    console.log("Smoke: default live screenshot captured.");
     panel.setSize(340, 400);
     await new Promise((r) => setTimeout(r, 500));
     writeFileSync(
@@ -914,6 +923,7 @@ async function boot() {
       ["live-440", 440, 440],
       ["live-640", 640, 380],
     ]) {
+      console.log(`Smoke: checking ${name} layout.`);
       panel.setSize(width, height);
       await new Promise((r) => setTimeout(r, 300));
       const layout = await panel.webContents.executeJavaScript(`(() => {
@@ -936,6 +946,7 @@ async function boot() {
       );
     }
     await controller.command("end");
+    console.log("Smoke: automatic recap completed.");
     await new Promise((r) => setTimeout(r, 350));
     writeFileSync(
       path.join(artifacts, "recap.png"),

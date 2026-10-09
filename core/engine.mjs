@@ -3,6 +3,15 @@ import { randomUUID } from "node:crypto";
 import { ContextStore, terms } from "./context.mjs";
 import { makePrompt, validateAdvice } from "./prompts.mjs";
 import { CALL_DEFAULTS } from "./defaults.mjs";
+import {
+  classifyTurn,
+  completePartial,
+  isOwnTurn,
+  normalize,
+  editRatio,
+  consumeToken,
+  echoMatch,
+} from "./triggers.mjs";
 
 export class CoachEngine extends EventEmitter {
   constructor({
@@ -17,10 +26,11 @@ export class CoachEngine extends EventEmitter {
     this.diagnostics = diagnostics;
     this.context = new ContextStore();
     this.config = {
-      fastDelay: 2500,
-      strategyDelay: 14000,
-      fastCooldown: 18000,
-      strategyCooldown: 60000,
+      autoCoach: true,
+      fastDelay: 0,
+      strategyDelay: 0,
+      fastCooldown: 0,
+      strategyCooldown: 120000,
       fastTTL: 30000,
       strategyTTL: 150000,
       maxFast: 120,
@@ -47,6 +57,20 @@ export class CoachEngine extends EventEmitter {
     this.dismissed = [];
     this.errors = [];
     this.activity = [];
+    this.handledTurns = new Set();
+    this.answered = new Map();
+    this.rate = { tokens: 3, at: this.clock(), requests: [] };
+    this.speculation = null;
+    this.autoQueue = [];
+    this.lastBackground = this.clock();
+    this.lastSlow = -Infinity;
+    this.userSpeechAt = null;
+    this.latencies = [];
+    this.prep = null;
+    this.summary = "";
+    this.commitments = [];
+    this.covered = new Set();
+    this.otherTurns = 0;
     this.metrics = {
       fastCalls: 0,
       strategyCalls: 0,
@@ -98,7 +122,7 @@ export class CoachEngine extends EventEmitter {
       this.settings.contextApps = [...new Set(patch.contextApps)];
     if (typeof patch.contextConsent === "boolean")
       this.settings.contextConsent = patch.contextConsent;
-    for (const key of ["mode", "goal", "profile", "project"])
+    for (const key of ["mode", "goal", "profile", "project", "userName"])
       if (typeof patch[key] === "string")
         this.settings[key] = patch[key].slice(
           0,
@@ -185,6 +209,8 @@ export class CoachEngine extends EventEmitter {
     for (const job of Object.values(this.inflight || {}))
       job.controller.abort();
     this.inflight = {};
+    this.autoQueue = [];
+    this.speculation = null;
   }
   ingest(segment) {
     if (this.status !== "running") return false;
@@ -227,39 +253,180 @@ export class CoachEngine extends EventEmitter {
       startMs: Number.isFinite(segment.startMs)
         ? Math.max(0, segment.startMs)
         : this.activeTimeMs(),
+      endMs: Number.isFinite(segment.endMs) ? segment.endMs : undefined,
       gap: segment.gap === true,
       receivedAt: this.clock(),
     };
+    // On speakers, retain the system transcript and remove the microphone echo.
+    for (const other of this.transcript.values()) {
+      if (echoMatch(row, other)) {
+        if (row.channel === "mic") return false;
+        this.transcript.delete(other.id);
+        this.commitments = this.commitments.filter(
+          (c) => c.segmentId !== other.id,
+        );
+      }
+    }
     this.transcript.set(row.id, row);
+    const own = isOwnTurn(row, this.settings.userName);
+    if (own && this.userSpeechAt === null) this.userSpeechAt = this.clock();
     if (row.final) {
       this.revision++;
-      if (!row.gap && !this.settings.quiet) {
-        this.schedule("fast");
-        this.schedule("strategy");
-      }
+      this.trackStructure(row);
+      if (!own && !row.gap && !prior?.final) this.otherTurns++;
+      if (!own) this.userSpeechAt = null;
+      if (this.speculation?.row.id === row.id) {
+        clearTimeout(this.timers.partial);
+        delete this.timers.partial;
+        if (editRatio(this.speculation.row.text, row.text) <= 0.15) {
+          this.speculation.row = row;
+          const job = this.inflight.fast;
+          if (job?.turnId === row.id) {
+            job.trigger = this.triggerFor(row);
+            job.latency.turnEndedAt = row.receivedAt;
+          }
+          for (const card of this.cards.filter(
+            (c) => c.trigger?.segmentId === row.id,
+          )) {
+            card.trigger = this.triggerFor(row);
+            card.latency.turnEndedAt = row.receivedAt;
+          }
+          this.handledTurns.add(row.id);
+        } else {
+          if (this.inflight.fast?.turnId === row.id)
+            this.inflight.fast.controller.abort();
+          this.cards = this.cards.filter(
+            (c) => c.trigger?.segmentId !== row.id,
+          );
+          this.handledTurns.delete(row.id);
+          this.speculation = null;
+          this.consider(row, true);
+        }
+      } else this.consider(row);
+    } else if (
+      !this.settings.quiet &&
+      this.config.autoCoach &&
+      completePartial(row, this.settings.mode, this.settings.userName)
+    ) {
+      clearTimeout(this.timers.partial);
+      this.timers.partial = setTimeout(() => {
+        delete this.timers.partial;
+        if (
+          this.status !== "running" ||
+          this.transcript.get(row.id)?.final ||
+          this.handledTurns.has(row.id)
+        )
+          return;
+        this.speculation = { row };
+        this.consider(row);
+      }, 250);
     }
     this.emitState();
     return true;
   }
-  schedule(lane) {
-    if (this.timers[lane] || this.inflight[lane] || this.status !== "running")
+  triggerFor(row) {
+    return row
+      ? {
+          speaker: row.speaker,
+          text: row.text,
+          segmentId: row.id,
+          endedAtMs: row.endMs ?? row.startMs,
+          turnEndedAt: row.receivedAt,
+        }
+      : null;
+  }
+  trackStructure(row) {
+    if (row.gap) return;
+    for (const point of this.prep?.myPoints || []) {
+      const wanted = terms(point.text || point.label),
+        actual = new Set(terms(row.text));
+      if (
+        wanted.length &&
+        wanted.filter((t) => actual.has(t)).length / wanted.length >= 0.6
+      )
+        this.covered.add(point.id);
+    }
+    if (
+      /\b(i.ll|i will|we.ll|we will|i can send|let.s|by (monday|tuesday|wednesday|thursday|friday))\b/i.test(
+        row.text,
+      )
+    ) {
+      if (!this.commitments.some((c) => c.segmentId === row.id))
+        this.commitments.push({
+          owner: row.speaker,
+          what: row.text,
+          due: row.text.match(/\bby\s+[^,.!?]+/i)?.[0] || "Not stated",
+          segmentId: row.id,
+        });
+    }
+  }
+  consider(row, restart = false) {
+    if (
+      !this.config.autoCoach ||
+      this.settings.quiet ||
+      row.gap ||
+      isOwnTurn(row, this.settings.userName) ||
+      this.handledTurns.has(row.id)
+    )
       return;
-    const delay = Math.max(
-      this.config[`${lane}Delay`],
-      this.lastRun[lane] + this.config[`${lane}Cooldown`] - this.clock(),
-    );
-    this.timers[lane] = setTimeout(
-      () => {
-        delete this.timers[lane];
-        void this.run(lane).catch((error) => this.error(error));
-      },
-      Math.max(0, delay),
-    );
+    const normalized = normalize(row.text),
+      now = this.clock();
+    for (const [text, at] of this.answered)
+      if (now - at > 180000) this.answered.delete(text);
+    if (this.answered.has(normalized)) return;
+    let kind = classifyTurn(row, this.settings.mode, this.settings.userName);
+    if (
+      !kind &&
+      row.final &&
+      normalized.split(" ").length >= 4 &&
+      now - this.lastBackground >= 45000
+    ) {
+      kind = "background";
+      this.lastBackground = now;
+    }
+    if (!kind) return;
+    if (!restart) {
+      const rate = consumeToken(this.rate, now);
+      this.rate = rate.state;
+      if (!rate.allowed) return;
+    }
+    this.handledTurns.add(row.id);
+    const opts = {
+      trigger: this.triggerFor(row),
+      turnId: row.id,
+      triggerKind: kind,
+    };
+    if (this.inflight.fast && !this.inflight.fast.controller.signal.aborted)
+      this.autoQueue.push(opts);
+    else void this.run("fast", "", opts).catch((error) => this.error(error));
+    if (kind === "decision" && now - this.lastSlow >= 120000) {
+      this.lastSlow = now;
+      void this.run("strategy", "", opts).catch((error) => this.error(error));
+    }
+  }
+  schedule(lane) {
+    // Retained for alternate providers and tests; proactive timing lives in consider().
+    if (
+      !this.config.autoCoach ||
+      this.settings.quiet ||
+      this.status !== "running"
+    )
+      return;
+    const row = [...this.transcript.values()]
+      .filter((r) => r.final && !isOwnTurn(r, this.settings.userName))
+      .at(-1);
+    if (row) this.consider(row);
   }
   async run(
     lane = "fast",
     question = "",
-    { origin = question ? "asked" : "auto", presentationLane = lane } = {},
+    {
+      origin = question ? "asked" : "auto",
+      presentationLane = lane,
+      trigger = null,
+      turnId = "",
+      triggerKind = "",
+    } = {},
   ) {
     const explicit = origin !== "auto";
     if (!["fast", "strategy"].includes(lane))
@@ -272,22 +439,31 @@ export class CoachEngine extends EventEmitter {
         "Session time limit reached. Export and create a new session.",
       );
     }
-    if (this.inflight[lane]) {
-      if (!explicit) return { busy: true };
-      // An explicit user question takes precedence over a speculative suggestion.
-      this.inflight[lane].controller.abort();
-      delete this.inflight[lane];
-    }
-    clearTimeout(this.timers[lane]);
-    delete this.timers[lane];
+    if (explicit) {
+      for (const [key, job] of Object.entries(this.inflight))
+        if (job.origin === "auto" || key === lane) {
+          job.controller.abort();
+          this.removeDraft(job);
+          delete this.inflight[key];
+        }
+      clearTimeout(this.timers.partial);
+      this.autoQueue = [];
+      this.speculation = null;
+    } else if (
+      this.inflight[lane] &&
+      !this.inflight[lane].controller.signal.aborted
+    )
+      return { busy: true };
+    const metric = `${lane}Calls`;
     if (!this.providers[lane]) {
+      if (explicit) this.fallback(question, origin, presentationLane);
       this.error(`${lane} provider is not configured.`);
       return;
     }
-    const metric = `${lane}Calls`;
     if (
+      !explicit &&
       this.metrics[metric] >=
-      this.config[lane === "fast" ? "maxFast" : "maxStrategy"]
+        this.config[lane === "fast" ? "maxFast" : "maxStrategy"]
     ) {
       this.error(`${lane} call limit reached for this session.`);
       return;
@@ -295,84 +471,105 @@ export class CoachEngine extends EventEmitter {
     const rows = [...this.transcript.values()]
       .filter((r) => r.final)
       .sort((a, b) => a.startMs - b.startMs);
-    if (!rows.length && !question) return;
+    if (!rows.length && !question && !trigger) return;
+    trigger = explicit
+      ? {
+          speaker: "You",
+          text: question,
+          segmentId: "",
+          endedAtMs: this.activeTimeMs(),
+          turnEndedAt: this.clock(),
+        }
+      : trigger || this.triggerFor(rows.at(-1));
     const epoch = this.epoch,
       revision = this.revision,
-      start = this.clock(),
-      job = {
-        id: ++this.jobs,
-        controller: new AbortController(),
-        presentationLane,
-      };
+      start = this.clock();
+    const job = {
+      id: ++this.jobs,
+      controller: new AbortController(),
+      presentationLane,
+      origin,
+      trigger,
+      turnId,
+      cardId: randomUUID(),
+      latency: {
+        turnEndedAt: trigger?.turnEndedAt ?? start,
+        requestedAt: start,
+        firstTokenAt: null,
+        firstPaintAt: null,
+        doneAt: null,
+      },
+    };
     this.inflight[lane] = job;
     this.lastRun[lane] = start;
     this.metrics[metric]++;
     this.diagnostics("provider.request", { lane, origin, requestedAt: start });
     const recent = rows
-      .slice(-8)
-      .map((r) => r.text)
-      .join(" ");
-    const query = `${question} ${recent} ${this.settings.goal}`;
+        .slice(-8)
+        .map((r) => r.text)
+        .join(" "),
+      query = `${question} ${trigger?.text || recent}`;
     let sources = this.context.search(query, {
       project: this.settings.project,
     });
+    const materials = [...this.context.docs.values()].filter(
+      (d) => !d.project || d.project === this.settings.project,
+    );
+    const live = () =>
+      epoch === this.epoch &&
+      this.inflight[lane]?.id === job.id &&
+      !job.controller.signal.aborted &&
+      this.status === "running";
     this.emitState();
     try {
-      if (lane === "strategy" && this.settings.autoSearch && this.retriever) {
+      // Connected research is slow and runs during a call only when explicitly asked.
+      if (
+        explicit &&
+        lane === "strategy" &&
+        this.settings.autoSearch &&
+        this.retriever
+      ) {
         try {
           const docs = await this.retriever({
-            query: (
-              question ||
-              `${this.settings.project}: ${rows
-                .slice(-3)
-                .map((row) => row.text)
-                .join(" ")}`
-            ).slice(0, 1500),
-            recent: question ? [{ text: question }] : rows.slice(-3),
+            query: question.slice(0, 1500),
+            recent: [{ text: question }],
             project: this.settings.project,
             sessionId: this.sessionId,
             signal: job.controller.signal,
           });
-          if (epoch !== this.epoch || job.controller.signal.aborted) return;
-          const added = docs.map((doc) =>
-            this.context.add({ ...doc, project: this.settings.project }),
-          );
-          const matches = this.context.search(query, {
-            project: this.settings.project,
-          });
-          const seen = new Set();
-          // The retriever already selected these excerpts semantically; a second
-          // keyword-only pass must not drop them because synonyms differ.
-          sources = [
-            ...added.map(({ text, ...doc }) => ({
-              ...doc,
-              excerpt: text.slice(0, 1800),
-            })),
-            ...matches,
-          ]
-            .filter((doc) => {
-              if (seen.has(doc.id)) return false;
-              seen.add(doc.id);
-              return true;
-            })
-            .slice(0, 5);
+          if (!live()) return;
+          for (const doc of docs)
+            materials.push(
+              this.context.add({ ...doc, project: this.settings.project }),
+            );
+          sources = materials.map(({ text, ...d }) => ({
+            ...d,
+            excerpt: text,
+          }));
         } catch (error) {
           if (job.controller.signal.aborted) return;
           this.log(
             "context",
-            "Background context search failed; using the sources already loaded.",
+            "Related notes were unavailable; using loaded materials.",
           );
         }
       }
-      if (epoch !== this.epoch || job.controller.signal.aborted) return;
       const prompt = makePrompt({
         lane,
         ...this.settings,
         transcript: rows,
         sources,
+        materials,
         question,
+        trigger: job.trigger,
         previousCards: this.cards,
+        prep: this.prep,
+        summary: this.summary,
+        commitments: this.commitments,
       });
+      const full = prompt.materialBudget.full;
+      if (full)
+        sources = materials.map(({ text, ...d }) => ({ ...d, excerpt: text }));
       const result = await this.providers[lane].generate({
         lane,
         prompt,
@@ -380,110 +577,212 @@ export class CoachEngine extends EventEmitter {
         sources,
         question,
         signal: job.controller.signal,
+        onToken: (at) => {
+          job.latency.firstTokenAt ??= at ?? this.clock();
+        },
+        onPartial: (partial) => {
+          if (
+            !live() ||
+            partial.speak !== true ||
+            !partial.lead ||
+            partial.kind === "fact"
+          )
+            return;
+          const now = this.clock();
+          job.latency.firstTokenAt ??= now;
+          job.latency.firstPaintAt ??= now;
+          const late = this.isLate(job, explicit);
+          const draft = {
+            id: job.cardId,
+            lane: presentationLane,
+            computedLane: lane,
+            origin,
+            question,
+            trigger: job.trigger,
+            kind: partial.kind || "say",
+            lead: partial.lead,
+            points: [],
+            sourceIds: [],
+            sources: [],
+            status: "new",
+            createdAt: start,
+            expiresAt: start + this.config[`${lane}TTL`],
+            streaming: true,
+            late,
+            otherTurn: this.otherTurns,
+            latency: { ...job.latency },
+            demo: this.source === "demo",
+          };
+          const index = this.cards.findIndex((c) => c.id === job.cardId);
+          if (index < 0) this.cards.push(draft);
+          else this.cards[index] = draft;
+          this.emitState();
+        },
       });
-      this.diagnostics("provider.completed", {
-        lane,
-        latencyMs: this.clock() - start,
-      });
-      if (epoch !== this.epoch || this.inflight[lane]?.id !== job.id) return;
-      if (this.status !== "running" || job.controller.signal.aborted) {
-        this.metrics.discarded++;
+      if (!live()) {
+        this.removeDraft(job);
         return;
       }
       this.clearErrors({ condition: `provider:${lane}`, emit: false });
       this.metrics.inputTokens += Number(result.usage?.input_tokens || 0);
       this.metrics.outputTokens += Number(result.usage?.output_tokens || 0);
-      const stale =
+      this.recordUsage?.(result.usage, lane);
+      if (
         !explicit &&
+        !this.isLate(job, false) &&
         (this.clock() - start > this.config[`${lane}TTL`] ||
-          this.revision - revision > (lane === "fast" ? 5 : 25));
-      if (stale) {
+          this.revision - revision > (lane === "fast" ? 5 : 25))
+      ) {
+        this.removeDraft(job);
         this.metrics.discarded++;
-        this.log("coaching", "An outdated suggestion was discarded.");
         return;
       }
       const allowed = new Set(sources.map((s) => s.id));
-      const before = this.cards.length;
+      this.removeDraft(job);
+      let shown = false;
       for (const card of validateAdvice(result)) {
-        if (card.kind === "fact" && !card.sourceIds.length) {
+        if (
+          (card.kind === "fact" && !card.sourceIds.length) ||
+          card.sourceIds.some((id) => !allowed.has(id))
+        ) {
           this.metrics.discarded++;
           continue;
         }
-        if (card.sourceIds.some((id) => !allowed.has(id))) {
-          this.metrics.discarded++;
-          this.log(
-            "coaching",
-            "A card with an unsupported citation was discarded.",
-          );
-          continue;
-        }
-        if (!explicit && card.confidence < 0.7) continue;
         if (!explicit && this.isDuplicate(card)) continue;
         const now = this.clock();
+        job.latency.firstTokenAt ??= now;
+        job.latency.firstPaintAt ??= now;
+        job.latency.doneAt = now;
+        const late = this.isLate(job, explicit);
         this.cards.push({
           ...card,
-          id: randomUUID(),
+          id: job.cardId,
           lane: presentationLane,
           computedLane: lane,
           origin,
-          question: origin === "asked" ? question : "",
+          question,
+          trigger: job.trigger,
           createdAt: now,
           expiresAt: now + this.config[`${lane}TTL`],
           latencyMs: now - start,
+          latency: { ...job.latency },
           basedOnRevision: revision,
           status: "new",
           sources: sources.filter((s) => card.sourceIds.includes(s.id)),
+          late,
+          otherTurn: this.otherTurns,
           demo: this.source === "demo",
         });
-      }
-      if (explicit && this.cards.length === before) {
-        const now = this.clock();
-        this.cards.push({
-          id: randomUUID(),
-          lane: presentationLane,
-          computedLane: lane,
+        for (const id of card.covers)
+          if (this.prep?.myPoints?.some((p) => p.id === id))
+            this.covered.add(id);
+        shown = true;
+        this.latencies.push({ ...job.latency, lane, origin });
+        this.latencies = this.latencies.slice(-200);
+        this.diagnostics("coaching.latency", {
+          ...job.latency,
+          lane,
           origin,
-          question: origin === "asked" ? question : "",
-          title: "More context needed",
-          body: "I don't have enough verified context to answer yet. Add your notes or ask a more specific question.",
-          say: "",
-          reason: "Your request needs more context.",
-          kind: "answer",
-          confidence: 0,
-          sourceIds: [],
-          sources: [],
-          createdAt: now,
-          expiresAt: now + this.config[`${lane}TTL`],
-          latencyMs: now - start,
-          basedOnRevision: revision,
-          status: "new",
-          demo: this.source === "demo",
+          latencyMs: job.latency.firstPaintAt - job.latency.turnEndedAt,
+          late,
         });
       }
-      // The normal session caps allow at most 270 cards. Keep their history.
+      if (shown && !explicit && trigger?.text)
+        this.answered.set(normalize(trigger.text), this.clock());
+      if (explicit && !shown)
+        this.fallback(question, origin, presentationLane, job);
       this.cards = this.cards.slice(-300);
       return { ok: true };
     } catch (error) {
-      if (epoch === this.epoch && !job.controller.signal.aborted)
+      this.removeDraft(job);
+      if (epoch === this.epoch && !job.controller.signal.aborted) {
+        if (explicit) this.fallback(question, origin, presentationLane, job);
         this.error(error, { condition: `provider:${lane}` });
+      }
     } finally {
       if (this.inflight[lane]?.id === job.id) delete this.inflight[lane];
       if (
         epoch === this.epoch &&
         this.status === "running" &&
-        revision !== this.revision &&
-        !this.settings.quiet
-      )
-        this.schedule(lane);
+        lane === "fast" &&
+        this.autoQueue.length &&
+        !this.inflight.fast
+      ) {
+        const next = this.autoQueue.shift();
+        void this.run("fast", "", next).catch((error) => this.error(error));
+      }
       this.emitState();
     }
   }
+  isLate(job, explicit) {
+    return (
+      !explicit &&
+      this.clock() - job.latency.turnEndedAt > 6000 &&
+      this.userSpeechAt !== null &&
+      this.clock() - this.userSpeechAt >= 3000
+    );
+  }
+  removeDraft(job) {
+    this.cards = this.cards.filter((c) => c.id !== job.cardId || !c.streaming);
+  }
+  fallback(question, origin, lane, job = {}) {
+    const now = this.clock();
+    this.cards.push({
+      id: job.cardId || randomUUID(),
+      lane,
+      origin,
+      question,
+      trigger: job.trigger || { speaker: "You", text: question },
+      kind: "say",
+      lead: "I need more verified context to help with that.",
+      points: [
+        {
+          label: "Try",
+          text: "Add your notes or ask a more specific question.",
+        },
+      ],
+      title: "More context needed",
+      body: "I don't have enough verified context to answer yet. Add your notes or ask a more specific question.",
+      say: "",
+      sourceIds: [],
+      sources: [],
+      covers: [],
+      status: "new",
+      createdAt: now,
+      expiresAt: now + this.config.fastTTL,
+      latency: job.latency || {},
+      otherTurn: this.otherTurns,
+      demo: this.source === "demo",
+    });
+  }
   isDuplicate(card) {
-    const current = new Set(terms(card.title + " " + card.body));
+    const current = new Set(
+      terms(
+        (card.legacyShape ? card.title : card.lead || card.title) +
+          " " +
+          (card.more || card.body),
+      ),
+    );
     return [...this.cards.slice(-20), ...this.dismissed.slice(-20)].some(
       (old) => {
-        if (old.title.toLowerCase() === card.title.toLowerCase()) return true;
-        const prev = new Set(terms(old.title + " " + old.body));
+        if (
+          (card.legacyShape
+            ? old.title || ""
+            : old.lead || old.title || ""
+          ).toLowerCase() ===
+          (card.legacyShape
+            ? card.title || ""
+            : card.lead || card.title || ""
+          ).toLowerCase()
+        )
+          return true;
+        const prev = new Set(
+          terms(
+            (old.legacyShape ? old.title : old.lead || old.title) +
+              " " +
+              (old.more || old.body),
+          ),
+        );
         const overlap = [...current].filter((t) => prev.has(t)).length;
         return (
           overlap / Math.max(1, new Set([...current, ...prev]).size) > 0.72
@@ -580,6 +879,12 @@ export class CoachEngine extends EventEmitter {
         contextApps: [...this.settings.contextApps],
       },
       revision: this.revision,
+      prep: this.prep,
+      summary: this.summary,
+      commitments: this.commitments,
+      covered: [...this.covered],
+      otherTurns: this.otherTurns,
+      latencies: this.latencies.map((l) => ({ ...l })),
       transcript: [...this.transcript.values()].sort(
         (a, b) => a.startMs - b.startMs,
       ),
@@ -593,6 +898,7 @@ export class CoachEngine extends EventEmitter {
         (error) => error.expiresAt === null || error.expiresAt > this.clock(),
       ),
       activity: [...this.activity],
+      pendingTrigger: this.inflight.fast?.trigger || null,
       thinking: {
         fast:
           !!this.inflight.fast ||

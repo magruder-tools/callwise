@@ -60,7 +60,7 @@ const server = http.createServer(async (req, res) => {
         let body = "";
         for await (const part of req) {
           body += part;
-          if (body.length > 300000) {
+          if (body.length > 2200000) {
             return fail(413, "Request too large.");
           }
         }
@@ -78,17 +78,9 @@ const server = http.createServer(async (req, res) => {
   if (req.method !== "GET") return fail(405, "GET only.");
   const filename = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
   if (
-    ![
-      "index.html",
-      "app.mjs",
-      "suggestion-focus.mjs",
-      "connections.mjs",
-      "context.css",
-      "styles.css",
-      "focus.css",
-      "capture.mjs",
-      "audio-worklet.js",
-    ].includes(filename)
+    !/^(?:index\.html|[a-z0-9-]+\.(?:mjs|js|css)|(?:views|components)\/[a-z0-9-]+\.mjs)$/.test(
+      filename,
+    )
   )
     return fail(404, "Not found.");
   try {

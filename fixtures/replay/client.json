@@ -1,0 +1,63 @@
+{
+  "type": "client",
+  "line": "Northwind check-in. Agree the Q4 budget.",
+  "materials": [
+    {
+      "id": "budget",
+      "title": "Approved budget",
+      "text": "Approved Q4 budget is $25000. Scope includes search and analytics. The review date is October 16."
+    }
+  ],
+  "turns": [
+    {
+      "id": "c1",
+      "at": 1000,
+      "speaker": "Client",
+      "channel": "system",
+      "text": "Can you remind me what we agreed for the budget?",
+      "expected": "fact"
+    },
+    {
+      "id": "c2",
+      "at": 12000,
+      "speaker": "Client",
+      "channel": "system",
+      "text": "Let's go with search and analytics for this quarter.",
+      "expected": "heads_up"
+    },
+    {
+      "id": "c3",
+      "at": 23000,
+      "speaker": "Client",
+      "channel": "system",
+      "text": "I will send the signed scope by Friday.",
+      "expected": "heads_up"
+    },
+    {
+      "id": "c4",
+      "at": 28000,
+      "speaker": "You",
+      "channel": "mic",
+      "text": "I'll confirm receipt when it comes through.",
+      "expected": "silent",
+      "mustSkip": true
+    },
+    {
+      "id": "c5",
+      "at": 34000,
+      "speaker": "Client",
+      "channel": "system",
+      "text": "Anything else before we wrap this up?",
+      "expected": "ask"
+    },
+    {
+      "id": "c6",
+      "at": 44000,
+      "speaker": "Client",
+      "channel": "system",
+      "text": "Right, okay, thank you.",
+      "expected": "silent",
+      "mustSkip": true
+    }
+  ]
+}

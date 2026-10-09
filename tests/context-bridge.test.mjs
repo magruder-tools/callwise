@@ -631,7 +631,7 @@ test("fast coaching is independent of slow context retrieval", async () => {
   e.retriever = () => new Promise((r) => (finish = r));
   e.start();
   e.ingest({ id: "a", text: options.query });
-  const slow = e.run("strategy");
+  const slow = e.run("strategy", "Find related context");
   await e.run("fast");
   assert.equal(e.snapshot().thinking.fast, false);
   assert.equal(e.snapshot().thinking.strategy, true);
@@ -766,7 +766,7 @@ test("semantically selected context is not dropped by a second keyword-only filt
     id: "x",
     text: "Remind us what everyone committed to previously.",
   });
-  await e.run("strategy");
+  await e.run("strategy", "Find related context");
   assert.equal(seen[0].id, "semantic");
   e.end();
 });

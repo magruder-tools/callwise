@@ -1,0 +1,65 @@
+{
+  "type": "interview",
+  "line": "Interview. Explain my actual paid media experience.",
+  "materials": [
+    {
+      "id": "resume",
+      "title": "Résumé",
+      "text": "Matthew rebuilt a dental group's paid search account. Cost per lead fell from $212 to $131. He managed three service lines."
+    }
+  ],
+  "turns": [
+    {
+      "id": "i1",
+      "at": 1000,
+      "speaker": "Interviewer",
+      "channel": "system",
+      "text": "Can you walk me through your paid media experience?",
+      "partial": "Can you walk me through your paid media experience?",
+      "expected": "say"
+    },
+    {
+      "id": "i2",
+      "at": 6000,
+      "speaker": "You",
+      "channel": "mic",
+      "text": "I rebuilt the dental group's paid search account.",
+      "expected": "silent",
+      "mustSkip": true
+    },
+    {
+      "id": "i3",
+      "at": 10000,
+      "speaker": "Interviewer",
+      "channel": "system",
+      "text": "Right, okay, got it.",
+      "expected": "silent",
+      "mustSkip": true
+    },
+    {
+      "id": "i4",
+      "at": 17000,
+      "speaker": "Interviewer",
+      "channel": "system",
+      "text": "How did you measure whether that worked?",
+      "expected": "say"
+    },
+    {
+      "id": "i5",
+      "at": 28000,
+      "speaker": "Interviewer",
+      "channel": "system",
+      "text": "Do you have any questions for us?",
+      "expected": "ask"
+    },
+    {
+      "id": "i6",
+      "at": 40000,
+      "speaker": "Interviewer",
+      "channel": "system",
+      "text": "How did you measure whether that worked?",
+      "expected": "silent",
+      "mustSkip": true
+    }
+  ]
+}

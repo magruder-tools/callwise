@@ -60,7 +60,7 @@ test("shortcuts register only while running, report conflicts, and release on pa
   assert.equal(active.size, 0);
 });
 
-test("file import handles valid, oversized, missing, and empty files independently", () => {
+test("file import handles valid, oversized, missing, and empty files independently", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "callwise-import-"));
   try {
     const filenames = [
@@ -71,16 +71,16 @@ test("file import handles valid, oversized, missing, and empty files independent
       "empty.txt",
     ].map((name) => path.join(dir, name));
     writeFileSync(filenames[0], "First useful note");
-    writeFileSync(filenames[1], "x".repeat(250001));
+    writeFileSync(filenames[1], "x".repeat(10 * 1024 * 1024 + 1));
     writeFileSync(filenames[2], "Second useful note");
     writeFileSync(filenames[4], "  ");
     const context = new ContextStore();
-    const result = importFiles(filenames, context, "Test project");
+    const result = await importFiles(filenames, context, "Test project");
     assert.equal(result.imported, 2);
     assert.equal(result.skipped.length, 3);
     assert.match(
       result.message,
-      /2 added, 3 skipped: too large, could not read, no text/,
+      /2 added, 3 skipped: too large.*could not read.*no extractable text/,
     );
     assert.equal(context.list().length, 2);
     assert.equal(context.docs.values().next().value.project, "Test project");

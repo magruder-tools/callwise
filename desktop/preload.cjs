@@ -1,6 +1,13 @@
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 contextBridge.exposeInMainWorld("callwise", {
   desktop: true,
+  filePath: (file) => webUtils.getPathForFile(file),
+  meter: (channel, rms) => ipcRenderer.send("callwise:meter", channel, rms),
+  onMeters: (callback) => {
+    const listener = (_event, data) => callback(data);
+    ipcRenderer.on("callwise:meters", listener);
+    return () => ipcRenderer.removeListener("callwise:meters", listener);
+  },
   command: (name, payload = {}) =>
     ipcRenderer.invoke("callwise:command", name, payload),
   audio: (channel, buffer) =>

@@ -1,62 +1,22 @@
-# Validation record
+# Validation
 
-This is the historical September 6 validation record. For the current 0.3.1
-candidate and its Mac test script, see [Checkpoint 1](CHECKPOINT_1.md).
+0.4.0 implements the remaining milestones from `CALLWISE_BRIEF.md` on top of the reliability work recorded in `CHECKPOINT_1.md`.
 
-Build date: September 6, 2026. Build host: Linux x64, Node 24.19.0.
+Automated verification uses the real controller/engine with offline providers, fake Realtime sockets, encrypted-storage substitutes and rendered DOM. Replays cover interview, discovery and client calls, including own speech, backchannels, repeats and partial questions. The stub measures trigger/engine first paint only, not live network or transcription performance. It does not establish model answer quality.
 
-## Verified
+The Mac workflow runs syntax, tests, production dependency audit, native Electron smoke, DMG/ZIP packaging, signature verification, bundled Codex verification and actual packaged-app smoke. Screenshots cover Ready, Recap and the live panel at 340, 440 and 640 px widths. CI checks that essential lead/point text is present and not clipped. It uses synthetic data, no permissions, audio or credentials.
 
-- Offline demo server starts without dependency installation or API keys.
-- All 31 automated checks passed in the final source suite, including a simulated
-  DOM renderer test against the real session controller. No tests were skipped.
-- JavaScript syntax checks cover all source and test modules.
-- Production dependency audit reports zero known vulnerabilities after updating
-  the direct WebSocket dependency. This is not a comprehensive security audit.
-- Demo flow: start → load fictional context → ingest transcript → fast/source
-  cards → inspect source → mark useful → pause → end → new session.
-- Engine: stable transcript IDs, revisions, cancellation, independent lanes,
-  stale advice rejection, request caps, quiet mode, deduplication, project scope,
-  unknown-citation rejection, background-retrieval cancellation, and export.
-- Provider fixtures: OpenAI structured requests, safe errors, Fireflies event
-  mapping/history import, MCP read-only filtering, PCM silence handling, and
-  Codex streaming/final-answer handling.
-- Real Codex CLI 0.153.4: schema generation, JSON-lines initialization, and
-  account inspection completed without running model inference. A signed-in
-  account was reported in the build environment; this does not verify the
-  user's Mac or automatic access to its ChatGPT connections.
-- Electron builder produced an Apple Silicon development app bundle on Linux.
-  Source and package metadata include macOS audio permission descriptions.
+## Checks that need your Mac/account
 
-## Not verified / environment limitations
+- Run the in-app API, microphone and call-audio tests; exercise a wrong key, revoked permission and muted output.
+- Install the app, test the floating panel over full-screen Zoom/Meet/FaceTime and confirm keyboard focus stays in the meeting.
+- Change the microphone and output device while listening; verify fallback/reacquisition and transcript continuity.
+- With the same persistent signing identity, install build N then N+1 over it and check permission continuity.
+- Use `npm run replay -- --live --compare` with a private API key to compare the two fast models. Targets: median first paint ≤2 seconds, p90 ≤4 seconds; evaluate factual correctness as well as timing. The app does not claim those targets have been measured here.
+- Spot-check preparation and recap against your original evidence. Citation IDs and recorded commitments are validated in code; factual prose still needs ordinary human review.
 
-- No OpenAI coaching or transcription request was made with a live API key.
-- No live Fireflies or MCP account was configured or tested.
-- No Codex inference turn was run. Model entitlement, behavior, latency, usage
-  limits, and tool restrictions still need a short real test after approval.
-  An attempted ephemeral thread startup timed out on the build host; end-to-end
-  Codex strategy remains experimental even though schema/account checks passed.
-- No microphone/computer audio was captured here. macOS permissions, device
-  switching, echo, dropouts, diarization, and app compatibility need Mac testing.
-- The cloud browser blocked the loopback demo URL. The headless Electron
-  renderer could not run under this host's socket/process restrictions. Thus
-  visual rendering and real desktop interaction were not verified; the DOM test
-  validates interface wiring, not pixel appearance or native UI behavior.
-- The macOS package is unsigned and unnotarized. It has not been launched on
-  macOS and should be treated as a development candidate.
-- Initial build environment could not create a GitHub repository. Matthew later
-  created private `magruder-tools/callwise`; its initial README and write access
-  were verified before preparing the source upload.
+No API key or signing certificate was supplied to this work session. No live request was made. The release workflow requires persistent signing secrets; preview CI can still build an ad-hoc DMG. The brief's companion HTML visual reference was not supplied, so the redesign follows its written layout, tokens and accessibility requirements.
 
-## First real-call gate
+## Audio-only capture investigation
 
-1. Run the offline demo in the actual desktop app.
-2. With chosen credentials, test a pasted conversation and verify source links.
-3. Test both audio channels in a permitted practice call with headphones.
-4. Pause during connection setup, during speech, and during strategic inference.
-5. Resume, disconnect a device/network, end, and start a separate session.
-6. Verify that no prior client's context appears in the next call.
-7. Assess actual useful/distracting advice, not just whether cards appear.
-
-Performance targets are not measurements. A strong model and a working event
-pipeline do not yet establish that Callwise is better than Final Round.
+The supported Electron loopback path grants a display source and audio. Chromium rejects display-media requests without a video source when video is requested, and the browser API does not expose audio-only display capture. Electron 39+ uses Core Audio taps internally. A separate process-tap helper would require native integration and real Mac permission/audio validation; shipping an unverified helper would reduce reliability. The permitted fallback retains the current path, never reads frames, explains macOS wording, and supplies an end-to-end sound check.

@@ -1,7 +1,7 @@
 {
   "name": "callwise",
   "productName": "Callwise",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "A personal thinking copilot for live conversations",
   "private": true,
   "type": "module",
@@ -18,16 +18,22 @@
     "check": "node scripts/check.mjs",
     "format": "prettier --write .",
     "doctor": "node scripts/doctor.mjs",
-    "dist:mac": "node scripts/bundle-codex.mjs && electron-builder --mac zip --arm64 --publish never",
+    "dist:mac": "node scripts/bundle-codex.mjs && electron-builder --mac dmg zip --arm64 --publish never",
     "dist:win": "electron-builder --win zip --x64 --publish never",
     "package:source": "node scripts/package-source.mjs",
-    "bundle:codex": "node scripts/bundle-codex.mjs"
+    "bundle:codex": "node scripts/bundle-codex.mjs",
+    "replay": "node scripts/replay.mjs",
+    "signing:setup": "node scripts/create-signing-identity.mjs"
   },
   "dependencies": {
+    "mammoth": "1.13.0",
+    "pdfjs-dist": "6.4.299",
     "socket.io-client": "4.8.3",
     "ws": "8.21.3"
   },
   "devDependencies": {
+    "@electron/osx-sign": "2.7.1",
+    "@playwright/test": "1.64.0",
     "electron": "44.2.0",
     "electron-builder": "26.15.3",
     "linkedom": "0.18.13",
@@ -54,6 +60,7 @@
       "category": "public.app-category.productivity",
       "icon": "assets/icon.icns",
       "target": [
+        "dmg",
         "zip"
       ],
       "extendInfo": {
@@ -62,7 +69,10 @@
         "NSScreenCaptureUsageDescription": "Callwise uses system capture to hear your selected meeting. Video frames are not sent to AI."
       },
       "minimumSystemVersion": "14.2",
-      "identity": "-"
+      "identity": "-",
+      "sign": "scripts/sign-mac.mjs",
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
     },
     "extraResources": [
       {
@@ -70,9 +80,27 @@
         "to": "codex"
       },
       {
-        "from": "docs/INSTALL_MAC.md",
-        "to": "INSTALL_MAC.md"
+        "from": "README.md",
+        "to": "README.md"
       }
-    ]
+    ],
+    "dmg": {
+      "contents": [
+        {
+          "x": 140,
+          "y": 180,
+          "type": "file"
+        },
+        {
+          "x": 420,
+          "y": 180,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
+  },
+  "overrides": {
+    "argparse": "2.0.1"
   }
 }

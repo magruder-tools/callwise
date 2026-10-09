@@ -1,641 +1,745 @@
-import { AudioCapture, describeAudioCapture } from "./capture.mjs";
-import { connectionControls } from "./connections.mjs";
-import { SuggestionFocus } from "./suggestion-focus.mjs";
-const focus = new SuggestionFocus();
-const $ = (id) => document.getElementById(id);
-const esc = (value) =>
-  String(value ?? "").replace(
-    /[&<>"']/g,
-    (c) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
-        c
-      ],
-  );
-const bridge = window.callwise || {
+import { state, viewState as ui } from "./state.mjs";
+import { ready } from "./views/ready.mjs";
+import { live } from "./views/live.mjs";
+import { recap } from "./views/recap.mjs";
+import { settings } from "./views/settings.mjs";
+import { welcome } from "./views/welcome.mjs";
+import { banner, errorBanner, escape, button } from "./components/common.mjs";
+import { AudioCapture } from "./capture.mjs";
+const root = document.getElementById("app"),
+  panel =
+    new URLSearchParams(window.location?.search || "").get("surface") ===
+    "panel";
+if (panel) document.body.classList.add("panel");
+const browserBridge = () => ({
   desktop: false,
-  async command(name, payload = {}) {
-    const response = await fetch("/api/command", {
+  command: async (name, payload = {}) => {
+    const r = await fetch("/api/command", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, payload }),
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Request failed.");
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error);
     return data.result;
   },
-  onState(callback) {
-    const stream = new EventSource("/api/events");
-    stream.onmessage = (event) => callback(JSON.parse(event.data));
-    stream.onerror = () => {
-      $("status-label").textContent = "Demo connection interrupted";
-    };
-    return () => stream.close();
+  onState: (callback) => {
+    const events = new EventSource("/api/events");
+    events.onmessage = (event) => callback(JSON.parse(event.data));
+    return () => events.close();
   },
-  onStopCapture() {
-    return () => {};
-  },
+  onStopCapture: () => () => {},
+});
+const bridge = window.callwise || browserBridge();
+let capture,
+  recordingShortcut = null,
+  renderQueued = false,
+  lastStatus = "idle",
+  testTimer,
+  captureStarting = false,
+  latestMeters = { mic: 0, system: 0 };
+const report = (error) => {
+  ui.notice = error?.message || String(error);
+  render();
 };
-let state,
-  toastTimer,
-  fastSignature = "",
-  strategySignature = "",
-  transcriptSignature = "",
-  contextSignature = "",
-  compact = false,
-  sourceUrl = "",
-  localError = null,
-  displayedError = null,
-  errorSequence = 0;
-const capture = new AudioCapture(
-  bridge,
-  (channel, rms) => {
-    $(`meter-${channel}`).style.width = `${Math.min(100, rms * 600)}%`;
-  },
-  (message) => {
-    void act("pause");
-    showError(message);
-  },
-);
-bridge.onStopCapture(() => capture.stop());
-function showError(message) {
-  localError = {
-    id: `local:${++errorSequence}`,
-    message,
-    at: Date.now(),
-    expiresAt: Date.now() + 30000,
-  };
-  drawError();
-}
-function drawError() {
-  if (localError?.expiresAt <= Date.now()) localError = null;
-  const active = (state?.errors || []).filter(
-    (error) => error.expiresAt === null || error.expiresAt > Date.now(),
-  );
-  displayedError = [...active, ...(localError ? [localError] : [])]
-    .sort((a, b) => a.at - b.at)
-    .at(-1);
-  $("error-box").hidden = !displayedError;
-  $("error-message").textContent = displayedError?.message || "";
-  $("error-box").classList.toggle(
-    "warning",
-    displayedError?.severity === "warning",
-  );
-}
-function toast(message, error = false) {
-  $("toast").textContent = message;
-  $("toast").hidden = false;
-  $("toast").style.borderColor = error ? "#ad7051" : "";
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => ($("toast").hidden = true), 5000);
-}
-async function act(name, payload = {}) {
+async function command(name, payload) {
   try {
     return await bridge.command(name, payload);
-  } catch (e) {
-    showError(e.message);
-    return null;
+  } catch (error) {
+    report(error);
+    throw error;
   }
 }
-const connections = connectionControls(bridge, { toast, showError });
-const timestamp = (ms) =>
-  `${String(Math.floor(ms / 60000)).padStart(2, "0")}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
-
-function cardAge(card) {
-  const earlier = card.expiresAt <= Date.now();
-  return earlier ? "Earlier · check relevance" : "From this conversation";
+const run = (name, payload) => void command(name, payload).catch(() => {});
+const field = (id) => document.getElementById(id)?.value || "";
+async function patch(key, value) {
+  await command("configure", { [key]: value });
 }
-function drawCards(lane) {
-  const card = focus.current?.[lane];
-  const pending = focus.pending(lane).length;
-  const next = $(`next-${lane}`);
-  next.disabled = !pending;
-  next.textContent = pending
-    ? `${pending} new ${lane === "fast" ? (pending === 1 ? "suggestion" : "suggestions") : pending === 1 ? "insight" : "insights"}`
-    : lane === "fast"
-      ? "New suggestion"
-      : "New insight";
-  if (lane === "fast")
-    next.textContent = pending ? `${pending} new` : "New suggestion";
-  const container = $(`${lane}-cards`);
-  // Keep the same DOM node while reading: selection, scroll and Details survive.
-  if (container.dataset.cardId !== (card?.id || "empty")) {
-    container.dataset.cardId = card?.id || "empty";
-    container.replaceChildren();
-    if (!card) {
-      const empty = document.createElement("div");
-      empty.className = "empty-card";
-      empty.innerHTML = `<span class="empty-mark" aria-hidden="true">${lane === "fast" ? "✦" : "·"}</span><p>${lane === "fast" ? "Stay with the conversation." : "Space for a bigger thought."}</p><small>${lane === "fast" ? "New suggestions appear automatically. Keep one to hold it here." : "Deeper advice will wait here when it adds something."}</small>`;
-      container.append(empty);
+const clipboard = async (text) => {
+  if (bridge.desktop) await command("desktop.copy", { text });
+  else await navigator.clipboard.writeText(text);
+  ui.notice = "Copied.";
+  render();
+};
+function receive(s) {
+  if (ui.sessionId !== s.sessionId) {
+    ui.sessionId = s.sessionId;
+    ui.consent = false;
+    ui.selectedId = null;
+    ui.lastCardId = null;
+    ui.transcript = false;
+    ui.coverage = false;
+    ui.prep = false;
+  }
+  if (s.status === "ended" && lastStatus !== "ended") ui.screen = "recap";
+  if (["running", "paused"].includes(s.status) && ui.screen !== "settings")
+    ui.screen = "live";
+  if (s.status === "idle" && lastStatus !== "idle" && ui.screen !== "settings")
+    ui.screen = "ready";
+  if (
+    !state.get() &&
+    bridge.desktop &&
+    !panel &&
+    !s.preferences.setupDismissed &&
+    (!s.desktop?.readiness?.ai ||
+      !s.desktop?.readiness?.mic ||
+      !s.desktop?.readiness?.system)
+  )
+    ui.screen = "welcome";
+  if (s.desktop?.platform === "darwin") document.body.classList.add("mac");
+  if (
+    bridge.desktop &&
+    !panel &&
+    s.status === "running" &&
+    s.source === "audio" &&
+    lastStatus !== "running" &&
+    !captureStarting
+  )
+    void startCapture(s);
+  if (s.status !== "running" && lastStatus === "running") capture?.stop();
+  lastStatus = s.status;
+  state.set(s);
+}
+async function startCapture(s) {
+  captureStarting = true;
+  try {
+    capture ||= new AudioCapture(
+      bridge,
+      meter,
+      (message, channel) => run("capture.error", { message, channel }),
+      (message) => {
+        run("capture.notice", { message });
+      },
+    );
+    await capture.start({ inputDevice: s.preferences.inputDevice });
+  } catch (error) {
+    run("pause");
+    report(error);
+  } finally {
+    captureStarting = false;
+  }
+}
+function meter(channel, rms) {
+  latestMeters[channel] = rms;
+  const node =
+    document.getElementById(`meter-${channel}`) ||
+    document.getElementById("meter-test");
+  if (node) node.style.transform = `scaleX(${Math.min(1, rms * 12)})`;
+  bridge.meter?.(channel, rms);
+}
+function clock() {
+  const s = state.get();
+  if (!s) return;
+  const ms =
+      s.activeTimeMs +
+      (s.status === "running" ? Math.max(0, Date.now() - s.snapshotAt) : 0),
+    seconds = Math.floor(ms / 1000),
+    node = document.getElementById("call-time");
+  if (node)
+    node.textContent = `${Math.floor(seconds / 60)
+      .toString()
+      .padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
+}
+function render() {
+  const s = state.get();
+  if (!s) return;
+  const active = document.activeElement,
+    focus = active?.id,
+    selection = active?.selectionStart,
+    value = active?.value,
+    scroll = root.scrollTop;
+  const preserved = {};
+  for (const id of [
+    "question",
+    "openai-key",
+    "fireflies-key",
+    "material-text",
+    "material-title",
+    "fireflies-id",
+    "transcript-text",
+    "speaker",
+  ])
+    if (document.getElementById(id)) preserved[id] = field(id);
+  const view = panel ? "live" : ui.screen;
+  let content = { ready, live, recap, settings, welcome }[view](s, ui);
+  const notices =
+    (s.desktop && !s.desktop.packaged && !s.demoOnly
+      ? banner(
+          "Development run. Call audio may be silent. Install the app for real calls.",
+          "",
+          "",
+          "warning",
+        )
+      : "") +
+    (s.desktop?.update
+      ? banner(
+          `Callwise ${s.desktop.update.version} is available.`,
+          "update",
+          "Get update",
+        )
+      : "") +
+    errorBanner(s) +
+    (ui.notice && !s.errors.some((e) => e.message === ui.notice)
+      ? banner(ui.notice, "dismiss-notice", "Dismiss")
+      : "");
+  root.innerHTML = notices + content;
+  for (const [id, text] of Object.entries(preserved))
+    if (document.getElementById(id)) document.getElementById(id).value = text;
+  const replacement = focus && document.getElementById(focus);
+  if (replacement && (!document.hasFocus || document.hasFocus())) {
+    if (value !== undefined && active?.tagName !== "SELECT")
+      replacement.value = value;
+    replacement.focus({ preventScroll: true });
+    if (Number.isInteger(selection) && replacement.setSelectionRange)
+      try {
+        replacement.setSelectionRange(selection, selection);
+      } catch {}
+  }
+  root.scrollTop = scroll;
+  clock();
+  for (const [channel, rms] of Object.entries(latestMeters))
+    meterLocal(channel, rms);
+  if (panel && bridge.desktop)
+    requestAnimationFrame(() =>
+      run("desktop.panel.fit", {
+        height: Math.min(
+          1000,
+          Math.max(320, document.getElementById("app").scrollHeight),
+        ),
+      }),
+    );
+}
+function meterLocal(channel, rms) {
+  const node =
+    document.getElementById(`meter-${channel}`) ||
+    document.getElementById("meter-test");
+  if (node) node.style.transform = `scaleX(${Math.min(1, rms * 12)})`;
+}
+state.subscribe(() => {
+  if (renderQueued) return;
+  renderQueued = true;
+  (window.requestAnimationFrame || ((cb) => setTimeout(cb, 0)))(() => {
+    renderQueued = false;
+    render();
+  });
+});
+bridge.onState(receive);
+bridge.onStopCapture(() => capture?.stop());
+bridge.onMeters?.(({ channel, rms }) => {
+  latestMeters[channel] = rms;
+  meterLocal(channel, rms);
+});
+bridge.onNavigate?.((data) => {
+  if (data.retryAudio) {
+    void capture?.retry(data.retryAudio);
+    return;
+  }
+  if (data.screen) {
+    ui.screen = data.screen;
+    render();
+  } else navigate(data.direction);
+});
+function navigate(direction) {
+  const s = state.get(),
+    cards = s.cards.filter(
+      (c) => c.lane === "fast" && c.status !== "dismissed" && !c.late,
+    ),
+    i = cards.findIndex((c) => c.id === ui.selectedId);
+  ui.selectedId =
+    cards[
+      Math.max(
+        0,
+        Math.min(cards.length - 1, i + (direction === "previous" ? -1 : 1)),
+      )
+    ]?.id;
+  render();
+}
+async function sound(channel) {
+  if (!bridge.desktop) {
+    report("Sound checks are available in the installed app.");
+    return;
+  }
+  if (state.get().status === "running")
+    throw new Error("Pause the call before a sound check.");
+  clearTimeout(testTimer);
+  capture?.stop();
+  await command("desktop.sound.begin", { channel });
+  ui.testChannel = channel;
+  render();
+  capture ||= new AudioCapture(bridge, meter, (message) => report(message));
+  try {
+    await capture.start({
+      inputDevice: state.get().preferences.inputDevice,
+      channels: [channel],
+    });
+    if (channel === "system") await command("desktop.sound.play");
+    testTimer = setTimeout(() => void endSound(), 12000);
+  } catch (error) {
+    await endSound();
+    throw error;
+  }
+}
+async function endSound() {
+  clearTimeout(testTimer);
+  capture?.stop();
+  ui.testChannel = null;
+  await command("desktop.sound.end");
+  render();
+}
+async function testAI(save) {
+  ui.checking = true;
+  ui.testResults = [];
+  render();
+  try {
+    if (save) {
+      const key = field("openai-key");
+      if (key.trim())
+        await command("desktop.connections.save", { openaiKey: key });
+      else if (!state.get().config.openaiReady)
+        throw new Error("Paste your OpenAI API key first.");
+      const node = document.getElementById("openai-key");
+      if (node) node.value = "";
+    }
+    ui.testResults = await command("desktop.connections.test");
+  } finally {
+    ui.checking = false;
+    render();
+  }
+}
+async function act(action, node) {
+  const s = state.get();
+  switch (action) {
+    case "call-type":
+      await patch("mode", node.dataset.value);
+      break;
+    case "consent":
+      ui.consent = node.checked;
+      render();
+      break;
+    case "start":
+      if (!ui.consent) return;
+      await command("start", {
+        source: bridge.desktop
+          ? s.preferences.preferredSource || "audio"
+          : "audio",
+        backend: s.preferences.preferredBackend || "openai",
+        consent: true,
+        transcriptId: field("fireflies-id"),
+      });
+      break;
+    case "resume":
+      await command("start", {
+        source: s.source,
+        backend: s.backend,
+        consent: true,
+      });
+      break;
+    case "retry-audio":
+      await command("desktop.capture.retry");
+      break;
+    case "pause":
+      await command("pause");
+      break;
+    case "end":
+      await command("end");
+      break;
+    case "practice":
+      await command("new", { clearContext: true });
+      await command("start", { source: "demo" });
+      break;
+    case "new":
+      await command("new", { clearContext: true });
+      ui.screen = "ready";
+      render();
+      break;
+    case "recent":
+      await command("sheet.load", { id: node.dataset.id });
+      break;
+    case "help":
+      await command("nudge");
+      break;
+    case "previous":
+    case "next":
+      navigate(action);
+      break;
+    case "pin":
+      await command("card.pin", { id: node.dataset.id });
+      break;
+    case "not-useful":
+      await command("feedback", { id: node.dataset.id, status: "dismissed" });
+      break;
+    case "transcript":
+      ui.transcript = !ui.transcript;
+      render();
+      break;
+    case "coverage":
+      ui.coverage = !ui.coverage;
+      render();
+      break;
+    case "paste":
+      ui.paste = true;
+      render();
+      break;
+    case "cancel-paste":
+      ui.paste = false;
+      render();
+      break;
+    case "remove-material":
+      await command("context.remove", { id: node.dataset.id });
+      break;
+    case "import-profile":
+      await command("desktop.profile.import");
+      break;
+    case "import":
+      if (bridge.desktop) {
+        const result = await command("desktop.import");
+        ui.notice = result.message;
+        render();
+      } else {
+        ui.paste = true;
+        ui.notice = "Paste notes to try materials in the browser sample.";
+        render();
+      }
+      break;
+    case "view-prep":
+      ui.prep = !ui.prep;
+      render();
+      break;
+    case "research":
+      await command("context.connected", { query: s.settings.goal });
+      break;
+    case "settings":
+      if (panel) {
+        await command("desktop.settings");
+        break;
+      }
+      ui.screen = "settings";
+      render();
+      await listDevices();
+      break;
+    case "close-settings":
+      ui.screen = ["running", "paused"].includes(s.status)
+        ? "live"
+        : s.status === "ended"
+          ? "recap"
+          : "ready";
+      render();
+      if (bridge.desktop) await command("desktop.settings.close");
+      break;
+    case "settings-tab":
+      ui.tab = node.dataset.tab;
+      render();
+      if (ui.tab === "Audio") await listDevices();
+      break;
+    case "readiness":
+      ui.screen = "welcome";
+      ui.welcomeStep = node.dataset.target === "AI" ? 0 : 1;
+      render();
+      break;
+    case "save-key":
+      await testAI(true);
+      break;
+    case "test-ai":
+      await testAI(false);
+      break;
+    case "mic-permission":
+      await command("desktop.mic.permission");
+      await listDevices();
+      break;
+    case "sound-mic":
+      await sound("mic");
+      break;
+    case "sound-system":
+      await sound("system");
+      break;
+    case "permissions-system":
+      await command("desktop.permissions.open", { pane: "system" });
+      break;
+    case "welcome-next":
+      ui.welcomeStep = Math.min(2, ui.welcomeStep + 1);
+      render();
+      if (ui.welcomeStep === 1) await listDevices();
+      break;
+    case "welcome-back":
+      ui.welcomeStep = Math.max(0, ui.welcomeStep - 1);
+      render();
+      break;
+    case "welcome-done":
+    case "skip-setup":
+      await patch("setupDismissed", true);
+      ui.screen = "ready";
+      render();
+      break;
+    case "copy-email":
+      await clipboard(s.recap?.email || "");
+      break;
+    case "copy-recap": {
+      const { recapText } = await command("recap.text");
+      await clipboard(recapText);
+      break;
+    }
+    case "export":
+      if (bridge.desktop) await command("desktop.export");
+      else {
+        const text = await command("export"),
+          url = URL.createObjectURL(
+            new Blob([text], { type: "text/markdown" }),
+          ),
+          a = document.createElement("a");
+        a.href = url;
+        a.download = "callwise.md";
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+      break;
+    case "carry-recap":
+      await command("recap.carry", { enabled: node.checked });
+      break;
+    case "pref-switch":
+      await patch(node.id, node.checked);
+      break;
+    case "diagnostics":
+      await command("desktop.diagnostics");
+      ui.notice = "Diagnostics copied.";
+      render();
+      break;
+    case "save-models":
+      await command(
+        "desktop.connections.save",
+        Object.fromEntries(
+          ["fastModel", "strategyModel", "transcriptionModel"].map((k) => [
+            k,
+            field(k),
+          ]),
+        ),
+      );
+      break;
+    case "reset-models":
+      await command("desktop.connections.save", {
+        fastModel: "gpt-5.6-luna",
+        strategyModel: "gpt-6-astra",
+        transcriptionModel: "gpt-live-transcribe",
+      });
+      break;
+    case "save-prices":
+      await patch(
+        "prices",
+        Object.fromEntries(
+          [
+            "fastInput",
+            "fastOutput",
+            "deepInput",
+            "deepOutput",
+            "audioMinute",
+          ].map((k) => [k, Number(field(k))]),
+        ),
+      );
+      break;
+    case "save-fireflies":
+      await command("desktop.connections.save", {
+        firefliesKey: field("fireflies-key"),
+      });
+      document.getElementById("fireflies-key").value = "";
+      break;
+    case "codex-signin":
+      await command("desktop.codex.signin");
+      ui.notice = "ChatGPT sign-in ready.";
+      render();
+      break;
+    case "discover-context":
+      await command("context.discover");
+      break;
+    case "record-shortcut":
+      recordingShortcut = node.dataset.shortcut;
+      node.classList.add("recording");
+      node.textContent = "Press Control + Option + key";
+      break;
+    case "delete-everything":
+      confirmDelete();
+      break;
+    case "confirm-delete":
+      await command("desktop.delete");
+      ui.screen = "welcome";
+      ui.welcomeStep = 0;
+      render();
+      break;
+    case "cancel-delete":
+      document.getElementById("confirm-dialog")?.close();
+      break;
+    case "dismiss-error":
+      await command("error.dismiss", { id: node.dataset.id });
+      break;
+    case "dismiss-notice":
+      ui.notice = "";
+      render();
+      break;
+    case "link":
+      await command("desktop.openLink", { url: node.dataset.url });
+      break;
+    case "update":
+      await command("desktop.openLink", { url: s.desktop.update.url });
+      break;
+  }
+}
+function confirmDelete() {
+  const d = document.createElement("dialog");
+  d.id = "confirm-dialog";
+  d.innerHTML = `<h1>Delete everything on this Mac?</h1><p>Saved calls, materials, recaps, keys, setup and diagnostic logs will be removed. Exported files remain wherever you saved them.</p><div class="row">${button("cancel-delete", "Cancel")}${button("confirm-delete", "Delete everything", { className: "danger" })}</div>`;
+  root.append(d);
+  d.showModal();
+}
+async function listDevices() {
+  if (bridge.desktop && navigator.mediaDevices?.enumerateDevices) {
+    ui.devices = (await navigator.mediaDevices.enumerateDevices()).filter(
+      (d) => d.kind === "audioinput",
+    );
+    await command("desktop.devices", {
+      ids: ui.devices.map((d) => d.deviceId),
+    });
+    render();
+  }
+}
+root.addEventListener("click", (e) => {
+  const node = e.target.closest("[data-action]");
+  if (node && node.type !== "checkbox")
+    void act(node.dataset.action, node).catch(report);
+});
+root.addEventListener("change", (e) => {
+  const node = e.target;
+  if (node.dataset.action && node.type === "checkbox")
+    void act(node.dataset.action, node).catch(report);
+  else if (node.dataset.pref)
+    void patch(
+      node.dataset.pref,
+      node.type === "checkbox" ? node.checked : node.value,
+    ).catch(() => {});
+  else if (node.dataset.contextApp) {
+    const ids = Array.from(
+      document.querySelectorAll("[data-context-app]:checked"),
+      (n) => n.dataset.contextApp,
+    );
+    void patch("contextApps", ids).catch(() => {});
+  }
+});
+const edits = new Map();
+root.addEventListener("input", (e) => {
+  const key = e.target.dataset.pref;
+  if (!key || e.target.tagName === "SELECT") return;
+  clearTimeout(edits.get(key));
+  const value = e.target.value;
+  edits.set(
+    key,
+    setTimeout(() => {
+      edits.delete(key);
+      void patch(key, value).catch(() => {});
+    }, 180),
+  );
+});
+root.addEventListener("submit", (e) => {
+  e.preventDefault();
+  void (async () => {
+    switch (e.target.id) {
+      case "ask-form": {
+        const question = field("question");
+        if (!question.trim()) return;
+        document.getElementById("question").value = "";
+        await command("ask", { question });
+        break;
+      }
+      case "material-form":
+        await command("context.add", {
+          title: field("material-title"),
+          text: field("material-text"),
+        });
+        ui.paste = false;
+        render();
+        break;
+      case "transcript-form":
+        await command("transcript", {
+          speaker: field("speaker"),
+          text: field("transcript-text"),
+        });
+        document.getElementById("transcript-text").value = "";
+        break;
+      case "fireflies-import":
+        await command("context.fireflies", { id: field("fireflies-id") });
+        break;
+    }
+  })().catch(report);
+});
+root.addEventListener("dragover", (e) => {
+  if (e.target.closest("#drop-zone")) {
+    e.preventDefault();
+    e.target.closest("#drop-zone").classList.add("drag-over");
+  }
+});
+root.addEventListener("dragleave", (e) =>
+  e.target.closest("#drop-zone")?.classList.remove("drag-over"),
+);
+root.addEventListener("drop", (e) => {
+  if (!e.target.closest("#drop-zone")) return;
+  e.preventDefault();
+  if (bridge.desktop) {
+    const paths = Array.from(e.dataTransfer.files, (f) => bridge.filePath(f));
+    void command("desktop.import", { paths })
+      .then((result) => {
+        ui.notice = result.message;
+        render();
+      })
+      .catch(() => {});
+  } else {
+    ui.paste = true;
+    render();
+  }
+});
+window.addEventListener("keydown", (e) => {
+  if (recordingShortcut) {
+    if (e.key === "Escape") {
+      recordingShortcut = null;
+      render();
       return;
     }
-    const article = document.createElement("article");
-    article.className = `coaching-card ${lane === "strategy" ? "strategy" : ""}`;
-    article.dataset.cardId = card.id;
-    const spoken = lane === "fast" && card.say;
-    const lead = spoken || card.title;
-    article.innerHTML = `<div class="card-scroll">${card.origin === "asked" ? `<p class="card-question">You asked: ${esc(card.question)}</p>` : card.origin === "hotkey" ? '<p class="card-question">You asked for help</p>' : ""}<div class="card-meta"><span>${card.demo ? "DEMO · " : ""}${esc(card.kind)}</span><span class="card-age"></span></div><h3 class="card-lead">${esc(lead)}</h3><p class="card-summary">${esc(card.reason)}</p><details class="advice-details"><summary>Details${card.sources.length ? ` · ${card.sources.length} ${card.sources.length === 1 ? "source" : "sources"}` : ""}</summary>${spoken ? `<h4>${esc(card.title)}</h4>` : ""}${lane === "strategy" && card.say ? `<p class="card-body">“${esc(card.say)}”</p>` : ""}<p class="card-body">${esc(card.body)}</p><div class="card-sources"></div></details></div><div class="card-actions"><button class="keep-button" type="button">Keep</button><button class="dismiss-button" type="button">Dismiss</button></div>`;
-    for (const source of card.sources) {
-      const button = document.createElement("button");
-      button.className = "source-chip";
-      button.textContent = source.title;
-      button.addEventListener("click", () =>
-        openSource(source.id, source.excerpt),
-      );
-      article.querySelector(".card-sources").append(button);
-    }
-    article
-      .querySelector(".keep-button")
-      .addEventListener("click", () =>
-        act("feedback", { id: card.id, status: "accepted" }),
-      );
-    article.querySelector(".dismiss-button").addEventListener("click", () => {
-      focus.dismiss(lane);
-      drawCards(lane);
-      if (card.status !== "accepted")
-        void act("feedback", { id: card.id, status: "dismissed" });
-    });
-    container.append(article);
-  }
-  if (card) {
-    container.querySelector(".card-age").textContent = cardAge(card);
-    const keep = container.querySelector(".keep-button");
-    keep.textContent = card.status === "accepted" ? "✓ Kept" : "Keep";
-    keep.disabled = card.status === "accepted";
-  }
-}
-function drawHistory() {
-  const list = $("advice-history-list");
-  list.replaceChildren();
-  if (!state.cards.length) {
-    list.textContent =
-      "Your suggestions will be collected here during the call.";
-    return;
-  }
-  for (const card of [...state.cards].reverse()) {
-    const row = document.createElement("article");
-    row.className = "history-item";
-    row.innerHTML = `<div class="card-meta"><span>${card.lane === "fast" ? "Next move" : "Worth considering"} · ${card.status === "accepted" ? "Kept" : card.status === "dismissed" ? "Dismissed" : "Suggestion"}</span><span>${esc(cardAge(card))}</span></div><h3>${esc(card.say || card.title)}</h3><p>${esc(card.body)}</p>`;
-    if (card.status !== "dismissed") {
-      const open = document.createElement("button");
-      open.className = "secondary-button";
-      open.textContent = "Show in call";
-      open.addEventListener("click", () => {
-        focus.select(card.lane, card.id);
-        drawCards(card.lane);
-        $("advice-history-dialog").close();
-        if (card.lane === "strategy") $("insights-dialog").showModal();
-      });
-      row.append(open);
-    }
-    list.append(row);
-  }
-}
-
-function render(next) {
-  const sessionChanged = state?.sessionId !== next.sessionId;
-  state = next;
-  document.body.classList.toggle("desktop", !!bridge.desktop);
-  if (sessionChanged) {
-    $("source").value = state.preferences?.preferredSource || "demo";
-    $("backend").value = state.preferences?.preferredBackend || "openai";
-    $("consent").checked = false;
-  }
-  if (bridge.desktop) {
-    compact = !!state.preferences?.compact;
-    document.body.classList.toggle("compact", compact);
-    $("compact").setAttribute("aria-pressed", String(compact));
-  }
-  focus.sync(state.sessionId, state.cards);
-  if (sessionChanged) {
-    for (const lane of ["fast", "strategy"])
-      $(`${lane}-cards`).dataset.cardId = "";
-    localError = null;
-    $("advice-history-dialog").close();
-  }
-  $("advice-count").textContent = state.cards.length;
-  const insights = state.cards.filter(
-    (c) => c.lane === "strategy" && c.status !== "dismissed",
-  ).length;
-  $("insights-count").textContent = insights ? `· ${insights}` : "";
-  $("capture-summary").textContent =
-    state.status === "running"
-      ? state.source === "demo"
-        ? "Demo · no recording"
-        : state.source === "audio"
-          ? describeAudioCapture(state.capture)
-          : "Receiving conversation text"
-      : "Nothing is being captured";
-  const running = state.status === "running",
-    paused = state.status === "paused",
-    ended = state.status === "ended";
-  $("status-label").textContent = state.connecting
-    ? "Connecting…"
-    : running
-      ? state.source === "demo"
-        ? "Demo in progress"
-        : Object.values(state.capture).includes("reconnecting")
-          ? "Reconnecting…"
-          : "Session active"
-      : paused
-        ? "Session paused"
-        : ended
-          ? "Session ended"
-          : "Ready when you are";
-  $("status-dot").className =
-    `dot ${running ? "running" : paused ? "paused" : ""}`;
-  $("start").disabled = running || state.connecting;
-  $("start").innerHTML = ended
-    ? "＋ New session"
-    : paused
-      ? "▶ Resume"
-      : $("source").value === "demo"
-        ? "▶ Start demo"
-        : "▶ Start session";
-  $("start").hidden = running || state.connecting;
-  $("pause").hidden = !running && !state.connecting;
-  $("end").hidden = !running && !paused && !state.connecting;
-  $("pause").disabled = !running && !state.connecting;
-  $("end").disabled = !running && !paused && !state.connecting;
-  for (const id of [
-    "source",
-    "backend",
-    "mode",
-    "goal",
-    "project",
-    "quiet",
-    "profile",
-    "save-profile",
-    "auto-search",
-  ])
-    $(id).disabled = running || state.connecting;
-  for (const id of ["ask-submit", "transcript-submit", "deep-think"])
-    $(id).disabled = !running || state.connecting;
-  for (const button of document.querySelectorAll(".prompt-chip"))
-    button.disabled = !running;
-  if (running || paused) {
-    $("source").value = state.source;
-    $("backend").value = state.backend;
-  }
-  for (const [id, value] of [
-    ["mode", state.settings.mode],
-    ["goal", state.settings.goal],
-    ["project", state.settings.project],
-    ["profile", state.settings.profile],
-  ])
-    if (document.activeElement !== $(id)) $(id).value = value;
-  $("quiet").checked = state.settings.quiet;
-
-  $("fast-status").textContent = state.thinking.fast
-    ? "Considering the conversation…"
-    : running
-      ? "Listening for a useful moment"
-      : "Suggestions stay until you move on";
-  $("strategy-status").textContent = state.thinking.strategy
-    ? "Thinking through the bigger picture…"
-    : running
-      ? state.source === "demo"
-        ? "Scripted strategy demo"
-        : state.backend === "codex"
-          ? "Astra via Codex"
-          : "Astra via API"
-      : "Room for a deeper thought";
-  for (const lane of ["fast", "strategy"])
-    $(`${lane}-status`).classList.toggle("thinking", state.thinking[lane]);
-  $("usage").textContent =
-    `${state.metrics.fastCalls} / ${state.limits.fast} fast · ${state.metrics.strategyCalls} / ${state.limits.strategy} strategic requests`;
-  $("retention").textContent =
-    state.backend === "codex" && state.source !== "demo"
-      ? "Callwise is in-memory; Codex manages its own retention"
-      : "Session stays in memory until you export";
-  $("transcript-footnote").textContent = running
-    ? state.source === "demo"
-      ? "Synthetic conversation · no audio captured"
-      : state.source === "audio"
-        ? "Two audio channels · no saved audio"
-        : "Receiving text · no local audio capture"
-    : "Nothing is being captured";
-  for (const [channel, key] of [
-    ["mic", "mic-label"],
-    ["system", "system-label"],
-  ])
-    $(key).textContent =
-      state.source === "demo" && running
-        ? "demo"
-        : state.capture[channel] || "off";
-  const tSignature = JSON.stringify(
-    state.transcript.map((r) => [r.id, r.text, r.final]),
-  );
-  if (tSignature !== transcriptSignature) {
-    transcriptSignature = tSignature;
-    const list = $("transcript");
-    const nearBottom =
-      list.scrollHeight - list.scrollTop - list.clientHeight < 90;
-    list.replaceChildren();
-    if (!state.transcript.length)
-      list.innerHTML =
-        '<div class="transcript-empty"><span>〰</span><strong>The conversation starts here.</strong><p>Try the demo to watch context turn into useful questions and strategic advice.</p></div>';
-    for (const row of state.transcript) {
-      const el = document.createElement("div");
-      el.className = `transcript-row ${row.speaker === "You" ? "you" : ""} ${row.final ? "" : "partial"} ${row.gap ? "gap" : ""}`;
-      el.innerHTML = `<header><span class="avatar">${esc(row.speaker.slice(0, 1))}</span><span>${esc(row.speaker)}</span><time>${timestamp(row.startMs)}</time></header><p>${esc(row.text)}</p>`;
-      list.append(el);
-    }
-    if (nearBottom) list.scrollTop = list.scrollHeight;
-  }
-  $("transcript-count").textContent = state.transcript.length;
-  const cSignature = JSON.stringify(state.context);
-  if (cSignature !== contextSignature) {
-    contextSignature = cSignature;
-    const list = $("context-list");
-    list.replaceChildren();
-    if (!state.context.length)
-      list.innerHTML =
-        '<p class="muted micro">Add a brief, notes, or a past transcript. Suggestions can cite the originals.</p>';
-    for (const doc of state.context) {
-      const button = document.createElement("button");
-      button.className = "context-item";
-      button.innerHTML = `<span class="file-icon">▤</span><span><strong>${esc(doc.title)}</strong><small>${esc(doc.kind)} · ${(doc.characters / 1000).toFixed(1)}k characters</small></span>`;
-      button.addEventListener("click", () => openSource(doc.id));
-      list.append(button);
-    }
-  }
-  $("context-count").textContent = state.context.length;
-  for (const [id, ready, no] of [
-    ["openai-status", state.config.openaiReady, "Key needed"],
-    ["fireflies-status", state.config.firefliesReady, "Optional"],
-    ["mcp-status", state.config.mcpReady, "Not connected"],
-  ]) {
-    $(id).textContent = ready ? "Configured" : no;
-    $(id).classList.toggle("ready", ready);
-  }
-  $("model-labels").textContent =
-    `Fast: ${state.config.fastModel || "gpt-5.6-luna"} · Strategy: ${state.config.strategyModel || "gpt-6-astra"}`;
-  $("import-file").disabled = !bridge.desktop;
-  connections.sync(state);
-  drawError();
-  drawCards("fast");
-  drawCards("strategy");
-  updateSource();
-  if (!running) capture.stop();
-}
-function updateSource() {
-  const source = $("source").value;
-  $("demo-notice").hidden = source !== "demo";
-  $("live-consent").hidden = source === "demo";
-  $("fireflies-field").hidden = source !== "fireflies";
-  if (state?.status === "idle")
-    $("start").textContent =
-      source === "demo" ? "▶ Start demo" : "▶ Start session";
-}
-async function openSource(id, excerpt) {
-  const doc = await act("context.get", { id });
-  if (!doc) return;
-  $("source-title").textContent = doc.title;
-  $("source-text").textContent = [
-    doc.provenance
-      ? `Retrieved from ${doc.provenance.appName} • ${doc.provenance.action}\nRetrieved at: ${doc.retrievedAt} (not the source modification date)\n`
-      : "",
-    excerpt || doc.text,
-  ]
-    .filter(Boolean)
-    .join("\n");
-  sourceUrl = doc.url;
-  $("source-link").hidden = !sourceUrl;
-  $("source-dialog").showModal();
-}
-function configure(event) {
-  const id = event.target.id;
-  const field =
-    { source: "preferredSource", backend: "preferredBackend" }[id] || id;
-  return act("configure", {
-    [field]: id === "quiet" ? $(id).checked : $(id).value,
-  });
-}
-for (const id of ["mode", "goal", "project", "quiet", "source", "backend"])
-  $(id).addEventListener("change", configure);
-$("source").addEventListener("change", updateSource);
-$("start").addEventListener("click", async () => {
-  if (state.status === "ended") {
-    const result = await act("new", { clearContext: state.source === "demo" });
-    if (result) {
-      $("consent").checked = false;
-      render(result);
+    if (
+      e.ctrlKey &&
+      e.altKey &&
+      !e.metaKey &&
+      !["Control", "Alt", "Shift"].includes(e.key)
+    ) {
+      e.preventDefault();
+      const key = e.code === "Space" ? "Space" : e.key.toUpperCase(),
+        action = recordingShortcut;
+      recordingShortcut = null;
+      void patch("hotkeys", {
+        ...state.get().preferences.hotkeys,
+        [action]: `Control+Alt+${e.shiftKey ? "Shift+" : ""}${key}`,
+      }).catch(() => {});
     }
     return;
   }
-  if ($("source").value !== "demo" && !$("consent").checked) {
-    $("setup-dialog").showModal();
-    toast("Confirm participant consent in call setup, then start when ready.");
-    return;
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && ui.screen === "ready") {
+    e.preventDefault();
+    for (const timer of edits.values()) clearTimeout(timer);
+    edits.clear();
+    const goal = field("goal");
+    void patch("goal", goal)
+      .then(() => act("start", {}))
+      .catch(report);
   }
-  const source = $("source").value;
-  $("start").disabled = true;
-  const result = await act("start", {
-    source,
-    backend: $("backend").value,
-    consent: $("consent").checked,
-    transcriptId: $("fireflies-id").value,
-  });
-  if (result) {
-    if (result.status === "running") localError = null;
-    render(result);
-    if (result.status === "running") $("setup-dialog").close();
-    if (source === "audio" && result.status === "running")
-      try {
-        await capture.start();
-      } catch (e) {
-        await act("pause");
-        showError(e.message);
-      }
-  } else $("start").disabled = false;
-});
-$("pause").addEventListener("click", () => {
-  capture.stop();
-  void act("pause");
-});
-$("end").addEventListener("click", () => {
-  capture.stop();
-  void act("end");
-});
-$("ask-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const question = $("question").value.trim();
-  if (!question) return;
-  $("question").value = "";
-  await act("ask", { question });
-});
-for (const button of document.querySelectorAll("[data-question]"))
-  button.addEventListener("click", () =>
-    act("ask", { question: button.dataset.question }),
-  );
-$("deep-think").addEventListener("click", () =>
-  act("ask", {
-    lane: "strategy",
-    question:
-      $("question").value.trim() ||
-      "What important assumption, tradeoff, or strategic next step am I missing?",
-  }),
-);
-$("transcript-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const text = $("transcript-text").value.trim();
-  if (!text) return;
-  const result = await act("transcript", { text, speaker: $("speaker").value });
-  if (result) $("transcript-text").value = "";
-});
-$("settings-open").addEventListener("click", () => {
-  $("settings-dialog").showModal();
-});
-$("save-profile").addEventListener("click", async () => {
-  const result = await act("configure", { profile: $("profile").value });
-  if (result)
-    toast(
-      bridge.desktop
-        ? "Preferences saved on this Mac."
-        : "Preferences kept until this demo closes.",
-    );
-});
-$("add-context").addEventListener("click", () =>
-  $("context-dialog").showModal(),
-);
-$("context-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const result = await act("context.add", {
-    title: $("context-title").value,
-    text: $("context-text").value,
-    url: $("context-url").value,
-    project: state.settings.project,
-  });
-  if (result) {
-    $("context-dialog").close();
-    $("context-form").reset();
-    toast("Source added to this session.");
-  }
-});
-$("import-file").addEventListener("click", async () => {
-  const result = await act("desktop.import");
-  if (result) {
-    if (result.imported) $("context-dialog").close();
-    if (result.message) toast(result.message);
-  }
-});
-$("context-search-open").addEventListener("click", () =>
-  $("search-dialog").showModal(),
-);
-$("search-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  $("search-result").textContent = "Searching…";
-  const result = await act("context.connected", {
-    query: $("context-query").value,
-  });
-  $("search-result").textContent = result
-    ? result.added !== undefined
-      ? `${result.added} verified source(s) added. ${result.retrieval?.detail || ""}`
-      : "Results added as a source for this session."
-    : "Search unavailable. Check your connections.";
-});
-$("history-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  $("search-result").textContent = "Importing…";
-  const result = await act("context.fireflies", { id: $("history-id").value });
-  $("search-result").textContent = result
-    ? "Transcript added as a source."
-    : "Import unavailable. Check your Fireflies connection.";
-});
-$("source-link").addEventListener("click", () => {
-  if (bridge.desktop) void act("desktop.openLink", { url: sourceUrl });
-  else window.open(sourceUrl, "_blank", "noopener,noreferrer");
-});
-$("export").addEventListener("click", async () => {
-  if (bridge.desktop) {
-    const result = await act("desktop.export");
-    if (result?.saved) toast("Session exported.");
-    return;
-  }
-  const text = await act("export");
-  if (typeof text !== "string") return;
-  const url = URL.createObjectURL(new Blob([text], { type: "text/markdown" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "callwise-demo.md";
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-});
-$("compact").addEventListener("click", async () => {
-  compact = !compact;
-  document.body.classList.toggle("compact", compact);
-  $("compact").setAttribute("aria-pressed", String(compact));
-  if (bridge.desktop) await act("desktop.compact", { enabled: compact });
-  else
-    toast("Compact layout enabled. The desktop app can float above your call.");
-});
-
-$("more-open").addEventListener("click", () => $("more-dialog").showModal());
-for (const button of $("more-dialog").querySelectorAll("button"))
-  button.addEventListener("click", () => $("more-dialog").close());
-$("connections-shortcut").addEventListener("click", () =>
-  $("settings-open").click(),
-);
-$("export-shortcut").addEventListener("click", () => $("export").click());
-$("copy-diagnostics").hidden = !bridge.desktop;
-$("copy-diagnostics").addEventListener("click", async () => {
-  if ((await act("desktop.diagnostics"))?.copied)
-    toast("Diagnostics copied. No keys or call content included.");
-});
-$("error-dismiss").addEventListener("click", () => {
-  const error = displayedError;
-  localError = null;
-  if (error && !error.id.startsWith("local:"))
-    void act("error.dismiss", { id: error.id });
-  else drawError();
-});
-bridge.onNavigate?.(({ direction }) => {
-  focus.navigate("fast", direction);
-  drawCards("fast");
-});
-window.addEventListener("keydown", (event) => {
   if (
-    event.ctrlKey &&
-    event.altKey &&
-    event.key.toLowerCase() === "p" &&
-    state?.status === "paused"
+    e.ctrlKey &&
+    e.altKey &&
+    e.key.toLowerCase() === "p" &&
+    state.get()?.status === "paused"
   ) {
-    event.preventDefault();
-    $("start").click();
+    e.preventDefault();
+    void act("resume", {}).catch(report);
   }
 });
-$("insights-open").addEventListener("click", () =>
-  $("insights-dialog").showModal(),
-);
-
-for (const id of ["setup-open"])
-  $(id).addEventListener("click", () => $("setup-dialog").showModal());
-$("transcript-open").addEventListener("click", () =>
-  $("transcript-dialog").showModal(),
-);
-$("advice-history-open").addEventListener("click", () => {
-  drawHistory();
-  $("advice-history-dialog").showModal();
+window.addEventListener("beforeunload", () => {
+  clearTimeout(testTimer);
+  capture?.stop();
 });
-for (const lane of ["fast", "strategy"])
-  $(`next-${lane}`).addEventListener("click", () => {
-    focus.advance(lane);
-    drawCards(lane);
-  });
-
-setInterval(() => {
-  if (!state) return;
-  $("clock").textContent = timestamp(
-    (state.activeTimeMs || 0) +
-      (state.status === "running"
-        ? Math.max(0, Date.now() - state.snapshotAt)
-        : 0),
-  );
-  drawError();
-  drawCards("fast");
-  drawCards("strategy");
-}, 1000);
-window.addEventListener("beforeunload", () => capture.stop());
-bridge.onState(render);
-const initial = await act("state");
-if (initial) render(initial);
+setInterval(clock, 1000);
+void command("state")
+  .then(receive)
+  .catch(() => {});

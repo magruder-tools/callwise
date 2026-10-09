@@ -16,13 +16,21 @@ export class SessionShortcuts {
     Object.assign(this, { globalShortcut, actions, onFailure, onSuccess });
     this.registered = new Set();
     this.active = false;
+    this.shortcuts = { ...SESSION_SHORTCUTS };
+  }
+  configure(hotkeys = {}) {
+    const next = { ...SESSION_SHORTCUTS, ...hotkeys };
+    if (JSON.stringify(next) !== JSON.stringify(this.shortcuts)) {
+      this.close();
+      this.shortcuts = next;
+    }
   }
   sync(status) {
     const active = status === "running";
     if (active === this.active) return;
     this.active = active; // Error reporting can trigger another state snapshot.
     if (!active) return this.close();
-    for (const [name, accelerator] of Object.entries(SESSION_SHORTCUTS)) {
+    for (const [name, accelerator] of Object.entries(this.shortcuts)) {
       let registered = false;
       try {
         registered = this.globalShortcut.register(

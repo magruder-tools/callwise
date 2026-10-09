@@ -1,0 +1,63 @@
+{
+  "type": "sales",
+  "line": "Discovery with Harbor Dental. Understand why leads dropped.",
+  "materials": [
+    {
+      "id": "case",
+      "title": "Case notes",
+      "text": "The audit examines account structure, service lines, tracking and wasted spend. No sales promises are guaranteed."
+    }
+  ],
+  "turns": [
+    {
+      "id": "s1",
+      "at": 1000,
+      "speaker": "Client",
+      "channel": "system",
+      "text": "What would your audit actually look at?",
+      "expected": "say"
+    },
+    {
+      "id": "s2",
+      "at": 12000,
+      "speaker": "Client",
+      "channel": "system",
+      "text": "We tried another agency and it was too expensive.",
+      "expected": "ask"
+    },
+    {
+      "id": "s3",
+      "at": 24000,
+      "speaker": "Client",
+      "channel": "system",
+      "text": "Our budget is $15000 a month for the next quarter.",
+      "expected": "fact"
+    },
+    {
+      "id": "s4",
+      "at": 29000,
+      "speaker": "You",
+      "channel": "mic",
+      "text": "I'll send the outline by Friday.",
+      "expected": "silent",
+      "mustSkip": true
+    },
+    {
+      "id": "s5",
+      "at": 38000,
+      "speaker": "Client",
+      "channel": "system",
+      "text": "We'll review it with the owner by Friday.",
+      "expected": "heads_up"
+    },
+    {
+      "id": "s6",
+      "at": 43000,
+      "speaker": "Client",
+      "channel": "system",
+      "text": "The sky outside is blue today.",
+      "expected": "silent",
+      "modelDecline": true
+    }
+  ]
+}

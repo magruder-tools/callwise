@@ -1,4 +1,5 @@
 import WebSocket from "ws";
+import { AdaptiveVoice } from "../ui/audio-level.mjs";
 import { providerError, fatalTranscriptionError } from "./errors.mjs";
 
 export function pcmRms(buffer) {
@@ -30,6 +31,12 @@ export class LiveTranscriber {
     retryWindowMs = 60000,
     bufferMs = 15000,
     clock = Date.now,
+    keywords = [],
+    languages = ["en"],
+    prompt = "",
+    delay = "low",
+    rotateMs = 50 * 60 * 1000,
+    namespace = "",
   }) {
     Object.assign(this, {
       apiKey,
@@ -48,7 +55,38 @@ export class LiveTranscriber {
       retryWindowMs,
       bufferMs,
       clock,
+      keywords,
+      languages,
+      prompt,
+      delay,
+      rotateMs,
+      namespace,
     });
+    this.voiceDetector = new AdaptiveVoice();
+    this.idleMs = 0;
+    this.rotationOptions = {
+      apiKey,
+      model,
+      channel,
+      onSegment,
+      onStatus,
+      onDiscard,
+      diagnostics,
+      WebSocketClass,
+      connectTimeoutMs,
+      heartbeatMs,
+      finalTimeoutMs,
+      retryBaseMs,
+      retryMaxMs,
+      retryWindowMs,
+      bufferMs,
+      clock,
+      keywords,
+      languages,
+      prompt,
+      delay,
+      rotateMs,
+    };
     this.socket = null;
     this.ready = false;
     this.stopped = false;
@@ -116,7 +154,12 @@ export class LiveTranscriber {
           audio: {
             input: {
               format: { type: "audio/pcm", rate: 24000 },
-              transcription: { model: this.model },
+              transcription: transcriptionOptions(this.model, {
+                keywords: this.keywords,
+                languages: this.languages,
+                prompt: this.prompt,
+                delay: this.delay,
+              }),
               turn_detection: null,
             },
           },
@@ -164,6 +207,7 @@ export class LiveTranscriber {
       clearTimeout(this.connectTimer);
       clearTimeout(this.retryDeadline);
       this.ready = true;
+      this.openedAt = this.clock();
       this.recoveryStartedAt = null;
       this.attempt = 0;
       this.lastPong = this.clock();
@@ -270,7 +314,7 @@ export class LiveTranscriber {
     if (this.awaitingFinal.size > 100) this.recover("backpressure");
   }
   segmentId(id) {
-    return `${this.channel}:${this.connection}:${id}`;
+    return `${this.channel}${this.namespace}:${this.connection}:${id}`;
   }
   emitSegment(id, text, final) {
     try {
@@ -281,6 +325,7 @@ export class LiveTranscriber {
         channel: this.channel,
         startMs: this.starts.get(id)?.startMs ?? this.currentStart ?? 0,
         final,
+        endMs: this.starts.get(id)?.endMs,
       });
     } catch {
       this.recover("delivery");
@@ -325,6 +370,10 @@ export class LiveTranscriber {
   }
   push(pcm, elapsedMs = 0) {
     if (this.stopped) return;
+    if (this.delegate) {
+      this.delegate.push(pcm, elapsedMs);
+      return;
+    }
     const data = Buffer.from(pcm);
     if (!data.length || data.length > 19200 || data.length % 2) return;
     const duration = data.length / 48;
@@ -338,7 +387,42 @@ export class LiveTranscriber {
       this.recover("backpressure");
       return;
     }
-    const active = pcmRms(data) > 0.007;
+    const active = this.voiceDetector.update(pcmRms(data), duration);
+    this.idleMs = active ? 0 : this.idleMs + duration;
+    if (this.clock() - this.openedAt >= this.rotateMs && !this.rotating) {
+      this.rotating = true;
+      const next = new LiveTranscriber({
+        ...this.rotationOptions,
+        namespace: `${this.namespace}:r${this.connection}`,
+        onStatus: (status, error) => {
+          if (this.delegate === next) this.onStatus?.(status, error);
+        },
+      });
+      this.standby = next;
+      void next.connect().catch(() => {
+        next.close();
+        if (this.standby === next) this.standby = null;
+        this.rotating = false;
+        this.openedAt = this.clock() - this.rotateMs + 60000;
+      });
+    }
+    if (
+      this.standby?.ready &&
+      this.idleMs >= 1500 &&
+      !this.voiceMs &&
+      !this.pendingCommits.length &&
+      !this.awaitingFinal.size
+    ) {
+      this.delegate = this.standby;
+      this.standby = null;
+      this.detachSocket();
+      this.retained = [];
+      this.retainedBytes = 0;
+      this.diagnostics("transcription.rotate", { channel: this.channel });
+      this.onStatus?.("connected");
+      this.delegate.push(data, elapsedMs);
+      return;
+    }
     if (!this.voiceMs && !active) {
       this.prefix.push({ data, startMs });
       if (this.prefix.length > 3) this.prefix.shift();
@@ -357,7 +441,11 @@ export class LiveTranscriber {
     if (!this.ready || !this.append(data)) return;
     this.voiceMs += duration;
     this.silenceMs = active ? 0 : this.silenceMs + duration;
-    if ((this.silenceMs >= 600 && this.voiceMs >= 300) || this.voiceMs >= 8000)
+    if (
+      (this.silenceMs >= 600 && this.voiceMs >= 300) ||
+      (this.voiceMs >= 8000 && this.silenceMs >= 200) ||
+      this.voiceMs >= 14000
+    )
       this.commit();
   }
   commit() {
@@ -367,6 +455,7 @@ export class LiveTranscriber {
     }
     this.pendingCommits.push({
       startMs: this.currentStart ?? 0,
+      endMs: (this.currentStart ?? 0) + this.voiceMs,
       firstSeq: this.turnFirstSeq,
       endSeq: this.sequence,
       at: this.clock(),
@@ -519,6 +608,10 @@ export class LiveTranscriber {
   }
   close() {
     this.stopped = true;
+    this.standby?.close();
+    this.delegate?.close();
+    this.standby = this.delegate = null;
+    this.rotating = false;
     this.settle?.(new Error("Transcription connection cancelled."));
     clearTimeout(this.retryTimer);
     clearTimeout(this.retryDeadline);
@@ -537,4 +630,28 @@ export class LiveTranscriber {
     this.completed.clear();
     this.currentStart = undefined;
   }
+}
+
+export function transcriptionOptions(
+  model,
+  { keywords = [], languages = ["en"], prompt = "", delay = "low" } = {},
+) {
+  if (!/^gpt-live-transcribe(?:-|$)/.test(model)) return { model };
+  return {
+    model,
+    keywords: [
+      ...new Set(
+        keywords
+          .filter((s) => typeof s === "string" && !/[<>\r\n]/.test(s))
+          .map((s) => s.slice(0, 100)),
+      ),
+    ].slice(0, 60),
+    languages: languages
+      .filter(
+        (s) => typeof s === "string" && /^[a-z]{2,3}(?:-[a-z]{2})?$/.test(s),
+      )
+      .slice(0, 4),
+    prompt: String(prompt).replace(/[<>]/g, "").slice(0, 800),
+    delay: ["minimal", "low", "medium", "high"].includes(delay) ? delay : "low",
+  };
 }

@@ -3,12 +3,17 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - '.github/workflows/mac-download.yml'
-      - 'desktop/**'
-      - 'core/codex-path.mjs'
-      - 'scripts/bundle-codex.mjs'
-      - 'docs/INSTALL_MAC.md'
-      - 'package.json'
+      - ".github/workflows/mac-download.yml"
+      - "desktop/**"
+      - "core/**"
+      - "providers/**"
+      - "ui/**"
+      - "build/**"
+      - "scripts/**"
+      - "tests/**"
+      - "README.md"
+      - "package.json"
+      - "package-lock.json"
 permissions:
   contents: read
 jobs:
@@ -28,10 +33,10 @@ jobs:
           path: |
             Callwise-source.zip
             BUILD_COMMIT.txt
-          retention-days: 7
+          retention-days: 30
   mac:
     runs-on: macos-15
-    timeout-minutes: 15
+    timeout-minutes: 20
     defaults:
       run:
         shell: bash
@@ -41,7 +46,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.16.0'
+          node-version: "22.16.0"
           cache: npm
       - name: Install locked dependencies
         run: npm ci
@@ -52,11 +57,16 @@ jobs:
           npm audit --omit=dev --audit-level=high 2>&1 | tee audit.log
       - name: Native Electron smoke test without keys or recording
         run: npm start -- --smoke 2>&1 | tee smoke.log
-      - name: Build personal-use Apple Silicon ZIP
+      - name: Import persistent identity when configured
+        env:
+          CALLWISE_SIGNING_P12: ${{ secrets.CALLWISE_SIGNING_P12 }}
+          CALLWISE_SIGNING_PASSWORD: ${{ secrets.CALLWISE_SIGNING_PASSWORD }}
+        run: node scripts/import-signing-identity.mjs
+      - name: Build Apple Silicon DMG and ZIP
         run: |
           npm run dist:mac 2>&1 | tee package.log
           git rev-parse HEAD > release/BUILD_COMMIT.txt
-          shasum -a 256 release/*.zip > release/SHA256SUMS.txt
+          shasum -a 256 release/*.zip release/*.dmg > release/SHA256SUMS.txt
           /usr/libexec/PlistBuddy -c 'Print :NSAudioCaptureUsageDescription' release/mac-arm64/Callwise.app/Contents/Info.plist
           file release/mac-arm64/Callwise.app/Contents/MacOS/Callwise
           codesign --verify --deep --strict --verbose=2 release/mac-arm64/Callwise.app 2>&1 | tee signature.log
@@ -73,9 +83,10 @@ jobs:
           name: Callwise-Apple-Silicon
           path: |
             release/*.zip
+            release/*.dmg
             release/BUILD_COMMIT.txt
             release/SHA256SUMS.txt
-          retention-days: 7
+          retention-days: 30
           compression-level: 0
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
@@ -92,5 +103,5 @@ jobs:
             bundled-codex.log
             packaged-smoke.log
             artifacts/**/*.png
-          retention-days: 7
+          retention-days: 30
           if-no-files-found: ignore

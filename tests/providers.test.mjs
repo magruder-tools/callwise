@@ -42,7 +42,9 @@ test("OpenAI contract uses bounded structured output, no storage, and keeps keys
   const body = JSON.parse(request.options.body);
   assert.equal(body.store, false);
   assert.equal(body.text.format.strict, true);
-  assert.equal(body.max_output_tokens, 1800);
+  assert.equal(body.max_output_tokens, 350);
+  assert.equal(body.stream, true);
+  assert.equal(body.reasoning.effort, "none");
   assert.equal(body.model, "gpt-5.6-luna");
   assert.equal(request.url, "https://api.openai.com/v1/responses");
 });

@@ -12,10 +12,17 @@ import {
   powerMonitor,
   Menu,
   clipboard,
+  screen,
 } from "electron";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
-import { mkdirSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  writeFileSync,
+  existsSync,
+  unlinkSync,
+  rmSync,
+} from "node:fs";
 import { release as osRelease } from "node:os";
 import { readConfig } from "../core/config.mjs";
 import {
@@ -32,11 +39,18 @@ import { CodexContextProvider } from "../providers/codex-context.mjs";
 import { CodexProvider } from "../providers/codex.mjs";
 import { Diagnostics } from "./diagnostics.mjs";
 import { SessionShortcuts } from "./shortcuts.mjs";
-import { importFiles } from "./import-files.mjs";
+import { execFile } from "node:child_process";
+import { readSheets, saveSheets } from "../core/call-sheets.mjs";
+import { recapMarkdown } from "../core/preparation.mjs";
+import { runSelfTest } from "./self-test.mjs";
+import { LiveTranscriber, pcmRms } from "../providers/transcription.mjs";
+import { readReadiness, saveReadiness, keySignature } from "./readiness.mjs";
+import { checkForUpdate } from "./updates.mjs";
+import { importFiles, extractFile } from "./import-files.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const smoke = process.argv.includes("--smoke");
-let win, controller;
+let win, panel, controller, soundCheck, soundTimer;
 const page = path.join(root, "ui", "index.html");
 const trustedFrame = (frame) =>
   !!frame && frame.url.split("?")[0] === pathToFileURL(page).href;
@@ -56,6 +70,17 @@ async function boot() {
   });
   const vault = path.join(dataDir, "connections.bin");
   const preferencesFile = path.join(dataDir, "preferences.bin");
+  const sheetsFile = path.join(dataDir, "calls.bin"),
+    readinessFile = path.join(dataDir, "readiness.bin");
+  let sheets = [],
+    readiness = smoke ? {} : readReadiness(readinessFile, safeStorage),
+    devices = [];
+  if (!smoke)
+    try {
+      sheets = readSheets(sheetsFile, safeStorage);
+    } catch (error) {
+      console.warn("Saved calls could not be loaded.");
+    }
   let preferences = {},
     preferencesWarning = "";
   if (!smoke)
@@ -86,10 +111,20 @@ async function boot() {
     new CallController({
       config,
       preferences,
+      sheets,
+      onSheets: smoke
+        ? () => {}
+        : (next) => {
+            saveSheets(sheetsFile, safeStorage, next);
+            sheets = next;
+          },
       diagnostics: (event, fields) => diagnostics.write(event, fields),
       onPreferences: smoke
         ? () => {}
-        : (next) => savePreferences(preferencesFile, safeStorage, next),
+        : (next) => {
+            savePreferences(preferencesFile, safeStorage, next);
+            preferences = next;
+          },
       contextProvider: smoke
         ? null
         : new CodexContextProvider({
@@ -116,10 +151,10 @@ async function boot() {
   if (vaultWarning) controller.engine.error(vaultWarning);
   if (preferencesWarning) controller.engine.error(preferencesWarning);
   win = new BrowserWindow({
-    width: 740,
-    height: 480,
-    minWidth: 600,
-    minHeight: 420,
+    width: 780,
+    height: 740,
+    minWidth: 580,
+    minHeight: 480,
     ...(process.platform === "darwin"
       ? { titleBarStyle: "hiddenInset", trafficLightPosition: { x: 16, y: 25 } }
       : {}),
@@ -136,9 +171,113 @@ async function boot() {
       backgroundThrottling: false,
     },
   });
-  if (controller.preferences.compact) {
-    win.setAlwaysOnTop(true, "floating");
-  }
+  const selectedDisplay = screen.getDisplayNearestPoint(
+      screen.getCursorScreenPoint(),
+    ),
+    area = selectedDisplay.workArea;
+  const bounds = controller.preferences.panelBounds?.[
+    String(selectedDisplay.id)
+  ] || {
+    width: 440,
+    height: 320,
+    x: area.x + area.width - 464,
+    y: area.y + 40,
+  };
+  bounds.width = Math.min(640, Math.max(340, bounds.width));
+  bounds.height = Math.max(320, Math.min(area.height, bounds.height));
+  bounds.x = Math.min(
+    area.x + area.width - bounds.width,
+    Math.max(area.x, bounds.x),
+  );
+  bounds.y = Math.min(
+    area.y + area.height - bounds.height,
+    Math.max(area.y, bounds.y),
+  );
+  panel = new BrowserWindow({
+    ...bounds,
+    minWidth: 340,
+    maxWidth: 640,
+    minHeight: 320,
+    frame: false,
+    ...(process.platform === "darwin" ? { type: "panel" } : {}),
+    title: "Callwise live",
+    show: false,
+    backgroundColor: "#101319",
+    webPreferences: {
+      preload: path.join(root, "desktop", "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      offscreen: smoke,
+      backgroundThrottling: false,
+    },
+  });
+  panel.setAlwaysOnTop(controller.preferences.floatPanel !== false, "floating");
+  if (process.platform === "darwin")
+    panel.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  let boundsTimer;
+  const saveBounds = () => {
+    clearTimeout(boundsTimer);
+    boundsTimer = setTimeout(() => {
+      if (smoke || !panel || panel.isDestroyed()) return;
+      const b = panel.getBounds(),
+        d = screen.getDisplayMatching(b);
+      controller.rememberPreferences({
+        panelBounds: {
+          ...controller.preferences.panelBounds,
+          [String(d.id)]: b,
+        },
+      });
+    }, 350);
+  };
+  panel.on("move", saveBounds);
+  panel.on("resize", saveBounds);
+  panel.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  panel.webContents.on("will-navigate", (event, url) => {
+    if (url.split("?")[0] !== pathToFileURL(page).href) event.preventDefault();
+  });
+  panel.webContents.on("render-process-gone", () => {
+    controller.stopInputs();
+    controller.engine.pause();
+    win?.show();
+  });
+  panel.on("close", (event) => {
+    if (!app.isQuitting) {
+      event.preventDefault();
+      panel.hide();
+      if (controller.engine.status === "running")
+        void controller.command("pause");
+    }
+  });
+  const refreshDesktop = () => {
+    const microphone =
+      process.platform === "darwin"
+        ? systemPreferences.getMediaAccessStatus("microphone")
+        : "unknown";
+    const screenStatus =
+      process.platform === "darwin"
+        ? systemPreferences.getMediaAccessStatus("screen")
+        : "unknown";
+    controller.desktopState = {
+      ...controller.desktopState,
+      packaged: app.isPackaged,
+      platform: process.platform,
+      version: app.getVersion(),
+      permissions: { microphone, screen: screenStatus },
+      readiness: {
+        ai:
+          !!controller.config.openaiKey &&
+          readiness.aiSignature === keySignature(controller.config),
+        mic:
+          microphone === "granted" &&
+          (!controller.preferences.inputDevice ||
+            devices.includes(controller.preferences.inputDevice)),
+        system: readiness.system === true && screenStatus !== "denied",
+      },
+    };
+  };
+  refreshDesktop();
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", (event, url) => {
     if (url.split("?")[0] !== pathToFileURL(page).href) event.preventDefault();
@@ -150,6 +289,8 @@ async function boot() {
   win.on("closed", () => {
     codexLogin.close();
     controller.close();
+    app.isQuitting = true;
+    panel?.destroy();
     win = null;
   });
   win.once("ready-to-show", () => {
@@ -160,8 +301,9 @@ async function boot() {
       callback(
         wc === win?.webContents &&
           trustedFrame(wc.mainFrame) &&
-          controller.engine.status === "running" &&
-          controller.mode === "audio" &&
+          (soundCheck ||
+            (controller.engine.status === "running" &&
+              controller.mode === "audio")) &&
           (permission === "display-capture" ||
             (permission === "media" &&
               !(details?.mediaTypes || []).includes("video"))),
@@ -171,8 +313,9 @@ async function boot() {
     (wc, permission) =>
       wc === win?.webContents &&
       trustedFrame(wc.mainFrame) &&
-      controller.mode === "audio" &&
-      controller.engine.status === "running" &&
+      (soundCheck ||
+        (controller.mode === "audio" &&
+          controller.engine.status === "running")) &&
       ["media", "display-capture"].includes(permission),
   );
   installDisplayCapture(
@@ -180,11 +323,13 @@ async function boot() {
     desktopCapturer,
     (frame) =>
       trustedFrame(frame) &&
-      controller.mode === "audio" &&
-      controller.engine.status === "running",
+      (soundCheck ||
+        (controller.mode === "audio" &&
+          controller.engine.status === "running")),
   );
   const send = (name, data) => {
-    if (win && !win.isDestroyed()) win.webContents.send(name, data);
+    for (const target of [win, panel])
+      if (target && !target.isDestroyed()) target.webContents.send(name, data);
   };
   const shortcuts = new SessionShortcuts(
     globalShortcut,
@@ -197,8 +342,8 @@ async function boot() {
       previous: () => send("callwise:navigate", { direction: "previous" }),
       next: () => send("callwise:navigate", { direction: "next" }),
       visibility: () => {
-        if (win?.isVisible()) win.hide();
-        else win?.showInactive();
+        if (panel?.isVisible()) panel.hide();
+        else panel?.showInactive();
       },
     },
     (accelerator) =>
@@ -209,16 +354,28 @@ async function boot() {
     (accelerator) =>
       controller.engine.clearErrors({ condition: `shortcut:${accelerator}` }),
   );
+  let windowStatus = "idle";
   controller.on("state", (state) => {
-    send("callwise:state", state);
+    refreshDesktop();
+    send("callwise:state", { ...state, desktop: controller.desktopState });
+    shortcuts.configure?.(state.preferences.hotkeys);
     shortcuts.sync(state.status);
-    if (
-      ["paused", "ended"].includes(state.status) &&
-      win &&
-      !win.isDestroyed() &&
-      !win.isVisible()
-    )
-      win.showInactive();
+    panel?.setAlwaysOnTop(state.preferences.floatPanel !== false, "floating");
+    if (state.status !== windowStatus) {
+      if (state.status === "running" && !smoke) {
+        win.hide();
+        panel.showInactive();
+      }
+      if (state.status === "ended") {
+        panel.hide();
+        if (!smoke) win.showInactive();
+      }
+      if (state.status === "idle" && !smoke) {
+        panel.hide();
+        win.showInactive();
+      }
+      windowStatus = state.status;
+    }
   });
   const copyDiagnostics = () =>
     clipboard.writeText(
@@ -241,9 +398,12 @@ async function boot() {
   );
   controller.on("stop-capture", () => send("callwise:stop-capture"));
   ipcMain.handle("callwise:command", async (event, name, payload = {}) => {
-    if (event.sender !== win?.webContents || !trustedFrame(event.senderFrame))
+    if (
+      ![win?.webContents, panel?.webContents].includes(event.sender) ||
+      !trustedFrame(event.senderFrame)
+    )
       throw new Error("Untrusted app frame.");
-    if (typeof name !== "string" || JSON.stringify(payload).length > 300000)
+    if (typeof name !== "string" || JSON.stringify(payload).length > 2200000)
       throw new Error("Invalid request.");
     if (name === "desktop.codex.signin") {
       if (
@@ -300,6 +460,198 @@ async function boot() {
         transcriptionModel: next.transcriptionModel,
       };
     }
+    if (name === "desktop.connections.test") {
+      if (smoke || controller.engine.status === "running")
+        throw new Error("Pause the call before testing AI.");
+      const results = await runSelfTest(controller.config);
+      readiness.aiSignature =
+        results.length === 4 && results.every((r) => r.ok)
+          ? keySignature(controller.config)
+          : "";
+      saveReadiness(readinessFile, safeStorage, readiness);
+      refreshDesktop();
+      controller.engine.emitState();
+      return results;
+    }
+    if (name === "desktop.capture.retry") {
+      if (controller.engine.status !== "running" || controller.mode !== "audio")
+        throw new Error("Start listening first.");
+      if ([...controller.transcribers.values()].some((t) => t.stopped)) {
+        await controller.command("pause");
+        await controller.command("start", {
+          source: "audio",
+          consent: true,
+          backend: controller.strategyBackend,
+        });
+      } else
+        for (const channel of ["mic", "system"])
+          if (controller.captureInputs[channel] === "failed")
+            win.webContents.send("callwise:navigate", { retryAudio: channel });
+      return {};
+    }
+    if (name === "desktop.settings") {
+      win.webContents.send("callwise:navigate", { screen: "settings" });
+      win.show();
+      win.focus();
+      return {};
+    }
+    if (name === "desktop.settings.close") {
+      if (["running", "paused"].includes(controller.engine.status)) {
+        win.hide();
+        panel.showInactive();
+      }
+      return {};
+    }
+    if (name === "desktop.panel.fit") {
+      if (
+        event.sender === panel.webContents &&
+        Number.isFinite(payload.height) &&
+        payload.height >= 320 &&
+        payload.height <= 1000
+      ) {
+        const b = panel.getBounds(),
+          area = screen.getDisplayMatching(b).workArea,
+          h = Math.min(payload.height, area.height - 24);
+        if (Math.abs(b.height - h) > 2)
+          panel.setBounds({
+            height: h,
+            y: Math.min(b.y, area.y + area.height - h),
+          });
+      }
+      return {};
+    }
+    if (name === "desktop.copy") {
+      if (typeof payload.text !== "string" || payload.text.length > 2200000)
+        throw new Error("Invalid copy request.");
+      clipboard.writeText(payload.text);
+      return { copied: true };
+    }
+    if (name === "desktop.devices") {
+      if (Array.isArray(payload.ids))
+        devices = payload.ids
+          .filter((id) => typeof id === "string" && id.length <= 300)
+          .slice(0, 100);
+      refreshDesktop();
+      return controller.desktopState;
+    }
+    if (name === "desktop.mic.permission") {
+      if (controller.engine.status === "running")
+        throw new Error("Pause the call first.");
+      if (process.platform === "darwin")
+        await systemPreferences.askForMediaAccess("microphone");
+      refreshDesktop();
+      controller.engine.emitState();
+      return controller.desktopState;
+    }
+    if (name === "desktop.permissions.open") {
+      const pane =
+        payload.pane === "mic" ? "Privacy_Microphone" : "Privacy_ScreenCapture";
+      if (process.platform === "darwin")
+        await shell.openExternal(
+          `x-apple.systempreferences:com.apple.preference.security?${pane}`,
+        );
+      return {};
+    }
+    if (name === "desktop.sound.begin") {
+      if (
+        smoke ||
+        controller.engine.status === "running" ||
+        controller.connecting ||
+        event.sender !== win.webContents
+      )
+        throw new Error("Pause the call before a sound check.");
+      if (!["mic", "system"].includes(payload.channel))
+        throw new Error("Choose an audio channel.");
+      if (!controller.config.openaiKey)
+        throw new Error("Save and test your OpenAI key first.");
+      endSound(false);
+      const channel = payload.channel;
+      const transcriber = new LiveTranscriber({
+        apiKey: controller.config.openaiKey,
+        model: controller.config.transcriptionModel,
+        channel,
+        onSegment: (row) => {
+          if (!soundCheck || soundCheck.transcriber !== transcriber) return;
+          controller.desktopState.testText = row.text;
+          controller.engine.emitState();
+        },
+        onStatus: () => {},
+      });
+      soundCheck = { channel, transcriber, level: 0 };
+      controller.desktopState.testText = "";
+      controller.desktopState.soundResult = "Listening for the test phrase…";
+      try {
+        await transcriber.connect();
+      } catch (error) {
+        endSound(false);
+        throw error;
+      }
+      soundTimer = setTimeout(() => endSound(true), 20000);
+      return {};
+    }
+    if (name === "desktop.sound.play") {
+      if (soundCheck?.channel !== "system")
+        throw new Error("Start the call-audio check first.");
+      await new Promise((resolve, reject) =>
+        execFile(
+          "/usr/bin/say",
+          ["Callwise is ready for my call."],
+          { timeout: 10000 },
+          (error) =>
+            error
+              ? reject(
+                  new Error(
+                    "The test phrase couldn't play. Check your output volume.",
+                  ),
+                )
+              : resolve(),
+        ),
+      );
+      return {};
+    }
+    if (name === "desktop.sound.end") {
+      endSound(true);
+      return controller.desktopState;
+    }
+    if (name === "desktop.delete") {
+      if (controller.engine.status === "running" || controller.connecting)
+        throw new Error("End the call before deleting data.");
+      endSound(false);
+      controller.cancelDocuments();
+      controller.close();
+      for (const file of [
+        vault,
+        preferencesFile,
+        sheetsFile,
+        readinessFile,
+        path.join(dataDir, ".env.local"),
+      ])
+        if (existsSync(file)) unlinkSync(file);
+      rmSync(path.join(dataDir, "logs"), { recursive: true, force: true });
+      rmSync(workDir, { recursive: true, force: true });
+      baseConfig.openaiKey = baseConfig.firefliesKey = baseConfig.mcpToken = "";
+      saved = {};
+      preferences = {};
+      sheets = [];
+      readiness = {};
+      controller.preferences = {};
+      controller.sheets = [];
+      controller.config = {
+        ...baseConfig,
+        openaiKey: "",
+        firefliesKey: "",
+        mcpToken: "",
+      };
+      controller.closing = false;
+      controller.recap = null;
+      controller.engine.context.clear();
+      controller.engine.reset();
+      controller.setProviders();
+      controller.mode = "demo";
+      controller.demoStarted = false;
+      controller.engine.emitState();
+      return controller.snapshot();
+    }
     if (name === "desktop.connections.check")
       return checkModelAccess(controller.config);
     if (name === "desktop.diagnostics") {
@@ -330,24 +682,62 @@ async function boot() {
             : "check in system settings",
         audio: "Verify both meters during a practice call.",
       };
-    if (name === "desktop.import") {
+    if (name === "desktop.profile.import") {
+      if (controller.engine.status === "running")
+        throw new Error("End the call before changing your profile.");
       const result = await dialog.showOpenDialog(win, {
-        title: "Add meeting context",
-        properties: ["openFile", "multiSelections"],
-        filters: [
-          {
-            name: "Text and transcripts",
-            extensions: ["md", "txt", "json", "vtt", "srt", "csv"],
-          },
-        ],
+        properties: ["openFile"],
+        filters: [{ name: "Résumé", extensions: ["pdf", "docx", "txt", "md"] }],
       });
+      if (!result.canceled) {
+        const text = await extractFile(result.filePaths[0]);
+        await controller.command("configure", { profile: text.slice(0, 6000) });
+      }
+      return controller.snapshot();
+    }
+    if (name === "desktop.import") {
+      if (controller.engine.status === "running")
+        throw new Error("End the call before changing materials.");
+      const result = payload.paths
+        ? {
+            canceled: false,
+            filePaths: Array.isArray(payload.paths)
+              ? payload.paths
+                  .filter(
+                    (p) =>
+                      typeof p === "string" &&
+                      p.length < 4096 &&
+                      path.isAbsolute(p),
+                  )
+                  .slice(0, 20)
+              : [],
+          }
+        : await dialog.showOpenDialog(win, {
+            title: "Add meeting context",
+            properties: ["openFile", "multiSelections"],
+            filters: [
+              {
+                name: "Text and transcripts",
+                extensions: [
+                  "pdf",
+                  "docx",
+                  "md",
+                  "txt",
+                  "json",
+                  "vtt",
+                  "srt",
+                  "csv",
+                ],
+              },
+            ],
+          });
       if (result.canceled) return { imported: 0 };
-      const imported = importFiles(
+      const imported = await importFiles(
         result.filePaths,
         controller.engine.context,
         controller.engine.settings.project,
       );
-      controller.engine.emitState();
+      controller.materialsChanged();
       return imported;
     }
     if (name === "desktop.export") {
@@ -357,11 +747,18 @@ async function boot() {
         filters: [{ name: "Markdown", extensions: ["md"] }],
       });
       if (result.canceled) return { saved: false };
-      writeFileSync(result.filePath, controller.engine.exportMarkdown(), {
-        mode: 0o600,
-      });
+      writeFileSync(
+        result.filePath,
+        recapMarkdown(controller.recap) +
+          "\n\n" +
+          controller.engine.exportMarkdown(),
+        {
+          mode: 0o600,
+        },
+      );
       return { saved: true };
     }
+    if (["start", "pause", "end", "new"].includes(name)) endSound(false);
     return controller.command(name, payload);
   });
   ipcMain.on("callwise:audio", (event, channel, buffer) => {
@@ -371,8 +768,46 @@ async function boot() {
       ["mic", "system"].includes(channel) &&
       buffer instanceof ArrayBuffer &&
       buffer.byteLength <= 19200
+    ) {
+      const data = Buffer.from(buffer);
+      if (soundCheck?.channel === channel) {
+        soundCheck.level = Math.max(soundCheck.level, pcmRms(data));
+        soundCheck.transcriber.push(data, Date.now());
+      } else controller.audio(channel, data);
+    }
+  });
+  const endSound = (evaluate) => {
+    clearTimeout(soundTimer);
+    if (!soundCheck) return;
+    const check = soundCheck;
+    soundCheck = null;
+    check.transcriber.close();
+    send("callwise:stop-capture");
+    if (evaluate) {
+      const text = controller.desktopState.testText || "",
+        passed =
+          check.level > 0.004 &&
+          /ready.*(?:call|my)/i.test(text) &&
+          /callwise|call wise/i.test(text);
+      readiness[check.channel] = passed;
+      controller.desktopState.soundResult = passed
+        ? `${check.channel === "mic" ? "Microphone" : "Call audio"} check passed.`
+        : `${check.channel === "mic" ? "Microphone" : "Call audio"} check didn't hear the phrase. Check permissions and output volume, then try again.`;
+      saveReadiness(readinessFile, safeStorage, readiness);
+      refreshDesktop();
+      controller.engine.emitState();
+    }
+  };
+  ipcMain.on("callwise:meter", (event, channel, rms) => {
+    if (
+      event.sender === win?.webContents &&
+      trustedFrame(event.senderFrame) &&
+      ["mic", "system"].includes(channel) &&
+      Number.isFinite(rms) &&
+      rms >= 0 &&
+      rms <= 1
     )
-      controller.audio(channel, Buffer.from(buffer));
+      send("callwise:meters", { channel, rms });
   });
   ipcMain.on("callwise:capture-status", (event, channel, status) => {
     if (event.sender === win?.webContents && trustedFrame(event.senderFrame))
@@ -389,7 +824,13 @@ async function boot() {
         );
       }
     });
+  app.on("before-quit", () => {
+    app.isQuitting = true;
+  });
   app.on("will-quit", () => {
+    app.isQuitting = true;
+    clearTimeout(soundTimer);
+    soundCheck?.transcriber.close();
     codexLogin.close();
     shortcuts.close();
     controller.close();
@@ -401,7 +842,15 @@ async function boot() {
       win.focus();
     }
   });
-  await win.loadFile(page);
+  await Promise.all([
+    win.loadFile(page),
+    panel.loadFile(page, { query: { surface: "panel" } }),
+  ]);
+  if (!smoke)
+    void checkForUpdate(app.getVersion()).then((update) => {
+      controller.desktopState.update = update;
+      controller.engine.emitState();
+    });
   if (smoke) {
     const artifacts =
       process.env.CALLWISE_SMOKE_DIR ||
@@ -425,12 +874,77 @@ async function boot() {
     await new Promise((r) => setTimeout(r, 800));
     writeFileSync(
       path.join(artifacts, "desktop-preview.png"),
-      (await win.webContents.capturePage()).toPNG(),
+      (await panel.webContents.capturePage()).toPNG(),
     );
-    win.setSize(600, 420);
+    panel.setSize(340, 400);
     await new Promise((r) => setTimeout(r, 500));
     writeFileSync(
       path.join(artifacts, "narrow-preview.png"),
+      (await panel.webContents.capturePage()).toPNG(),
+    );
+    controller.engine.providers.fast = {
+      generate: async () => ({
+        speak: true,
+        kind: "say",
+        lead: "I'd start with the real example, explain my actions, and put the measured result in context.",
+        points: [
+          {
+            label: "Situation",
+            text: "The approved notes explain the starting point and the original constraint.",
+          },
+          {
+            label: "Action",
+            text: "I can describe the specific changes I made and why they mattered.",
+          },
+          {
+            label: "Result",
+            text: "I should use the actual numbers and clarify how they were measured.",
+          },
+        ],
+        sourceIds: [],
+        covers: [],
+      }),
+    };
+    await controller.engine.run(
+      "fast",
+      "Give me an example answer for the sample call.",
+    );
+    for (const [name, width, height] of [
+      ["live-340", 340, 520],
+      ["live-440", 440, 440],
+      ["live-640", 640, 380],
+    ]) {
+      panel.setSize(width, height);
+      await new Promise((r) => setTimeout(r, 300));
+      const layout = await panel.webContents.executeJavaScript(`(() => {
+        const lead=document.querySelector('.lead'),points=[...document.querySelectorAll('.points li')];
+        const text=[lead,...points].filter(Boolean);
+        return {lead:lead?.textContent,points:points.length,fontSizes:text.map(n=>parseFloat(getComputedStyle(n).fontSize)),clipped:text.filter(n=>{const r=n.getBoundingClientRect();return r.x<0||r.right>innerWidth+1||n.scrollHeight>n.clientHeight+1||r.bottom>innerHeight+1;}).length};
+      })()`);
+      if (
+        !layout.lead ||
+        layout.points !== 3 ||
+        layout.clipped ||
+        layout.fontSizes.some((size) => size < 12)
+      )
+        throw new Error(
+          `Live layout failed at ${width}px: ${JSON.stringify(layout)}`,
+        );
+      writeFileSync(
+        path.join(artifacts, `${name}.png`),
+        (await panel.webContents.capturePage()).toPNG(),
+      );
+    }
+    await controller.command("end");
+    await new Promise((r) => setTimeout(r, 350));
+    writeFileSync(
+      path.join(artifacts, "recap.png"),
+      (await win.webContents.capturePage()).toPNG(),
+    );
+    await controller.command("new", { clearContext: true });
+    await new Promise((r) => setTimeout(r, 350));
+    writeFileSync(
+      path.join(artifacts, "ready.png"),
       (await win.webContents.capturePage()).toPNG(),
     );
     console.log(

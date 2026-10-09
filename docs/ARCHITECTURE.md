@@ -1,96 +1,33 @@
 # Architecture
 
-## Boundaries
+Callwise is a macOS Electron app with a trusted main process and sandboxed ES-module renderers. It has no renderer Node access. The browser sample uses the same controller and engine with synthetic input and an offline provider.
 
-- `desktop/main.mjs`: trusted Electron main process. Owns provider credentials,
-  OS integration, session controller, file dialogs, export, and IPC validation.
-- `desktop/preload.cjs`: narrow IPC bridge. No provider keys are exposed.
-- `ui/`: local interface and AudioWorklet. Captures two streams after explicit
-  start. Sends 24 kHz mono PCM to main; never sends video frames to a model.
-- `core/engine.mjs`: state machine, revisioned transcript, retrieval, scheduling,
-  bounded prompts, cancellation, source validation, and feedback.
-- `providers/`: OpenAI Responses, OpenAI transcription, Codex App Server,
-  Fireflies, and a single-tool read-only remote MCP client.
-- `scripts/demo-server.mjs`: an independent loopback-only, cookie-protected demo
-  host. Hard-disables live modes and does not load credentials.
+## Conversation and coaching
 
-## Coaching lifecycle
+`core/controller.mjs` owns inputs, preparation, recaps, call sheets, usage estimates and read-only context research. `core/engine.mjs` owns active call time, final and partial transcript rows, cards, cancellation epochs, coverage and verbatim commitments.
 
-Each final transcript segment is upserted by stable ID. Partial updates are
-displayed but do not trigger coaching. Fast and strategic lanes have separate
-in-flight slots, minimum intervals, delays, TTLs, and request counters. Incoming
-updates coalesce; no unbounded queue is created. Once an in-flight request
-finishes, a changed transcript can schedule one subsequent request.
+Pure rules in `core/triggers.mjs` classify the other person's turns. Own speech, backchannels, short utterances and recently answered repeats do not trigger proactive help. Limits are a burst of three, eight per rolling minute and per-session caps. A complete partial question can start after 250 ms of stability; a materially changed final aborts it and restarts. Explicit questions cancel proactive work and always produce an answer or a missing-context fallback. Background checks run at most every 45 seconds, deeper observations at decision/topic changes at most every two minutes. Connected lookups during calls run only when explicitly asked.
 
-Pause/end/new increments a generation, clears timers, aborts in-flight work,
-closes transcription sockets, and signals the renderer to release capture.
-Results from old generations cannot produce a card. Results that exceeded time
-or transcript-advancement limits are dropped. An old job cannot clear a newer
-job's in-flight slot.
+OpenAI Responses requests stream v2 cards with `speak`, `kind`, `lead`, `points`, `sourceIds`, `covers`. The engine paints partial leads, retains authoritative source checks, holds factual cards until citations can be checked, and removes invalid draft cards. Fast requests use 350 output tokens, the lowest known supported reasoning effort, a six-second first-token deadline and at most one network/5xx retry within that deadline. Slow observations never replace the main card. Older Codex and demo response shapes are adapted at the validation boundary without changing their transports.
 
-Source lookup runs over in-memory documents, scoring chunks with matching query
-and title terms, scoped by project. Optional background MCP retrieval happens
-before strategic inference. It replaces one recent search-result document and
-is bounded by network timeouts and the strategic request limit. A failed lookup
-falls back to already loaded context. Only retrieved source IDs may be cited;
-cards explicitly labeled as facts require a citation. This checks provenance
-references, not the semantic truth of every generated claim.
-
-## Codex adapter
-
-Callwise spawns the configured `codex app-server` executable with argument
-arrays, never shell command interpolation. It uses the documented initialize /
-thread / turn / item protocol, requests structured advice, denies approval
-requests, and interrupts cancelled turns. Inherited apps and MCP servers are
-disabled for the coaching thread via per-thread overrides. Shell, computer-use,
-browser, code-host, and related capabilities are explicitly disabled as well.
-The adapter reads the installed CLI's generated schema to select its supported
-approval/sandbox enum values. The turn uses a read-only, network-disabled policy;
-it adds restricted filesystem roots when that CLI supports them. Older versions
-have broader filesystem read access, so disabling execution tools remains
-important. No global Codex configuration is edited.
-
-Existing ChatGPT auth is managed by Codex. The bridge does not read, export, or
-copy OAuth tokens. App discovery is a readiness check only. Provider-specific
-retention remains separate from the Callwise in-memory policy.
-
-The adapter must be validated on the user's actual CLI before live use. It does
-not provide a universal custom-agent sandbox or inherit all ChatGPT memory.
+Prompts keep instructions, playbook, profile, call line, material text and prep before the volatile conversation tail. Full material is supplied within estimated 20k/60k token budgets; oversized material uses selected excerpts and the digest. Those budgets use a documented four-character estimate. Short recent verbatim turns, rolling memory, commitments, explicit gaps, the trigger and prior leads follow. All user and retrieved data is marked untrusted. Citation IDs are checked against actually supplied evidence. Running summaries are updated by the cheap model after three minutes of new active-call transcript, and cancelled on pause, reset and close.
 
 ## Audio
 
-Microphone uses `getUserMedia`; computer audio uses `getDisplayMedia` with
-loopback. Electron 44's macOS capture path requires the packaged audio-capture
-usage description. The native picker is preferred. Display frames keep the
-capture stream alive but are not inspected or transmitted.
+The main renderer captures audio; the panel only receives state and meters. User-consented listening and user-initiated short sound checks are the only permission windows. Both channels produce 24 kHz mono PCM through a muted AudioWorklet graph. Raw video is never read: Electron's supported display-media loopback path also requires a display track. The current path is retained instead of shipping an unverified native Core Audio helper. Electron 44 uses Core Audio taps for loopback, but a display-source permission can still be needed by this API path.
 
-The AudioWorklet averages input channels, produces 100 ms PCM packets, and
-measures RMS. Main retains a brief leading buffer and streams voice plus bounded
-trailing silence; utterances commit after 600 ms silence or 8 seconds of speech.
-Each channel has an independent transcription connection. The first practical
-test should use headphones; microphone echo cancellation is not full acoustic
-echo separation of system audio.
+Each channel has an independent Realtime transcription socket, bounded 15-second PCM recovery buffer, exponential reconnect up to a minute, heartbeat and stalled-segment checks, gap markers and cancellation. At 50 minutes a standby session is opened; it takes over after 1.5 seconds of silence and old pending transcript acknowledgements drain. Closing or pausing clears standby/delegate sockets too. This is preventive rotation; the current transcription guide does not specify a distinct guaranteed transcription-session duration.
 
-## Current constraints
+Voice detection calibrates a noise floor during the first second and updates quietly. Speech commits after normal silence or a 200 ms dip after eight seconds, with a hard 14-second boundary. Device changes reacquire the saved microphone or fall back to default, without stopping the other channel. Reacquiring system capture may require renewed user interaction on some macOS versions; a failure is reported. Overlapping microphone and system transcripts at 70% text similarity keep system evidence. Saved language, prep glossary and limited call context become supported transcription hints.
 
-- No automatic diarization of multiple remote participants in local capture.
-- No persisted session DB, background daemon, or silent auto-recording.
-- Audio transcription reconnects independently per channel for up to 60 seconds,
-  using 0.5–8-second backoff and up to 15 seconds of in-memory PCM replay.
-  A larger gap is marked in the transcript and prompts; it is never presented as
-  continuous speech. A terminal channel failure is reported without pausing the
-  other channel. Pause, End and New cancel recovery and release all buffered PCM.
-- Request caps are not dollar budgets. Transcription time is separate.
-- Context import is text-only; no PDF/Word extraction yet.
-- No model benchmark or macOS end-to-end success is implied by fixture tests.
+## Desktop and storage
 
-## Sources reviewed September 6, 2026
+Ready, Recap, Settings and Welcome use the normal main window. Listening uses a nonactivating panel, default 440 × 320, resizable 340–640 wide, expanded to fit content, with per-display bounds. `showInactive` and all-Spaces/full-screen visibility avoid taking meeting focus. Global shortcuts register only while running and conflicts are reported.
 
-- https://learn.chatgpt.com/docs/app-server
-- https://learn.chatgpt.com/docs/auth
-- https://developers.openai.com/api/docs/models/gpt-6-astra
-- https://developers.openai.com/api/docs/guides/realtime-transcription
-- https://www.electronjs.org/docs/latest/api/desktop-capturer
-- https://docs.fireflies.ai/realtime-api/getting-started
-- https://docs.fireflies.ai/realtime-api/event-schema
-- Cue and Glass revisions in THIRD_PARTY_NOTICES.md
+Keys, settings, call sheets and setup-test status use Electron `safeStorage`, fail closed without encryption, and write atomically. Recent calls keep setup/materials and explicitly carried recaps; no transcript or card array is serialized. Current transcript/card history and short PCM buffers are in memory. Structured diagnostics whitelist timing, state and safe error metadata, exclude private content, and rotate five 1 MB files.
+
+The read-only Codex bridge, Fireflies transport and custom MCP policy retain their existing safety boundaries. The bundled Codex helper removes Terminal/PATH requirements. External links are restricted to HTTP(S); update offers accept only stable newer GitHub releases under this repository's HTTPS release path.
+
+## Distribution
+
+Mac CI checks source and packaged apps and records UI screenshots. DMG and ZIP builds use the same app identifier. Personal development builds are explicitly ad-hoc; production release publishing requires a persistent certificate held in Actions secrets. The signer handles nested Electron code and the bundled helper. Releases are durable; CI preview artifacts are retained 30 days. Actual permission continuity and full-screen behavior require a real Mac with two successive persistent-identity builds.

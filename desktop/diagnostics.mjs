@@ -35,6 +35,7 @@ const numeric = new Set([
   "delayMs",
   "latencyMs",
   "requestedAt",
+  "turnEndedAt",
   "firstTokenAt",
   "firstPaintAt",
   "doneAt",

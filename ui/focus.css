@@ -78,3 +78,11 @@ dialog::backdrop { background:#080b0dbb; }
  .transcript-trigger { padding:8px; }
  .card-summary { font-size:14px; }
 }
+
+.error-box[hidden] { display:none; }
+.error-box { display:flex; align-items:center; gap:12px; }
+.error-box > span { flex:1; }
+.error-box button { flex-shrink:0; }
+.error-box.warning { border-color:#a58a4a; color:#e6ce92; }
+.card-question { font-size:12px; color:var(--muted); margin:0 0 8px; }
+.transcript-row.gap { border-left:2px solid #a58a4a; color:#e6ce92; }

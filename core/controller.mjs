@@ -4,6 +4,7 @@ import { ContextRetrieval, shouldSearch } from "./retrieval.mjs";
 import { CoachEngine } from "./engine.mjs";
 import { publicConfig } from "./config.mjs";
 import { sanitizePreferences } from "./preferences.mjs";
+import { CALL_DEFAULTS, DEMO_SETTINGS } from "./defaults.mjs";
 import { DemoProvider } from "../providers/demo.mjs";
 import { OpenAIProvider } from "../providers/openai.mjs";
 import { FirefliesClient } from "../providers/fireflies.mjs";
@@ -18,11 +19,23 @@ export class CallController extends EventEmitter {
     contextProvider = null,
     preferences = {},
     onPreferences = () => {},
+    transcriberFactory = null,
+    diagnostics = () => {},
   } = {}) {
     super();
     this.config = config;
     this.preferences = sanitizePreferences(preferences);
     this.onPreferences = onPreferences;
+    this.diagnostics = diagnostics;
+    this.transcriberFactory = transcriberFactory;
+    this.demoStarted = false;
+    if (
+      this.preferences.goal === DEMO_SETTINGS.goal &&
+      this.preferences.project === DEMO_SETTINGS.project
+    ) {
+      this.preferences = sanitizePreferences(CALL_DEFAULTS, this.preferences);
+      this.onPreferences(this.preferences);
+    }
     this.demoOnly = demoOnly;
     this.codex = codexProvider;
     this.contextProvider = contextProvider;
@@ -35,7 +48,7 @@ export class CallController extends EventEmitter {
     this.strategyBackend = "openai";
     this.generation = 0;
     this.pendingSearch = null;
-    this.engine = new CoachEngine();
+    this.engine = new CoachEngine({ diagnostics });
     this.engine.configure(this.preferences);
     this.lastEngineStatus = this.engine.status;
     this.engine.on("state", () => {
@@ -47,6 +60,7 @@ export class CallController extends EventEmitter {
     this.fireflies = new FirefliesClient({ apiKey: config.firefliesKey });
     this.transcribers = new Map();
     this.capture = { mic: "off", system: "off" };
+    this.captureInputs = { mic: "off", system: "off" };
     this.demoProvider = new DemoProvider();
     this.setProviders();
   }
@@ -168,6 +182,9 @@ export class CallController extends EventEmitter {
     return this.snapshot();
   }
   rememberPreferences(patch) {
+    patch = { ...patch };
+    if (this.demoStarted)
+      for (const key of ["mode", "goal", "project"]) delete patch[key];
     const next = sanitizePreferences(patch, this.preferences);
     this.onPreferences(next);
     this.preferences = next;
@@ -184,9 +201,7 @@ export class CallController extends EventEmitter {
     if (this.engine.status === "ended")
       throw new Error("Create a new session before searching.");
     if (!settings.contextConsent)
-      throw new Error(
-        "Allow selected context sources in Connections first.",
-      );
+      throw new Error("Allow selected context sources in Connections first.");
     if (settings.contextBackend === "mcp") return this.searchMcp(query);
     if (settings.contextBackend !== "codex")
       throw new Error("Choose Codex connected apps in Connections first.");
@@ -239,6 +254,7 @@ export class CallController extends EventEmitter {
         this.stopInputs();
         this.generation++;
         this.mode = "demo";
+        this.demoStarted = false;
         this.retrieval.reset();
         this.engine.reset();
         this.engine.configure(this.preferences);
@@ -260,25 +276,33 @@ export class CallController extends EventEmitter {
         this.stopInputs();
         this.engine.end();
         return this.snapshot();
-      case "ask":
+      case "ask": {
         if (typeof payload.question !== "string" || !payload.question.trim())
           throw new Error("Enter a question first.");
-        return this.engine.run(
+        const lane =
           payload.lane === "strategy" ||
-            (this.engine.settings.autoSearch &&
-              this.engine.settings.contextConsent &&
-              shouldSearch({
-                recent: [{ text: payload.question }],
-                project: this.engine.settings.project,
-              }))
+          (this.engine.settings.autoSearch &&
+            this.engine.settings.contextConsent &&
+            shouldSearch({
+              recent: [{ text: payload.question }],
+              project: this.engine.settings.project,
+            }))
             ? "strategy"
-            : "fast",
-          payload.question.slice(0, 3000),
-        );
+            : "fast";
+        return this.engine.run(lane, payload.question.slice(0, 3000), {
+          origin: "asked",
+          presentationLane: "fast",
+        });
+      }
       case "nudge":
         return this.engine.run(
-          payload.lane === "strategy" ? "strategy" : "fast",
+          "fast",
+          "What is the most useful thing to say or ask right now?",
+          { origin: "hotkey" },
         );
+      case "error.dismiss":
+        this.engine.clearErrors({ id: payload.id });
+        return this.snapshot();
       case "feedback":
         this.engine.feedback(payload.id, payload.status);
         return this.snapshot();
@@ -392,51 +416,68 @@ export class CallController extends EventEmitter {
         const { LiveTranscriber } = await import(
           "../providers/transcription.mjs"
         );
-        for (const channel of ["mic", "system"]) {
-          const transcriber = new LiveTranscriber({
-            apiKey: this.config.openaiKey,
-            model: this.config.transcriptionModel,
-            channel,
-            onSegment: (row) => {
-              if (generation === this.generation) this.engine.ingest(row);
-            },
-            onStatus: (status) => {
-              if (generation !== this.generation) return;
-              this.capture[channel] = status;
-              if (
-                ["error", "closed", "backpressure"].includes(status) &&
-                this.engine.status === "running"
-              ) {
-                this.engine.error(
-                  `${channel} transcription interrupted. Session paused to avoid missing audio.`,
-                );
-                this.stopInputs();
-                this.engine.pause();
-              }
-              this.engine.emitState();
-            },
-          });
-          this.transcribers.set(channel, transcriber);
-          await transcriber.connect();
-          if (generation !== this.generation) {
-            transcriber.close();
-            return this.snapshot();
-          }
-        }
+        await Promise.all(
+          ["mic", "system"].map(async (channel) => {
+            const options = {
+              apiKey: this.config.openaiKey,
+              model: this.config.transcriptionModel,
+              channel,
+              onSegment: (row) => {
+                if (generation === this.generation) this.engine.ingest(row);
+              },
+              diagnostics: this.diagnostics,
+              onDiscard: (ids) => {
+                if (generation !== this.generation) return;
+                for (const id of ids)
+                  if (!this.engine.transcript.get(id)?.final)
+                    this.engine.transcript.delete(id);
+                this.engine.emitState();
+              },
+              onStatus: (status, error) => {
+                if (generation !== this.generation) return;
+                this.capture[channel] =
+                  status === "connected" &&
+                  this.captureInputs[channel] !== "off"
+                    ? this.captureInputs[channel]
+                    : status;
+                this.diagnostics("capture.status", { channel, state: status });
+                if (status === "failed")
+                  this.engine.error(
+                    error ||
+                      `${channel} transcription could not reconnect. Pause and resume to try again.`,
+                    { condition: `connection:${channel}`, lifetimeMs: null },
+                  );
+                if (status === "connected")
+                  this.engine.clearErrors({
+                    condition: `connection:${channel}`,
+                  });
+                this.engine.emitState();
+              },
+            };
+            const transcriber = this.transcriberFactory
+              ? this.transcriberFactory(options)
+              : new LiveTranscriber(options);
+            this.transcribers.set(channel, transcriber);
+            await transcriber.connect();
+            if (generation !== this.generation) {
+              transcriber.close();
+              return this.snapshot();
+            }
+          }),
+        );
       }
       if (generation !== this.generation) return this.snapshot();
       if (source === "demo" && !this.engine.transcript.size) {
+        this.demoStarted = true;
         this.engine.context.clear();
         for (const doc of DEMO_DOCUMENTS) this.engine.context.add(doc);
-        this.engine.configure({
-          mode: "strategy",
-          project: "Northstar",
-          goal: "Help the client make a defensible budget decision and agree on a focused first engagement.",
-        });
+        this.engine.configure(DEMO_SETTINGS);
         this.demoPosition = 0;
       }
       this.engine.start({ consent, source });
       if (source === "demo") this.replay();
+      this.connecting = false;
+      this.engine.emitState();
       return this.snapshot();
     } catch (error) {
       if (generation !== this.generation) return this.snapshot();
@@ -475,13 +516,15 @@ export class CallController extends EventEmitter {
   }
   audio(channel, buffer) {
     if (this.mode !== "audio" || this.engine.status !== "running") return;
-    this.transcribers
-      .get(channel)
-      ?.push(buffer, Date.now() - this.engine.startedAt);
+    this.transcribers.get(channel)?.push(buffer, this.engine.activeTimeMs());
   }
   captureStatus(channel, status) {
     if (!["mic", "system"].includes(channel)) return;
-    this.capture[channel] = String(status).slice(0, 50);
+    // Renderer capture updates must not hide a transcription reconnect/failure.
+    this.captureInputs[channel] = String(status).slice(0, 50);
+    if (!["reconnecting", "failed"].includes(this.capture[channel]))
+      this.capture[channel] = String(status).slice(0, 50);
+    this.diagnostics("capture.status", { channel, state: status });
     this.engine.emitState();
   }
   stopInputs() {
@@ -496,6 +539,7 @@ export class CallController extends EventEmitter {
     this.pendingSearch?.abort();
     this.pendingSearch = null;
     this.capture = { mic: "off", system: "off" };
+    this.captureInputs = { mic: "off", system: "off" };
     this.emit("stop-capture");
   }
   async searchMcp(query) {
@@ -532,7 +576,10 @@ export class CallController extends EventEmitter {
     return this.snapshot();
   }
   async importFireflies(id) {
-    if (this.demoOnly || this.mode === "demo")
+    if (
+      this.demoOnly ||
+      (this.mode === "demo" && this.engine.status !== "idle")
+    )
       throw new Error(
         "External context import is disabled in Demo mode. Start a live session to connect it.",
       );

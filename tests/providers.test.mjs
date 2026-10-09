@@ -60,7 +60,9 @@ test("provider errors never echo arbitrary upstream bodies", async () => {
       signal: new AbortController().signal,
     }),
     (error) =>
-      error.message.includes("401") && !error.message.includes("sensitive"),
+      error.status === 401 &&
+      !error.message.includes("sensitive") &&
+      /didn't accept/.test(error.message),
   );
 });
 test("Fireflies event revision IDs are stable and cross-meeting events are ignored", () => {

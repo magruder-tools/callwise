@@ -92,7 +92,15 @@ test("renderer runs against the real controller: start, source-linked cards, fee
     [],
     `UI fixture is missing IDs: ${missing.join(", ")}`,
   );
-  const c = new CallController({ demoOnly: true });
+  const c = new CallController({
+    demoOnly: true,
+    preferences: {
+      goal: "My own goal",
+      mode: "interview",
+      project: "Real call",
+    },
+  });
+  const commands = [];
   const tracked = [];
   const originalInterval = globalThis.setInterval;
   const originalTimeout = globalThis.setTimeout;
@@ -111,7 +119,10 @@ test("renderer runs against the real controller: start, source-linked cards, fee
   };
   window.callwise = {
     desktop: false,
-    command: (name, payload) => c.command(name, payload),
+    command: (name, payload) => {
+      commands.push({ name, payload });
+      return c.command(name, payload);
+    },
     onState: (cb) => {
       c.on("state", cb);
       return () => c.off("state", cb);
@@ -143,7 +154,10 @@ test("renderer runs against the real controller: start, source-linked cards, fee
   try {
     await import("../ui/app.mjs");
     assert.equal(byId("status-label").textContent, "Ready when you are");
-    assert.equal(byId("strategy-cards").closest("dialog").id, "insights-dialog");
+    assert.equal(
+      byId("strategy-cards").closest("dialog").id,
+      "insights-dialog",
+    );
     click(byId("more-open"));
     assert.equal(byId("more-dialog").hasAttribute("open"), true);
     click(byId("setup-open"));
@@ -155,6 +169,16 @@ test("renderer runs against the real controller: start, source-linked cards, fee
     assert.equal(byId("settings-dialog").hasAttribute("open"), true);
     assert.equal(byId("more-dialog").hasAttribute("open"), false);
     byId("settings-dialog").close();
+    window.callwise.desktop = true;
+    click(byId("settings-open"));
+    await wait(5);
+    assert.equal(
+      commands.some((command) => command.name === "context.discover"),
+      false,
+      "settings must not discover apps without a click",
+    );
+    byId("settings-dialog").close();
+    window.callwise.desktop = false;
     click(byId("insights-open"));
     assert.equal(byId("insights-dialog").hasAttribute("open"), true);
     byId("insights-dialog").close();
@@ -166,7 +190,7 @@ test("renderer runs against the real controller: start, source-linked cards, fee
       speaker: "Client",
       text: "Are these attribution windows comparable?",
     });
-    await c.command("nudge");
+    await c.engine.run("fast");
     assert.ok(
       byId("fast-cards").textContent.includes("Check whether the ROAS"),
     );
@@ -227,8 +251,62 @@ test("renderer runs against the real controller: start, source-linked cards, fee
     assert.equal(byId("next-fast").disabled, true);
     assert.equal(c.engine.status, "paused");
     assert.equal(byId("status-label").textContent, "Session paused");
+    c.engine.error("Connection interrupted", {
+      condition: "connection:mic",
+      lifetimeMs: null,
+    });
+    assert.equal(byId("error-box").hidden, false);
+    assert.equal(
+      byId("toast").hidden,
+      true,
+      "errors are shown once, without a duplicate toast",
+    );
+    click(byId("start"));
+    await wait(5);
+    assert.equal(c.engine.status, "running");
+    assert.equal(
+      byId("error-box").hidden,
+      true,
+      "a successful resume clears the connection error",
+    );
+    await c.command("ask", { question: "What is the next step?" });
+    assert.match(
+      byId("fast-cards").textContent,
+      /You asked: What is the next step/,
+    );
+    assert.equal(
+      byId("next-fast").disabled,
+      true,
+      "asked answers become current immediately",
+    );
+    c.engine.error("Dismiss me", { lifetimeMs: null });
+    click(byId("error-dismiss"));
+    await wait(5);
+    c.engine.emitState();
+    assert.equal(
+      byId("error-box").hidden,
+      true,
+      "dismissed errors stay dismissed across snapshots",
+    );
     click(byId("end"));
     await wait(5);
+    byId("source").value = "audio";
+    byId("source").dispatchEvent(new window.Event("change", { bubbles: true }));
+    await wait(5);
+    assert.deepEqual(
+      commands.filter((command) => command.name === "configure").at(-1).payload,
+      { preferredSource: "audio" },
+    );
+    assert.equal(c.preferences.goal, "My own goal");
+    click(byId("save-profile"));
+    await wait(5);
+    assert.deepEqual(
+      Object.keys(
+        commands.filter((command) => command.name === "configure").at(-1)
+          .payload,
+      ),
+      ["profile"],
+    );
     click(byId("start"));
     await wait(5);
     assert.equal(c.engine.status, "idle");
@@ -240,7 +318,11 @@ test("renderer runs against the real controller: start, source-linked cards, fee
     click(byId("start"));
     await wait(5);
     assert.equal(byId("setup-dialog").hasAttribute("open"), true);
-    assert.equal(c.engine.status, "idle", "consent review must not start capture");
+    assert.equal(
+      c.engine.status,
+      "idle",
+      "consent review must not start capture",
+    );
   } finally {
     c.close();
     for (const id of tracked) clearInterval(id);

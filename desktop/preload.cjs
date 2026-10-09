@@ -12,6 +12,11 @@ contextBridge.exposeInMainWorld("callwise", {
     ipcRenderer.on("callwise:state", listener);
     return () => ipcRenderer.removeListener("callwise:state", listener);
   },
+  onNavigate: (callback) => {
+    const listener = (_event, data) => callback(data);
+    ipcRenderer.on("callwise:navigate", listener);
+    return () => ipcRenderer.removeListener("callwise:navigate", listener);
+  },
   onStopCapture: (callback) => {
     const listener = () => callback();
     ipcRenderer.on("callwise:stop-capture", listener);

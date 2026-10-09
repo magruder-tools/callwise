@@ -1,4 +1,4 @@
-// Presentation state only: incoming advice never replaces a card being read.
+// New advice follows the conversation; kept cards stay until an explicit ask.
 export class SuggestionFocus {
   sync(sessionId, cards) {
     if (this.sessionId !== sessionId) {
@@ -11,7 +11,18 @@ export class SuggestionFocus {
       const updated = cards.find((c) => c.id === this.current[lane]?.id);
       if (updated) this.current[lane] = updated;
       if (this.current[lane]?.status === "dismissed") this.current[lane] = null;
-      if (!this.current[lane]) this.advance(lane);
+      const pending = this.pending(lane);
+      const explicit = pending
+        .filter((card) => ["asked", "hotkey"].includes(card.origin))
+        .at(-1);
+      if (explicit) {
+        this.current[lane] = explicit;
+        for (const card of pending) this.seen[lane].add(card.id);
+      } else if (
+        !this.current[lane] ||
+        this.current[lane].status !== "accepted"
+      )
+        this.advance(lane);
     }
   }
   pending(lane) {
@@ -39,5 +50,15 @@ export class SuggestionFocus {
       this.current[lane] = card;
       this.seen[lane].add(id);
     }
+  }
+  navigate(lane, direction) {
+    const history = this.cards.filter(
+      (card) => card.lane === lane && card.status !== "dismissed",
+    );
+    const current = history.findIndex(
+      (card) => card.id === this.current[lane]?.id,
+    );
+    const next = history[current + (direction === "previous" ? -1 : 1)];
+    if (next) this.select(lane, next.id);
   }
 }

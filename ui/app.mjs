@@ -42,7 +42,10 @@ let state,
   transcriptSignature = "",
   contextSignature = "",
   compact = false,
-  sourceUrl = "";
+  sourceUrl = "",
+  localError = null,
+  displayedError = null,
+  errorSequence = 0;
 const capture = new AudioCapture(
   bridge,
   (channel, rms) => {
@@ -55,9 +58,28 @@ const capture = new AudioCapture(
 );
 bridge.onStopCapture(() => capture.stop());
 function showError(message) {
-  $("error-box").textContent = message;
-  $("error-box").hidden = false;
-  toast(message, true);
+  localError = {
+    id: `local:${++errorSequence}`,
+    message,
+    at: Date.now(),
+    expiresAt: Date.now() + 30000,
+  };
+  drawError();
+}
+function drawError() {
+  if (localError?.expiresAt <= Date.now()) localError = null;
+  const active = (state?.errors || []).filter(
+    (error) => error.expiresAt === null || error.expiresAt > Date.now(),
+  );
+  displayedError = [...active, ...(localError ? [localError] : [])]
+    .sort((a, b) => a.at - b.at)
+    .at(-1);
+  $("error-box").hidden = !displayedError;
+  $("error-message").textContent = displayedError?.message || "";
+  $("error-box").classList.toggle(
+    "warning",
+    displayedError?.severity === "warning",
+  );
 }
 function toast(message, error = false) {
   $("toast").textContent = message;
@@ -80,9 +102,7 @@ const timestamp = (ms) =>
 
 function cardAge(card) {
   const earlier = card.expiresAt <= Date.now();
-  return earlier
-    ? "Earlier · check relevance"
-    : "From this conversation";
+  return earlier ? "Earlier · check relevance" : "From this conversation";
 }
 function drawCards(lane) {
   const card = focus.current?.[lane];
@@ -94,7 +114,8 @@ function drawCards(lane) {
     : lane === "fast"
       ? "New suggestion"
       : "New insight";
-  if (lane === "fast") next.textContent = pending ? `${pending} new` : "New suggestion";
+  if (lane === "fast")
+    next.textContent = pending ? `${pending} new` : "New suggestion";
   const container = $(`${lane}-cards`);
   // Keep the same DOM node while reading: selection, scroll and Details survive.
   if (container.dataset.cardId !== (card?.id || "empty")) {
@@ -103,7 +124,7 @@ function drawCards(lane) {
     if (!card) {
       const empty = document.createElement("div");
       empty.className = "empty-card";
-      empty.innerHTML = `<span class="empty-mark" aria-hidden="true">${lane === "fast" ? "✦" : "·"}</span><p>${lane === "fast" ? "Stay with the conversation." : "Space for a bigger thought."}</p><small>${lane === "fast" ? "A useful suggestion will appear here. It stays until you move on." : "Deeper advice will wait here when it adds something."}</small>`;
+      empty.innerHTML = `<span class="empty-mark" aria-hidden="true">${lane === "fast" ? "✦" : "·"}</span><p>${lane === "fast" ? "Stay with the conversation." : "Space for a bigger thought."}</p><small>${lane === "fast" ? "New suggestions appear automatically. Keep one to hold it here." : "Deeper advice will wait here when it adds something."}</small>`;
       container.append(empty);
       return;
     }
@@ -112,7 +133,7 @@ function drawCards(lane) {
     article.dataset.cardId = card.id;
     const spoken = lane === "fast" && card.say;
     const lead = spoken || card.title;
-    article.innerHTML = `<div class="card-scroll"><div class="card-meta"><span>${card.demo ? "DEMO · " : ""}${esc(card.kind)}</span><span class="card-age"></span></div><h3 class="card-lead">${esc(lead)}</h3><p class="card-summary">${esc(card.reason)}</p><details class="advice-details"><summary>Details${card.sources.length ? ` · ${card.sources.length} ${card.sources.length === 1 ? "source" : "sources"}` : ""}</summary>${spoken ? `<h4>${esc(card.title)}</h4>` : ""}${lane === "strategy" && card.say ? `<p class="card-body">“${esc(card.say)}”</p>` : ""}<p class="card-body">${esc(card.body)}</p><div class="card-sources"></div></details></div><div class="card-actions"><button class="keep-button" type="button">Keep</button><button class="dismiss-button" type="button">Dismiss</button></div>`;
+    article.innerHTML = `<div class="card-scroll">${card.origin === "asked" ? `<p class="card-question">You asked: ${esc(card.question)}</p>` : card.origin === "hotkey" ? '<p class="card-question">You asked for help</p>' : ""}<div class="card-meta"><span>${card.demo ? "DEMO · " : ""}${esc(card.kind)}</span><span class="card-age"></span></div><h3 class="card-lead">${esc(lead)}</h3><p class="card-summary">${esc(card.reason)}</p><details class="advice-details"><summary>Details${card.sources.length ? ` · ${card.sources.length} ${card.sources.length === 1 ? "source" : "sources"}` : ""}</summary>${spoken ? `<h4>${esc(card.title)}</h4>` : ""}${lane === "strategy" && card.say ? `<p class="card-body">“${esc(card.say)}”</p>` : ""}<p class="card-body">${esc(card.body)}</p><div class="card-sources"></div></details></div><div class="card-actions"><button class="keep-button" type="button">Keep</button><button class="dismiss-button" type="button">Dismiss</button></div>`;
     for (const source of card.sources) {
       const button = document.createElement("button");
       button.className = "source-chip";
@@ -188,11 +209,13 @@ function render(next) {
   if (sessionChanged) {
     for (const lane of ["fast", "strategy"])
       $(`${lane}-cards`).dataset.cardId = "";
-    $("error-box").hidden = true;
+    localError = null;
     $("advice-history-dialog").close();
   }
   $("advice-count").textContent = state.cards.length;
-  const insights = state.cards.filter(c => c.lane === "strategy" && c.status !== "dismissed").length;
+  const insights = state.cards.filter(
+    (c) => c.lane === "strategy" && c.status !== "dismissed",
+  ).length;
   $("insights-count").textContent = insights ? `· ${insights}` : "";
   $("capture-summary").textContent =
     state.status === "running"
@@ -210,7 +233,9 @@ function render(next) {
     : running
       ? state.source === "demo"
         ? "Demo in progress"
-        : "Session active"
+        : Object.values(state.capture).includes("reconnecting")
+          ? "Reconnecting…"
+          : "Session active"
       : paused
         ? "Session paused"
         : ended
@@ -311,7 +336,7 @@ function render(next) {
         '<div class="transcript-empty"><span>〰</span><strong>The conversation starts here.</strong><p>Try the demo to watch context turn into useful questions and strategic advice.</p></div>';
     for (const row of state.transcript) {
       const el = document.createElement("div");
-      el.className = `transcript-row ${row.speaker === "You" ? "you" : ""} ${row.final ? "" : "partial"}`;
+      el.className = `transcript-row ${row.speaker === "You" ? "you" : ""} ${row.final ? "" : "partial"} ${row.gap ? "gap" : ""}`;
       el.innerHTML = `<header><span class="avatar">${esc(row.speaker.slice(0, 1))}</span><span>${esc(row.speaker)}</span><time>${timestamp(row.startMs)}</time></header><p>${esc(row.text)}</p>`;
       list.append(el);
     }
@@ -347,10 +372,7 @@ function render(next) {
     `Fast: ${state.config.fastModel || "gpt-5.6-luna"} · Strategy: ${state.config.strategyModel || "gpt-6-astra"}`;
   $("import-file").disabled = !bridge.desktop;
   connections.sync(state);
-  if (state.errors.length) {
-    $("error-box").textContent = state.errors.at(-1).message;
-    $("error-box").hidden = false;
-  }
+  drawError();
   drawCards("fast");
   drawCards("strategy");
   updateSource();
@@ -381,22 +403,18 @@ async function openSource(id, excerpt) {
   $("source-link").hidden = !sourceUrl;
   $("source-dialog").showModal();
 }
-function configure() {
+function configure(event) {
+  const id = event.target.id;
+  const field =
+    { source: "preferredSource", backend: "preferredBackend" }[id] || id;
   return act("configure", {
-    mode: $("mode").value,
-    goal: $("goal").value,
-    project: $("project").value,
-    quiet: $("quiet").checked,
-    profile: $("profile").value,
-    preferredSource: $("source").value,
-    preferredBackend: $("backend").value,
+    [field]: id === "quiet" ? $(id).checked : $(id).value,
   });
 }
 for (const id of ["mode", "goal", "project", "quiet", "source", "backend"])
   $(id).addEventListener("change", configure);
 $("source").addEventListener("change", updateSource);
 $("start").addEventListener("click", async () => {
-  $("error-box").hidden = true;
   if (state.status === "ended") {
     const result = await act("new", { clearContext: state.source === "demo" });
     if (result) {
@@ -410,7 +428,6 @@ $("start").addEventListener("click", async () => {
     toast("Confirm participant consent in call setup, then start when ready.");
     return;
   }
-  if (!(await configure())) return;
   const source = $("source").value;
   $("start").disabled = true;
   const result = await act("start", {
@@ -420,6 +437,7 @@ $("start").addEventListener("click", async () => {
     transcriptId: $("fireflies-id").value,
   });
   if (result) {
+    if (result.status === "running") localError = null;
     render(result);
     if (result.status === "running") $("setup-dialog").close();
     if (source === "audio" && result.status === "running")
@@ -467,13 +485,15 @@ $("transcript-form").addEventListener("submit", async (event) => {
 });
 $("settings-open").addEventListener("click", () => {
   $("settings-dialog").showModal();
-  if (bridge.desktop && !state?.contextApps?.length &&
-      state?.status !== "running" && !state?.connecting)
-    $("inspect-codex").click();
 });
 $("save-profile").addEventListener("click", async () => {
-  const result = await configure();
-  if (result) toast(bridge.desktop ? "Preferences saved on this Mac." : "Preferences kept until this demo closes.");
+  const result = await act("configure", { profile: $("profile").value });
+  if (result)
+    toast(
+      bridge.desktop
+        ? "Preferences saved on this Mac."
+        : "Preferences kept until this demo closes.",
+    );
 });
 $("add-context").addEventListener("click", () =>
   $("context-dialog").showModal(),
@@ -494,9 +514,9 @@ $("context-form").addEventListener("submit", async (event) => {
 });
 $("import-file").addEventListener("click", async () => {
   const result = await act("desktop.import");
-  if (result?.imported) {
-    $("context-dialog").close();
-    toast(`${result.imported} source(s) added.`);
+  if (result) {
+    if (result.imported) $("context-dialog").close();
+    if (result.message) toast(result.message);
   }
 });
 $("context-search-open").addEventListener("click", () =>
@@ -553,9 +573,40 @@ $("compact").addEventListener("click", async () => {
 $("more-open").addEventListener("click", () => $("more-dialog").showModal());
 for (const button of $("more-dialog").querySelectorAll("button"))
   button.addEventListener("click", () => $("more-dialog").close());
-$("connections-shortcut").addEventListener("click", () => $("settings-open").click());
+$("connections-shortcut").addEventListener("click", () =>
+  $("settings-open").click(),
+);
 $("export-shortcut").addEventListener("click", () => $("export").click());
-$("insights-open").addEventListener("click", () => $("insights-dialog").showModal());
+$("copy-diagnostics").hidden = !bridge.desktop;
+$("copy-diagnostics").addEventListener("click", async () => {
+  if ((await act("desktop.diagnostics"))?.copied)
+    toast("Diagnostics copied. No keys or call content included.");
+});
+$("error-dismiss").addEventListener("click", () => {
+  const error = displayedError;
+  localError = null;
+  if (error && !error.id.startsWith("local:"))
+    void act("error.dismiss", { id: error.id });
+  else drawError();
+});
+bridge.onNavigate?.(({ direction }) => {
+  focus.navigate("fast", direction);
+  drawCards("fast");
+});
+window.addEventListener("keydown", (event) => {
+  if (
+    event.ctrlKey &&
+    event.altKey &&
+    event.key.toLowerCase() === "p" &&
+    state?.status === "paused"
+  ) {
+    event.preventDefault();
+    $("start").click();
+  }
+});
+$("insights-open").addEventListener("click", () =>
+  $("insights-dialog").showModal(),
+);
 
 for (const id of ["setup-open"])
   $(id).addEventListener("click", () => $("setup-dialog").showModal());
@@ -575,10 +626,12 @@ for (const lane of ["fast", "strategy"])
 setInterval(() => {
   if (!state) return;
   $("clock").textContent = timestamp(
-    state.startedAt
-      ? Math.max(0, (state.stoppedAt || Date.now()) - state.startedAt)
-      : 0,
+    (state.activeTimeMs || 0) +
+      (state.status === "running"
+        ? Math.max(0, Date.now() - state.snapshotAt)
+        : 0),
   );
+  drawError();
   drawCards("fast");
   drawCards("strategy");
 }, 1000);

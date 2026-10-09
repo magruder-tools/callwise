@@ -2,12 +2,19 @@ import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
 import { ContextStore, terms } from "./context.mjs";
 import { makePrompt, validateAdvice } from "./prompts.mjs";
+import { CALL_DEFAULTS } from "./defaults.mjs";
 
 export class CoachEngine extends EventEmitter {
-  constructor({ providers, clock = Date.now, config = {} } = {}) {
+  constructor({
+    providers,
+    clock = Date.now,
+    config = {},
+    diagnostics = () => {},
+  } = {}) {
     super();
     this.providers = providers || {};
     this.clock = clock;
+    this.diagnostics = diagnostics;
     this.context = new ContextStore();
     this.config = {
       fastDelay: 2500,
@@ -18,7 +25,8 @@ export class CoachEngine extends EventEmitter {
       strategyTTL: 150000,
       maxFast: 120,
       maxStrategy: 15,
-      maxSessionMs: 2 * 60 * 60 * 1000,
+      warnSessionMs: 2 * 60 * 60 * 1000,
+      maxSessionMs: 4 * 60 * 60 * 1000,
       ...config,
     };
     this.epoch = 0;
@@ -49,8 +57,7 @@ export class CoachEngine extends EventEmitter {
       dismissed: 0,
     };
     this.settings = {
-      mode: "general",
-      goal: "Have a useful conversation and agree on clear next steps.",
+      ...CALL_DEFAULTS,
       profile: "",
       project: "",
       quiet: false,
@@ -61,6 +68,9 @@ export class CoachEngine extends EventEmitter {
     };
     this.lastRun = { fast: 0, strategy: 0 };
     this.startedAt = null;
+    this.activeMs = 0;
+    this.activeStartedAt = null;
+    this.durationWarned = false;
     this.stoppedAt = null;
     this.source = "demo";
     this.emitState();
@@ -107,28 +117,37 @@ export class CoachEngine extends EventEmitter {
       throw new Error(
         "Confirm that AI assistance and transcription are permitted before starting.",
       );
-    if (
-      this.startedAt !== null &&
-      this.clock() - this.startedAt >= this.config.maxSessionMs
-    )
+    if (this.activeTimeMs() >= this.config.maxSessionMs)
       throw new Error(
         "Session time limit reached. Export and create a new session.",
       );
     this.source = source;
     this.status = "running";
+    this.activeStartedAt = this.clock();
     this.startedAt ??= this.clock();
     this.stoppedAt = null;
+    this.clearErrors({ prefix: "connection:", emit: false });
     clearTimeout(this.deadlineTimer);
     this.deadlineTimer = setTimeout(
       () => {
-        this.pause();
+        this.end();
         this.error(
           "Session time limit reached. Export and create a new session.",
         );
       },
-      Math.max(1, this.config.maxSessionMs - (this.clock() - this.startedAt)),
+      Math.max(1, this.config.maxSessionMs - this.activeTimeMs()),
     );
     this.deadlineTimer.unref?.();
+    if (
+      !this.durationWarned &&
+      this.config.warnSessionMs < this.config.maxSessionMs
+    ) {
+      this.warningTimer = setTimeout(
+        () => this.warnDuration(),
+        Math.max(1, this.config.warnSessionMs - this.activeTimeMs()),
+      );
+      this.warningTimer.unref?.();
+    }
     this.epoch++;
     this.log(
       "session",
@@ -140,6 +159,7 @@ export class CoachEngine extends EventEmitter {
   }
   pause() {
     if (this.status !== "running") return;
+    this.freezeClock();
     this.status = "paused";
     this.stoppedAt = this.clock();
     this.epoch++;
@@ -148,6 +168,7 @@ export class CoachEngine extends EventEmitter {
     this.emitState();
   }
   end() {
+    this.freezeClock();
     this.status = "ended";
     this.stoppedAt = this.clock();
     this.epoch++;
@@ -156,6 +177,7 @@ export class CoachEngine extends EventEmitter {
     this.emitState();
   }
   cancel() {
+    clearTimeout(this.warningTimer);
     clearTimeout(this.deadlineTimer);
     this.deadlineTimer = null;
     for (const t of Object.values(this.timers || {})) clearTimeout(t);
@@ -166,13 +188,14 @@ export class CoachEngine extends EventEmitter {
   }
   ingest(segment) {
     if (this.status !== "running") return false;
-    if (this.clock() - this.startedAt > this.config.maxSessionMs) {
-      this.pause();
+    if (this.activeTimeMs() >= this.config.maxSessionMs) {
+      this.end();
       this.error(
         "Session time limit reached. Start a new session to continue.",
       );
       return false;
     }
+    if (this.activeTimeMs() >= this.config.warnSessionMs) this.warnDuration();
     if (
       !segment ||
       typeof segment.id !== "string" ||
@@ -203,13 +226,14 @@ export class CoachEngine extends EventEmitter {
       final: segment.final !== false,
       startMs: Number.isFinite(segment.startMs)
         ? Math.max(0, segment.startMs)
-        : this.clock() - this.startedAt,
+        : this.activeTimeMs(),
+      gap: segment.gap === true,
       receivedAt: this.clock(),
     };
     this.transcript.set(row.id, row);
     if (row.final) {
       this.revision++;
-      if (!this.settings.quiet) {
+      if (!row.gap && !this.settings.quiet) {
         this.schedule("fast");
         this.schedule("strategy");
       }
@@ -227,24 +251,29 @@ export class CoachEngine extends EventEmitter {
     this.timers[lane] = setTimeout(
       () => {
         delete this.timers[lane];
-        void this.run(lane).catch((error) => this.error(error.message));
+        void this.run(lane).catch((error) => this.error(error));
       },
       Math.max(0, delay),
     );
   }
-  async run(lane = "fast", question = "") {
+  async run(
+    lane = "fast",
+    question = "",
+    { origin = question ? "asked" : "auto", presentationLane = lane } = {},
+  ) {
+    const explicit = origin !== "auto";
     if (!["fast", "strategy"].includes(lane))
       throw new Error("Unknown coaching lane.");
     if (this.status !== "running")
       throw new Error("Start or resume the session first.");
-    if (this.clock() - this.startedAt >= this.config.maxSessionMs) {
-      this.pause();
+    if (this.activeTimeMs() >= this.config.maxSessionMs) {
+      this.end();
       throw new Error(
         "Session time limit reached. Export and create a new session.",
       );
     }
     if (this.inflight[lane]) {
-      if (!question) return { busy: true };
+      if (!explicit) return { busy: true };
       // An explicit user question takes precedence over a speculative suggestion.
       this.inflight[lane].controller.abort();
       delete this.inflight[lane];
@@ -270,10 +299,15 @@ export class CoachEngine extends EventEmitter {
     const epoch = this.epoch,
       revision = this.revision,
       start = this.clock(),
-      job = { id: ++this.jobs, controller: new AbortController() };
+      job = {
+        id: ++this.jobs,
+        controller: new AbortController(),
+        presentationLane,
+      };
     this.inflight[lane] = job;
     this.lastRun[lane] = start;
     this.metrics[metric]++;
+    this.diagnostics("provider.request", { lane, origin, requestedAt: start });
     const recent = rows
       .slice(-8)
       .map((r) => r.text)
@@ -347,22 +381,29 @@ export class CoachEngine extends EventEmitter {
         question,
         signal: job.controller.signal,
       });
+      this.diagnostics("provider.completed", {
+        lane,
+        latencyMs: this.clock() - start,
+      });
       if (epoch !== this.epoch || this.inflight[lane]?.id !== job.id) return;
       if (this.status !== "running" || job.controller.signal.aborted) {
         this.metrics.discarded++;
         return;
       }
+      this.clearErrors({ condition: `provider:${lane}`, emit: false });
       this.metrics.inputTokens += Number(result.usage?.input_tokens || 0);
       this.metrics.outputTokens += Number(result.usage?.output_tokens || 0);
       const stale =
-        this.clock() - start > this.config[`${lane}TTL`] ||
-        this.revision - revision > (lane === "fast" ? 5 : 25);
+        !explicit &&
+        (this.clock() - start > this.config[`${lane}TTL`] ||
+          this.revision - revision > (lane === "fast" ? 5 : 25));
       if (stale) {
         this.metrics.discarded++;
         this.log("coaching", "An outdated suggestion was discarded.");
         return;
       }
       const allowed = new Set(sources.map((s) => s.id));
+      const before = this.cards.length;
       for (const card of validateAdvice(result)) {
         if (card.kind === "fact" && !card.sourceIds.length) {
           this.metrics.discarded++;
@@ -376,13 +417,16 @@ export class CoachEngine extends EventEmitter {
           );
           continue;
         }
-        if (!question && card.confidence < 0.7) continue;
-        if (this.isDuplicate(card)) continue;
+        if (!explicit && card.confidence < 0.7) continue;
+        if (!explicit && this.isDuplicate(card)) continue;
         const now = this.clock();
         this.cards.push({
           ...card,
           id: randomUUID(),
-          lane,
+          lane: presentationLane,
+          computedLane: lane,
+          origin,
+          question: origin === "asked" ? question : "",
           createdAt: now,
           expiresAt: now + this.config[`${lane}TTL`],
           latencyMs: now - start,
@@ -392,12 +436,36 @@ export class CoachEngine extends EventEmitter {
           demo: this.source === "demo",
         });
       }
+      if (explicit && this.cards.length === before) {
+        const now = this.clock();
+        this.cards.push({
+          id: randomUUID(),
+          lane: presentationLane,
+          computedLane: lane,
+          origin,
+          question: origin === "asked" ? question : "",
+          title: "More context needed",
+          body: "I don't have enough verified context to answer yet. Add your notes or ask a more specific question.",
+          say: "",
+          reason: "Your request needs more context.",
+          kind: "answer",
+          confidence: 0,
+          sourceIds: [],
+          sources: [],
+          createdAt: now,
+          expiresAt: now + this.config[`${lane}TTL`],
+          latencyMs: now - start,
+          basedOnRevision: revision,
+          status: "new",
+          demo: this.source === "demo",
+        });
+      }
       // The normal session caps allow at most 270 cards. Keep their history.
       this.cards = this.cards.slice(-300);
       return { ok: true };
     } catch (error) {
       if (epoch === this.epoch && !job.controller.signal.aborted)
-        this.error(error.message || "Coaching request failed.");
+        this.error(error, { condition: `provider:${lane}` });
     } finally {
       if (this.inflight[lane]?.id === job.id) delete this.inflight[lane];
       if (
@@ -440,16 +508,60 @@ export class CoachEngine extends EventEmitter {
     this.activity.push({ kind, message, at: this.clock() });
     this.activity = this.activity.slice(-30);
   }
-  error(message) {
-    const safe = String(message).slice(0, 400);
+  activeTimeMs() {
+    return (
+      this.activeMs +
+      (this.activeStartedAt === null
+        ? 0
+        : Math.max(0, this.clock() - this.activeStartedAt))
+    );
+  }
+  freezeClock() {
+    this.activeMs = this.activeTimeMs();
+    this.activeStartedAt = null;
+  }
+  warnDuration() {
+    if (this.durationWarned || this.status !== "running") return;
+    this.durationWarned = true;
+    this.error(
+      "This call has been running for two hours. Callwise can continue for another two hours.",
+      { severity: "warning", lifetimeMs: 60000 },
+    );
+  }
+  clearErrors({ id, condition, prefix, emit = true } = {}) {
+    this.errors = this.errors.filter((error) =>
+      id
+        ? error.id !== id
+        : condition
+          ? error.condition !== condition
+          : prefix
+            ? !error.condition?.startsWith(prefix)
+            : false,
+    );
+    if (emit) this.emitState();
+  }
+  error(
+    error,
+    { condition = "", lifetimeMs = 30000, severity = "error" } = {},
+  ) {
+    const safe = String(error?.message || error).slice(0, 400);
+    this.diagnostics("provider.error", {
+      status: error?.status,
+      code: error?.code,
+      type: error?.type,
+    });
     if (
       this.errors.at(-1)?.message === safe &&
       this.clock() - this.errors.at(-1).at < 10000
     )
       return;
     this.errors.push({
-      message: String(message).slice(0, 400),
+      id: randomUUID(),
+      message: safe,
       at: this.clock(),
+      expiresAt: lifetimeMs === null ? null : this.clock() + lifetimeMs,
+      condition,
+      severity,
     });
     this.errors = this.errors.slice(-8);
     this.emitState();
@@ -461,6 +573,8 @@ export class CoachEngine extends EventEmitter {
       source: this.source,
       startedAt: this.startedAt,
       stoppedAt: this.stoppedAt,
+      activeTimeMs: this.activeTimeMs(),
+      snapshotAt: this.clock(),
       settings: {
         ...this.settings,
         contextApps: [...this.settings.contextApps],
@@ -475,16 +589,26 @@ export class CoachEngine extends EventEmitter {
       })),
       context: this.context.list(),
       metrics: { ...this.metrics },
-      errors: [...this.errors],
+      errors: this.errors.filter(
+        (error) => error.expiresAt === null || error.expiresAt > this.clock(),
+      ),
       activity: [...this.activity],
       thinking: {
-        fast: !!this.inflight.fast,
+        fast:
+          !!this.inflight.fast ||
+          Object.values(this.inflight).some(
+            (job) => job.presentationLane === "fast",
+          ),
         strategy: !!this.inflight.strategy,
       },
       limits: { fast: this.config.maxFast, strategy: this.config.maxStrategy },
     };
   }
   emitState() {
+    if (this.diagnosticStatus !== this.status) {
+      this.diagnosticStatus = this.status;
+      this.diagnostics?.("session.state", { state: this.status });
+    }
     this.emit("state", this.snapshot());
   }
   exportMarkdown() {

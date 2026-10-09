@@ -1,5 +1,8 @@
 # Validation record
 
+This is the historical September 6 validation record. For the current 0.3.1
+candidate and its Mac test script, see [Checkpoint 1](CHECKPOINT_1.md).
+
 Build date: September 6, 2026. Build host: Linux x64, Node 24.19.0.
 
 ## Verified

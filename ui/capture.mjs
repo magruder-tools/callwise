@@ -102,7 +102,8 @@ export class AudioCapture {
       this.bridge.audio(channel, data.buffer);
     };
     await ctx.resume();
-    if (this.active && generation === this.generation) this.bridge.captureStatus(channel, "listening");
+    if (this.active && generation === this.generation)
+      this.bridge.captureStatus(channel, "listening");
   }
   stop() {
     this.generation++;
@@ -124,8 +125,17 @@ export class AudioCapture {
 }
 
 export function describeAudioCapture(capture = {}) {
-  const label = (status) => status === "receiving" ? "receiving" :
-    status === "listening" ? "listening" :
-    status?.startsWith("No signal") ? "no signal yet" : "starting";
+  const label = (status) =>
+    status === "receiving"
+      ? "receiving"
+      : status === "reconnecting"
+        ? "reconnecting"
+        : status === "failed"
+          ? "transcription stopped"
+          : status === "listening"
+            ? "listening"
+            : status?.startsWith("No signal")
+              ? "no signal yet"
+              : "starting";
   return `Mic: ${label(capture.mic)} · Computer: ${label(capture.system)}`;
 }

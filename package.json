@@ -1,7 +1,7 @@
 {
   "name": "callwise",
   "productName": "Callwise",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A personal thinking copilot for live conversations",
   "private": true,
   "type": "module",

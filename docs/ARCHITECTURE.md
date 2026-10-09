@@ -75,8 +75,11 @@ echo separation of system audio.
 
 - No automatic diarization of multiple remote participants in local capture.
 - No persisted session DB, background daemon, or silent auto-recording.
-- No audio restart/replay across a disconnection. Failures pause or visibly
-  report a gap; do not silently fabricate continuity.
+- Audio transcription reconnects independently per channel for up to 60 seconds,
+  using 0.5–8-second backoff and up to 15 seconds of in-memory PCM replay.
+  A larger gap is marked in the transcript and prompts; it is never presented as
+  continuous speech. A terminal channel failure is reported without pausing the
+  other channel. Pause, End and New cancel recovery and release all buffered PCM.
 - Request caps are not dollar budgets. Transcription time is separate.
 - Context import is text-only; no PDF/Word extraction yet.
 - No model benchmark or macOS end-to-end success is implied by fixture tests.

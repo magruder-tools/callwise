@@ -17,7 +17,7 @@
       <div class="brand">
         <span class="brand-mark" aria-hidden="true">c</span>Callwise<span
           class="version"
-          >0.3.0</span
+          >0.3.1</span
         >
       </div>
       <div class="top-status">
@@ -74,7 +74,7 @@
         </form>
         <button id="transcript-open" class="secondary-button transcript-trigger">Transcript</button>
       </div>
-      <div id="error-box" class="error-box" role="alert" hidden></div>
+      <div id="error-box" class="error-box" role="alert" hidden><span id="error-message"></span><button id="error-dismiss" type="button" aria-label="Dismiss error">Dismiss</button></div>
       <footer class="call-footer">
         <span id="capture-summary">Nothing is being captured</span
         ><button id="insights-open" class="text-button">Insights <span id="insights-count"></span></button>
@@ -88,7 +88,8 @@
       <button id="compact" class="menu-option" aria-label="Float above other apps" aria-pressed="false">Float above other apps <span aria-hidden="true">↗</span></button>
       <button class="menu-option prompt-chip" data-question="What is the best next question to ask?">Suggest a question</button>
       <button id="export-shortcut" class="menu-option">Export session</button>
-      <p class="muted micro">Callwise 0.3.0 · Floating focus</p>
+      <button id="copy-diagnostics" class="menu-option" hidden>Copy diagnostics</button>
+      <p class="muted micro">Callwise 0.3.1 · Reliability fixes</p>
     </dialog>
     <dialog id="insights-dialog" class="drawer" aria-label="Deeper insights">
       <form method="dialog" class="dialog-top"><h2>Deeper insights</h2><button class="icon-button" aria-label="Close insights">×</button></form>

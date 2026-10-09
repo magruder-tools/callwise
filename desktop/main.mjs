@@ -10,10 +10,13 @@ import {
   systemPreferences,
   safeStorage,
   powerMonitor,
+  Menu,
+  clipboard,
 } from "electron";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
-import { mkdirSync, readFileSync, writeFileSync, statSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { release as osRelease } from "node:os";
 import { readConfig } from "../core/config.mjs";
 import {
   readConnections,
@@ -27,6 +30,9 @@ import { installDisplayCapture } from "./display-capture.mjs";
 import { readPreferences, savePreferences } from "../core/preferences.mjs";
 import { CodexContextProvider } from "../providers/codex-context.mjs";
 import { CodexProvider } from "../providers/codex.mjs";
+import { Diagnostics } from "./diagnostics.mjs";
+import { SessionShortcuts } from "./shortcuts.mjs";
+import { importFiles } from "./import-files.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const smoke = process.argv.includes("--smoke");
@@ -40,11 +46,24 @@ async function boot() {
   const dataDir = app.getPath("userData"),
     workDir = path.join(dataDir, "codex-work");
   mkdirSync(workDir, { recursive: true });
+  const diagnostics = new Diagnostics(path.join(dataDir, "logs"), {
+    versions: {
+      app: app.getVersion(),
+      os: `${process.platform} ${osRelease()}`,
+      electron: process.versions.electron,
+      node: process.versions.node,
+    },
+  });
   const vault = path.join(dataDir, "connections.bin");
   const preferencesFile = path.join(dataDir, "preferences.bin");
-  let preferences = {}, preferencesWarning = "";
-  if (!smoke) try { preferences = readPreferences(preferencesFile, safeStorage); }
-  catch (error) { preferencesWarning = error.message; }
+  let preferences = {},
+    preferencesWarning = "";
+  if (!smoke)
+    try {
+      preferences = readPreferences(preferencesFile, safeStorage);
+    } catch (error) {
+      preferencesWarning = error.message;
+    }
   const baseConfig = smoke
     ? {
         fastModel: "gpt-5.6-luna",
@@ -67,7 +86,10 @@ async function boot() {
     new CallController({
       config,
       preferences,
-      onPreferences: smoke ? () => {} : (next) => savePreferences(preferencesFile, safeStorage, next),
+      diagnostics: (event, fields) => diagnostics.write(event, fields),
+      onPreferences: smoke
+        ? () => {}
+        : (next) => savePreferences(preferencesFile, safeStorage, next),
       contextProvider: smoke
         ? null
         : new CodexContextProvider({
@@ -98,7 +120,9 @@ async function boot() {
     height: 480,
     minWidth: 600,
     minHeight: 420,
-    ...(process.platform === "darwin" ? {titleBarStyle: "hiddenInset", trafficLightPosition: {x:16, y:25}} : {}),
+    ...(process.platform === "darwin"
+      ? { titleBarStyle: "hiddenInset", trafficLightPosition: { x: 16, y: 25 } }
+      : {}),
     backgroundColor: "#101319",
     title: "Callwise",
     show: false,
@@ -151,14 +175,70 @@ async function boot() {
       controller.engine.status === "running" &&
       ["media", "display-capture"].includes(permission),
   );
-  installDisplayCapture(session.defaultSession, desktopCapturer, (frame) =>
-    trustedFrame(frame) && controller.mode === "audio" &&
-    controller.engine.status === "running",
+  installDisplayCapture(
+    session.defaultSession,
+    desktopCapturer,
+    (frame) =>
+      trustedFrame(frame) &&
+      controller.mode === "audio" &&
+      controller.engine.status === "running",
   );
   const send = (name, data) => {
     if (win && !win.isDestroyed()) win.webContents.send(name, data);
   };
-  controller.on("state", (state) => send("callwise:state", state));
+  const shortcuts = new SessionShortcuts(
+    globalShortcut,
+    {
+      help: () =>
+        void controller
+          .command("nudge")
+          .catch((error) => controller.engine.error(error)),
+      pause: () => void controller.command("pause"),
+      previous: () => send("callwise:navigate", { direction: "previous" }),
+      next: () => send("callwise:navigate", { direction: "next" }),
+      visibility: () => {
+        if (win?.isVisible()) win.hide();
+        else win?.showInactive();
+      },
+    },
+    (accelerator) =>
+      controller.engine.error(
+        `Another app is using ${accelerator}. Use the Callwise controls for now.`,
+        { condition: `shortcut:${accelerator}`, lifetimeMs: null },
+      ),
+    (accelerator) =>
+      controller.engine.clearErrors({ condition: `shortcut:${accelerator}` }),
+  );
+  controller.on("state", (state) => {
+    send("callwise:state", state);
+    shortcuts.sync(state.status);
+    if (
+      ["paused", "ended"].includes(state.status) &&
+      win &&
+      !win.isDestroyed() &&
+      !win.isVisible()
+    )
+      win.showInactive();
+  });
+  const copyDiagnostics = () =>
+    clipboard.writeText(
+      diagnostics.copy({
+        status: controller.engine.status,
+        source: controller.mode,
+        config: controller.config,
+        preferences: controller.preferences,
+      }),
+    );
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      ...(process.platform === "darwin" ? [{ role: "appMenu" }] : []),
+      { role: "editMenu" },
+      {
+        label: "Help",
+        submenu: [{ label: "Copy diagnostics", click: copyDiagnostics }],
+      },
+    ]),
+  );
   controller.on("stop-capture", () => send("callwise:stop-capture"));
   ipcMain.handle("callwise:command", async (event, name, payload = {}) => {
     if (event.sender !== win?.webContents || !trustedFrame(event.senderFrame))
@@ -222,6 +302,10 @@ async function boot() {
     }
     if (name === "desktop.connections.check")
       return checkModelAccess(controller.config);
+    if (name === "desktop.diagnostics") {
+      copyDiagnostics();
+      return { copied: true };
+    }
     if (name === "desktop.compact") {
       controller.rememberPreferences({ compact: !!payload.enabled });
       win.setAlwaysOnTop(!!payload.enabled, "floating");
@@ -258,22 +342,13 @@ async function boot() {
         ],
       });
       if (result.canceled) return { imported: 0 };
-      let count = 0;
-      for (const filename of result.filePaths.slice(0, 20)) {
-        if (statSync(filename).size > 250000)
-          throw new Error(
-            `${path.basename(filename)} is too large. Use an excerpt below 250 KB.`,
-          );
-        controller.engine.context.add({
-          title: path.basename(filename),
-          text: readFileSync(filename, "utf8"),
-          kind: "document",
-          project: controller.engine.settings.project,
-        });
-        count++;
-      }
+      const imported = importFiles(
+        result.filePaths,
+        controller.engine.context,
+        controller.engine.settings.project,
+      );
       controller.engine.emitState();
-      return { imported: count };
+      return imported;
     }
     if (name === "desktop.export") {
       const result = await dialog.showSaveDialog(win, {
@@ -303,15 +378,6 @@ async function boot() {
     if (event.sender === win?.webContents && trustedFrame(event.senderFrame))
       controller.captureStatus(channel, status);
   });
-  globalShortcut.register("CommandOrControl+Shift+Space", () => {
-    if (controller.engine.status === "running")
-      void controller
-        .command("nudge")
-        .catch((e) => controller.engine.error(e.message));
-  });
-  globalShortcut.register("CommandOrControl+Shift+P", () => {
-    void controller.command("pause");
-  });
   for (const event of ["suspend", "lock-screen"])
     powerMonitor.on(event, () => {
       codexLogin.cancel();
@@ -325,10 +391,16 @@ async function boot() {
     });
   app.on("will-quit", () => {
     codexLogin.close();
-    globalShortcut.unregisterAll();
+    shortcuts.close();
     controller.close();
   });
   app.on("window-all-closed", () => app.quit());
+  app.on("activate", () => {
+    if (win && !win.isDestroyed()) {
+      win.show();
+      win.focus();
+    }
+  });
   await win.loadFile(page);
   if (smoke) {
     const artifacts =

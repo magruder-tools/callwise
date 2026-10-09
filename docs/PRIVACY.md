@@ -4,7 +4,7 @@ Callwise listens only when you start a call with consent or run a short sound ch
 
 ## What leaves your Mac
 
-While listening, microphone and call audio go to OpenAI Realtime transcription. Coaching requests include your supplied profile, call line, materials, prep, relevant transcript and rolling memory. Preparation and recap requests use those same supplied materials and conversation evidence. They set `store:false`. OpenAI's applicable API retention and account policies still apply; this setting is not a guarantee of zero retention.
+While listening, microphone and call audio go to OpenAI Realtime transcription. Coaching requests include your supplied profile, call line, materials, prep, relevant transcript and rolling memory. With a saved key, preparation reads supplied materials before Start as you edit the setup; recaps use the conversation after End. These requests set `store:false`. OpenAI's applicable API retention and account policies still apply; this setting is not a guarantee of zero retention.
 
 Saving and testing the API key makes a metadata request, two tiny billed inference requests, and a transcription-session handshake. Sound checks send the short test audio to transcription and display the returned words. They stop automatically and do not become saved conversations.
 

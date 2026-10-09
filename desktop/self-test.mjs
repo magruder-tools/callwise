@@ -36,7 +36,12 @@ export async function runSelfTest(
         detail: "Passed",
       });
     } catch (error) {
-      results.push({ label, ok: false, detail: error.message });
+      results.push({
+        label,
+        ok: false,
+        detail: error.message,
+        action: error.action || "",
+      });
     }
   };
   await check("API key", async () => {

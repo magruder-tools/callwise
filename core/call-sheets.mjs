@@ -27,6 +27,17 @@ export function sanitizeSheets(sheets) {
       text: String(d.text || ""),
       kind: "document",
       url: /^https?:\/\//.test(d.url || "") ? String(d.url).slice(0, 2000) : "",
+      ...(d.provenance?.provider === "codex"
+        ? {
+            provenance: {
+              provider: "codex",
+              appName: String(d.provenance.appName || "").slice(0, 200),
+              appId: String(d.provenance.appId || "").slice(0, 200),
+              action: String(d.provenance.action || "").slice(0, 200),
+            },
+            retrievedAt: String(d.retrievedAt || "").slice(0, 50),
+          }
+        : {}),
     }));
     if (
       materials.reduce((n, d) => n + Buffer.byteLength(d.text), 0) >

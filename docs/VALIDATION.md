@@ -2,6 +2,14 @@
 
 0.4.0 implements the remaining milestones from `CALLWISE_BRIEF.md` on top of the reliability work recorded in `CHECKPOINT_1.md`.
 
+## Completion audit — 9 October 2026
+
+The existing full upgrade was recovered from PR #4 at `949ad2b` and reviewed against the attached brief. Additional regression coverage verifies preparation reuse/invalidation, import refresh, cancellation on Start, Fireflies recovery and meeting-ID reuse, wrap-up coverage, background backchannel silence, removal of interrupted streamed drafts, streamed pin/dismissal, first-paint lateness, deeper-request trigger visibility, specific setup fixes, encrypted custom server configuration and retained source provenance.
+
+The full Node suite now has 183 passing tests. Syntax validation covers 81 JavaScript modules. All three deterministic offline fixtures pass (11 helped turns; approximately 51 ms median and 52 ms p90 to engine first paint). The production dependency audit has no vulnerabilities. No additional runtime dependency was introduced by the completion audit.
+
+Browser screenshot and native packaging validation run in GitHub Actions for the exact published commit. This workspace could not install the requested Chromium build because its download returned an invalid archive; that is a local tool limitation, not a claim that browser checks passed locally. The CI artifacts and PR record contain the resulting screenshots, packaged-app logs and installer.
+
 Automated verification uses the real controller/engine with offline providers, fake Realtime sockets, encrypted-storage substitutes and rendered DOM. Replays cover interview, discovery and client calls, including own speech, backchannels, repeats and partial questions. The stub measures trigger/engine first paint only, not live network or transcription performance. It does not establish model answer quality.
 
 The Mac workflow runs syntax, tests, production dependency audit, native Electron smoke, DMG/ZIP packaging, signature verification, bundled Codex verification and actual packaged-app smoke. Screenshots cover Ready, Recap and the live panel at 340, 440 and 640 px widths. CI checks that essential lead/point text is present and not clipped. It uses synthetic data, no permissions, audio or credentials.

@@ -1,12 +1,13 @@
 import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
 import { ContextStore, terms } from "./context.mjs";
-import { makePrompt, validateAdvice } from "./prompts.mjs";
+import { makePrompt, validateAdvice, words } from "./prompts.mjs";
 import { CALL_DEFAULTS } from "./defaults.mjs";
 import {
   classifyTurn,
   completePartial,
   isOwnTurn,
+  isBackchannel,
   normalize,
   editRatio,
   consumeToken,
@@ -206,8 +207,10 @@ export class CoachEngine extends EventEmitter {
     this.deadlineTimer = null;
     for (const t of Object.values(this.timers || {})) clearTimeout(t);
     this.timers = {};
-    for (const job of Object.values(this.inflight || {}))
+    for (const job of Object.values(this.inflight || {})) {
       job.controller.abort();
+      this.removeDraft(job);
+    }
     this.inflight = {};
     this.autoQueue = [];
     this.speculation = null;
@@ -375,8 +378,14 @@ export class CoachEngine extends EventEmitter {
       if (now - at > 180000) this.answered.delete(text);
     if (this.answered.has(normalized)) return;
     let kind = classifyTurn(row, this.settings.mode, this.settings.userName);
+    if (kind === "wrap_up" && this.coverageReminder(row)) {
+      this.handledTurns.add(row.id);
+      this.answered.set(normalized, now);
+      return;
+    }
     if (
       !kind &&
+      !isBackchannel(row.text) &&
       row.final &&
       normalized.split(" ").length >= 4 &&
       now - this.lastBackground >= 45000
@@ -416,6 +425,41 @@ export class CoachEngine extends EventEmitter {
       .filter((r) => r.final && !isOwnTurn(r, this.settings.userName))
       .at(-1);
     if (row) this.consider(row);
+  }
+  coverageReminder(row) {
+    const remaining = (this.prep?.myPoints || []).filter(
+      (p) => !this.covered.has(p.id),
+    );
+    if (!remaining.length) return false;
+    const now = this.clock();
+    this.cards.push({
+      id: randomUUID(),
+      lane: "fast",
+      origin: "auto",
+      kind: "heads_up",
+      lead: "Before we finish, I want to cover the remaining points.",
+      points: remaining
+        .slice(0, 3)
+        .map((p) => ({ label: "Cover", text: words(p.text, 12) })),
+      sourceIds: [],
+      sources: [],
+      covers: [],
+      status: "new",
+      trigger: this.triggerFor(row),
+      createdAt: now,
+      expiresAt: now + this.config.fastTTL,
+      otherTurn: this.otherTurns,
+      demo: this.source === "demo",
+      latency: {
+        turnEndedAt: row.receivedAt,
+        requestedAt: now,
+        firstTokenAt: now,
+        firstPaintAt: now,
+        doneAt: now,
+      },
+    });
+    this.cards = this.cards.slice(-300);
+    return true;
   }
   async run(
     lane = "fast",
@@ -566,6 +610,8 @@ export class CoachEngine extends EventEmitter {
         prep: this.prep,
         summary: this.summary,
         commitments: this.commitments,
+        covered: [...this.covered],
+        triggerKind,
       });
       const full = prompt.materialBudget.full;
       if (full)
@@ -591,7 +637,10 @@ export class CoachEngine extends EventEmitter {
           const now = this.clock();
           job.latency.firstTokenAt ??= now;
           job.latency.firstPaintAt ??= now;
-          const late = this.isLate(job, explicit);
+          job.late ??= this.isLate(job, explicit);
+          const late = job.late;
+          const previous = this.cards.find((c) => c.id === job.cardId);
+          if (previous?.status === "dismissed") return;
           const draft = {
             id: job.cardId,
             lane: presentationLane,
@@ -600,11 +649,15 @@ export class CoachEngine extends EventEmitter {
             question,
             trigger: job.trigger,
             kind: partial.kind || "say",
-            lead: partial.lead,
+            lead: words(
+              partial.lead,
+              partial.kind === "bigger_picture" ? 18 : 16,
+            ),
             points: [],
             sourceIds: [],
             sources: [],
-            status: "new",
+            status: previous?.status || "new",
+            pinned: previous?.pinned || false,
             createdAt: start,
             expiresAt: start + this.config[`${lane}TTL`],
             streaming: true,
@@ -638,6 +691,7 @@ export class CoachEngine extends EventEmitter {
         return;
       }
       const allowed = new Set(sources.map((s) => s.id));
+      const draftState = this.cards.find((c) => c.id === job.cardId);
       this.removeDraft(job);
       let shown = false;
       for (const card of validateAdvice(result)) {
@@ -653,7 +707,7 @@ export class CoachEngine extends EventEmitter {
         job.latency.firstTokenAt ??= now;
         job.latency.firstPaintAt ??= now;
         job.latency.doneAt = now;
-        const late = this.isLate(job, explicit);
+        const late = job.late ?? this.isLate(job, explicit);
         this.cards.push({
           ...card,
           id: job.cardId,
@@ -667,7 +721,8 @@ export class CoachEngine extends EventEmitter {
           latencyMs: now - start,
           latency: { ...job.latency },
           basedOnRevision: revision,
-          status: "new",
+          status: draftState?.status || "new",
+          pinned: draftState?.pinned || false,
           sources: sources.filter((s) => card.sourceIds.includes(s.id)),
           late,
           otherTurn: this.otherTurns,
@@ -861,6 +916,7 @@ export class CoachEngine extends EventEmitter {
       expiresAt: lifetimeMs === null ? null : this.clock() + lifetimeMs,
       condition,
       severity,
+      action: error?.action || "",
     });
     this.errors = this.errors.slice(-8);
     this.emitState();
@@ -898,7 +954,13 @@ export class CoachEngine extends EventEmitter {
         (error) => error.expiresAt === null || error.expiresAt > this.clock(),
       ),
       activity: [...this.activity],
-      pendingTrigger: this.inflight.fast?.trigger || null,
+      pendingTrigger:
+        (
+          this.inflight.fast ||
+          Object.values(this.inflight).find(
+            (job) => job.presentationLane === "fast",
+          )
+        )?.trigger || null,
       thinking: {
         fast:
           !!this.inflight.fast ||

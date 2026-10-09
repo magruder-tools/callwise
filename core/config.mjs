@@ -2,8 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolveCodexBin } from "./codex-path.mjs";
 import { parseEnv } from "node:util";
 
-export function readConfig(paths = []) {
-  const env = { ...process.env };
+export function readConfig(paths = [], { environment = process.env } = {}) {
+  const env = { ...environment };
   for (const path of paths) {
     if (!existsSync(path)) continue;
     for (const [key, value] of Object.entries(

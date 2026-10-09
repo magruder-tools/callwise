@@ -9,6 +9,10 @@
 - Independent recovery and preventive session rotation, microphone fallback, echo removal, adaptive voice detection, glossary/language hints and rolling memory.
 - Editable estimated cost and stable GitHub Release update offers.
 - DMG and ZIP packaging, persistent identity support and guarded release publishing; installation documentation consolidated.
+- Completion audit: cancel interrupted streamed drafts; keep pin/dismissal through streaming; retain timely answers when completion is slow; surface typed deeper answers immediately.
+- Reuse unchanged preparation, refresh it after every import, reject late preparation after Start, and show uncovered points on wrap-up cues. Backchannels remain silent when a background check is due.
+- Let the existing Fireflies transport recover with visible transcript gaps; retain its meeting ID for pause/resume and report exhausted recovery.
+- Packaged builds use encrypted credentials only. Custom read-only server settings are available in Advanced and encrypted; reusable materials retain connector provenance. Setup failures offer their specific fix, microphone permission has its own settings action, and first-run results show measured timings.
 
 The live fast-model benchmark, real Mac capture/full-screen behavior and permission continuity across signed upgrades still require a real account/device. Development preview builds remain ad-hoc until persistent signing secrets are configured.
 

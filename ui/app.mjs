@@ -72,6 +72,7 @@ function receive(s) {
     ui.prep = false;
   }
   if (s.status === "ended" && lastStatus !== "ended") ui.screen = "recap";
+  if (s.status === "running" && lastStatus !== "running") ui.notice = "";
   if (["running", "paused"].includes(s.status) && ui.screen !== "settings")
     ui.screen = "live";
   if (s.status === "idle" && lastStatus !== "idle" && ui.screen !== "settings")
@@ -163,6 +164,10 @@ function render() {
     "fireflies-id",
     "transcript-text",
     "speaker",
+    "mcpUrl",
+    "mcpToken",
+    "mcpSearchTool",
+    "mcpSearchArguments",
   ])
     if (document.getElementById(id)) preserved[id] = field(id);
   const view = panel ? "live" : ui.screen;
@@ -247,6 +252,7 @@ bridge.onNavigate?.((data) => {
   }
   if (data.screen) {
     ui.screen = data.screen;
+    if (data.tab) ui.tab = data.tab;
     render();
   } else navigate(data.direction);
 });
@@ -454,6 +460,19 @@ async function act(action, node) {
     case "test-ai":
       await testAI(false);
       break;
+    case "replace-key":
+      if (panel) await command("desktop.settings", { tab: "AI" });
+      else {
+        ui.screen = "settings";
+        ui.tab = "AI";
+        render();
+      }
+      break;
+    case "open-billing":
+      await command("desktop.openLink", {
+        url: "https://platform.openai.com/settings/organization/billing/overview",
+      });
+      break;
     case "mic-permission":
       await command("desktop.mic.permission");
       await listDevices();
@@ -466,6 +485,9 @@ async function act(action, node) {
       break;
     case "permissions-system":
       await command("desktop.permissions.open", { pane: "system" });
+      break;
+    case "permissions-mic":
+      await command("desktop.permissions.open", { pane: "mic" });
       break;
     case "welcome-next":
       ui.welcomeStep = Math.min(2, ui.welcomeStep + 1);
@@ -614,6 +636,14 @@ root.addEventListener("change", (e) => {
     void command("desktop.connections.save", {
       [node.dataset.model]: node.value,
     }).catch(() => {});
+  } else if (node.dataset.connection) {
+    void command("desktop.connections.save", {
+      [node.dataset.connection]: node.value,
+    })
+      .then(() => {
+        if (node.id === "mcpToken") node.value = "";
+      })
+      .catch(() => {});
   } else if (node.dataset.price) {
     void patch("prices", {
       ...state.get().preferences.prices,

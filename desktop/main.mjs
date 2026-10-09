@@ -100,10 +100,12 @@ async function boot() {
         strategyModel: "gpt-6-astra",
         transcriptionModel: "gpt-live-transcribe",
       }
-    : readConfig([
-        path.join(root, ".env.local"),
-        path.join(dataDir, ".env.local"),
-      ]);
+    : app.isPackaged
+      ? readConfig([], { environment: {} })
+      : readConfig([
+          path.join(root, ".env.local"),
+          path.join(dataDir, ".env.local"),
+        ]);
   let saved = {};
   let vaultWarning = "";
   if (!smoke)
@@ -478,6 +480,18 @@ async function boot() {
       return results;
     }
     if (name === "desktop.capture.retry") {
+      if (
+        controller.engine.status === "running" &&
+        controller.mode === "fireflies"
+      ) {
+        await controller.command("pause");
+        await controller.command("start", {
+          source: "fireflies",
+          consent: true,
+          backend: controller.strategyBackend,
+        });
+        return {};
+      }
       if (controller.engine.status !== "running" || controller.mode !== "audio")
         throw new Error("Start listening first.");
       if ([...controller.transcribers.values()].some((t) => t.stopped)) {
@@ -494,7 +508,10 @@ async function boot() {
       return {};
     }
     if (name === "desktop.settings") {
-      win.webContents.send("callwise:navigate", { screen: "settings" });
+      win.webContents.send("callwise:navigate", {
+        screen: "settings",
+        ...(payload.tab === "AI" ? { tab: "AI" } : {}),
+      });
       win.show();
       win.focus();
       return {};
@@ -794,9 +811,21 @@ async function boot() {
           /ready.*(?:call|my)/i.test(text) &&
           /callwise|call wise/i.test(text);
       readiness[check.channel] = passed;
+      const permission =
+        process.platform === "darwin"
+          ? systemPreferences.getMediaAccessStatus(
+              check.channel === "mic" ? "microphone" : "screen",
+            )
+          : "unknown";
       controller.desktopState.soundResult = passed
         ? `${check.channel === "mic" ? "Microphone" : "Call audio"} check passed.`
-        : `${check.channel === "mic" ? "Microphone" : "Call audio"} check didn't hear the phrase. Check permissions and output volume, then try again.`;
+        : ["denied", "restricted"].includes(permission)
+          ? `${check.channel === "mic" ? "Microphone" : "Call audio"} permission isn't granted. Open System Settings to allow it.`
+          : check.channel === "system" &&
+              !app.isPackaged &&
+              check.level <= 0.004
+            ? "This development run didn't hear call audio. Install the app and run the sound check there."
+            : `${check.channel === "mic" ? "Microphone" : "Call audio"} check didn't hear the phrase. ${check.channel === "mic" ? "Check the input device, then say the phrase again." : "Unmute the output and play the test phrase again."}`;
       saveReadiness(readinessFile, safeStorage, readiness);
       refreshDesktop();
       controller.engine.emitState();

@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { ContextRetrieval, shouldSearch } from "./retrieval.mjs";
 import { CoachEngine } from "./engine.mjs";
 import { publicConfig } from "./config.mjs";
@@ -193,6 +193,7 @@ export class CallController extends EventEmitter {
       )
     )
       throw new Error("Refresh apps and select only apps marked ready.");
+    const prepBefore = this.prepKey();
     const prior = JSON.stringify([
       this.engine.settings.project,
       this.engine.settings.contextBackend,
@@ -202,7 +203,6 @@ export class CallController extends EventEmitter {
     // Persist only explicit user edits, so demo fixtures cannot become defaults.
     this.rememberPreferences(payload);
     this.engine.configure(payload);
-    this.schedulePrep();
     const next = JSON.stringify([
       this.engine.settings.project,
       this.engine.settings.contextBackend,
@@ -216,6 +216,7 @@ export class CallController extends EventEmitter {
         if (doc.kind === "connector") this.engine.context.docs.delete(id);
     }
     this.setProviders();
+    if (prepBefore !== this.prepKey()) this.schedulePrep();
     this.engine.emitState();
     return this.snapshot();
   }
@@ -313,6 +314,7 @@ export class CallController extends EventEmitter {
         this.recap = null;
         this.sheetId = randomUUID();
         this.recapAt = null;
+        this.firefliesTranscriptId = "";
         this.usage = {
           fastInput: 0,
           fastOutput: 0,
@@ -410,6 +412,8 @@ export class CallController extends EventEmitter {
         });
         return this.snapshot();
       case "context.add":
+        if (this.engine.status === "running")
+          throw new Error("End the call before changing materials.");
         this.engine.context.add({
           title: payload.title,
           text: payload.text,
@@ -490,6 +494,9 @@ export class CallController extends EventEmitter {
         "Start a new session before switching between demo and live sources.",
       );
     this.mode = source;
+    if (source === "fireflies")
+      this.firefliesTranscriptId =
+        transcriptId || this.firefliesTranscriptId || "";
     this.strategyBackend = backend === "codex" ? "codex" : "openai";
     this.setProviders();
     this.stopInputs();
@@ -497,27 +504,52 @@ export class CallController extends EventEmitter {
     this.connecting = true;
     this.engine.emitState();
     try {
+      // A late preparation result must never change the stable call prompt.
+      this.cancelPreparation();
+      if (source !== "demo" && !this.engine.prep)
+        this.engine.prep = localPrep(
+          [...this.engine.context.docs.values()],
+          this.engine.settings.goal,
+        );
       if (source === "fireflies")
         await this.fireflies.connect({
-          transcriptId,
+          transcriptId: this.firefliesTranscriptId,
           onSegment: (row) => {
-            if (generation === this.generation) this.engine.ingest(row);
+            if (generation === this.generation) {
+              this.capture.system = "connected";
+              this.firefliesGap = false;
+              this.engine.ingest(row);
+            }
           },
           onStatus: (status) => {
             if (generation !== this.generation) return;
-            this.capture.system = status;
-            if (
-              ["connection-error", "disconnected"].includes(status) &&
-              this.engine.status === "running"
-            ) {
-              this.engine.error(
-                "Fireflies connection interrupted. Session paused to avoid missing transcript segments.",
-              );
-              this.stopInputs();
-              this.engine.pause();
+            // Let the existing Socket.IO recovery run instead of closing it.
+            const interrupted = ["connection-error", "disconnected"].includes(
+              status,
+            );
+            this.capture.system = interrupted ? "reconnecting" : status;
+            if (interrupted && !this.firefliesGap) {
+              this.firefliesGap = true;
+              this.engine.ingest({
+                id: `fireflies:gap:${randomUUID()}`,
+                speaker: "Transcription gap",
+                channel: "meeting",
+                gap: true,
+                text: "Fireflies disconnected. Words during this interruption may be missing.",
+              });
             }
+            if (status === "connected") this.firefliesGap = false;
             this.engine.emitState();
           },
+        });
+      if (source === "fireflies")
+        this.fireflies.socket?.io?.once("reconnect_failed", () => {
+          if (generation !== this.generation) return;
+          this.capture.system = "failed";
+          this.engine.error(
+            "Fireflies couldn't reconnect. Pause and resume to try again.",
+            { condition: "connection:fireflies", lifetimeMs: null },
+          );
         });
       if (source === "audio") {
         const { LiveTranscriber } = await import(
@@ -655,6 +687,7 @@ export class CallController extends EventEmitter {
     this.fireflies.close();
     this.pendingSearch?.abort();
     this.pendingSearch = null;
+    this.firefliesGap = false;
     this.capture = { mic: "off", system: "off" };
     this.captureInputs = { mic: "off", system: "off" };
     this.emit("stop-capture");
@@ -690,7 +723,7 @@ export class CallController extends EventEmitter {
       kind: "search",
       project: this.engine.settings.project,
     });
-    this.engine.emitState();
+    this.materialsChanged();
     return this.snapshot();
   }
   async importFireflies(id) {
@@ -712,7 +745,7 @@ export class CallController extends EventEmitter {
     if (generation !== this.generation)
       throw new Error("Import cancelled because the session changed.");
     this.engine.context.add({ ...doc, project: this.engine.settings.project });
-    this.engine.emitState();
+    this.materialsChanged();
     return this.snapshot();
   }
   addUsage(usage = {}, lane = "strategy") {
@@ -734,18 +767,52 @@ export class CallController extends EventEmitter {
     this.schedulePrep();
     this.engine.emitState();
   }
-  schedulePrep() {
+  prepKey() {
+    return createHash("sha256")
+      .update(
+        JSON.stringify({
+          type: this.engine.settings.mode,
+          line: this.engine.settings.goal,
+          profile: this.engine.settings.profile,
+          materials: [...this.engine.context.docs.values()],
+          history:
+            this.sheets.find((s) => s.id === this.sheetId)?.history || [],
+          model: this.config.strategyModel,
+        }),
+      )
+      .digest("hex");
+  }
+  cancelPreparation() {
     clearTimeout(this.prepTimer);
+    this.prepTimer = null;
     this.prepJob?.abort();
+    this.prepJob = null;
+    this.preparing = false;
+  }
+  schedulePrep() {
     if (this.demoStarted || this.engine.status === "running") return;
+    const signature = this.prepKey();
+    if (
+      signature === this.prepSignature &&
+      (this.engine.prep || this.prepJob || this.prepTimer)
+    )
+      return;
+    this.cancelPreparation();
+    this.prepSignature = signature;
+    this.engine.prep = null;
+    this.engine.covered.clear();
     this.prepTimer = setTimeout(() => void this.prepare(), 750);
     this.prepTimer.unref?.();
     if (this.sheets.some((s) => s.id === this.sheetId)) this.persistSheet();
   }
   async prepare() {
     clearTimeout(this.prepTimer);
+    this.prepTimer = null;
+    const signature = this.prepKey();
+    if (signature === this.prepSignature && this.engine.prep) return;
     this.prepJob?.abort();
     if (this.demoStarted || this.engine.status === "running") return;
+    this.prepSignature = signature;
     const job = new AbortController();
     this.prepJob = job;
     this.preparing = true;
@@ -777,6 +844,7 @@ export class CallController extends EventEmitter {
         });
         if (job.signal.aborted || this.prepJob !== job) return;
         this.engine.prep = validatePrep(result, materials);
+        this.engine.clearErrors({ condition: "prep", emit: false });
         this.addUsage(result.usage);
       }
     } catch (error) {
@@ -812,12 +880,13 @@ export class CallController extends EventEmitter {
       line: this.engine.settings.goal,
       materials: [...this.engine.context.docs.values()]
         .filter((d) => d.kind !== "recap")
-        .map(({ id, title, text, url, kind }) => ({
+        .map(({ id, title, text, url, kind, provenance, retrievedAt }) => ({
           id,
           title,
           text,
           url,
           kind,
+          ...(provenance ? { provenance, retrievedAt } : {}),
         })),
       history: previous?.history || [],
       updatedAt: Date.now(),
@@ -980,8 +1049,8 @@ export class CallController extends EventEmitter {
       });
   }
   cancelDocuments() {
-    clearTimeout(this.prepTimer);
-    this.prepJob?.abort();
+    this.cancelPreparation();
+    this.prepSignature = null;
     this.recapJob?.abort();
     this.summaryJob?.abort();
     this.preparing = false;

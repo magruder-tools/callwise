@@ -57,10 +57,22 @@ export function header(s, title = "Callwise") {
 }
 export const section = (title, content) =>
   `<section class="section"><h2>${escape(title)}</h2>${content}</section>`;
+const errorActions = {
+  "replace-key": "Replace key",
+  "open-billing": "Open billing",
+  "reset-models": "Use recommended models",
+};
+export const selfTestResults = (results) =>
+  results
+    .map(
+      (r) =>
+        `<p class="test-result ${r.ok ? "passed" : "failed"}"><strong>${escape(r.label)}</strong> ${escape(r.detail)}${Number.isFinite(r.elapsedMs) ? ` (${r.elapsedMs} ms)` : ""}${errorActions[r.action] ? button(r.action, errorActions[r.action]) : ""}</p>`,
+    )
+    .join("");
 export const errorBanner = (s) => {
   const e = s.errors.at(-1);
   return e
-    ? `<div class="banner error" role="alert"><span>${escape(e.message)}</span>${button("dismiss-error", "", { iconName: "close", title: "Dismiss notice", attrs: `data-id="${escape(e.id)}"` })}</div>`
+    ? `<div class="banner ${e.severity === "warning" ? "warning" : "error"}" role="alert"><span>${escape(e.message)}</span>${errorActions[e.action] ? button(e.action, errorActions[e.action]) : ""}${button("dismiss-error", "", { iconName: "close", title: "Dismiss notice", attrs: `data-id="${escape(e.id)}"` })}</div>`
     : "";
 };
 export const check = (id, label, checked = false, action = "") =>

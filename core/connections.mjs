@@ -46,6 +46,60 @@ export function sanitizeConnections(patch, previous = {}) {
     }
     next[name] = value;
   }
+  for (const [name, limit] of Object.entries({
+    mcpUrl: 2000,
+    mcpToken: 2048,
+    mcpSearchTool: 150,
+    mcpSearchArguments: 8000,
+  })) {
+    const candidate =
+      patch[name] === undefined || patch[name] === ""
+        ? previous[name]
+        : patch[name];
+    if (candidate === undefined || candidate === "") continue;
+    if (typeof candidate !== "string" || candidate.length > limit)
+      throw new Error("Enter valid custom server settings.");
+    const value = candidate.trim();
+    if (name === "mcpUrl") {
+      let url;
+      try {
+        url = new URL(value);
+      } catch {
+        throw new Error("Use an HTTPS or localhost server URL.");
+      }
+      if (
+        (url.protocol !== "https:" &&
+          !(
+            url.protocol === "http:" &&
+            ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
+          )) ||
+        url.username ||
+        url.password ||
+        url.hash
+      )
+        throw new Error(
+          "Use HTTPS or localhost, with credentials in the private token field.",
+        );
+    }
+    if (name === "mcpToken" && /\s/.test(value))
+      throw new Error("The private server token cannot contain spaces.");
+    if (
+      name === "mcpSearchTool" &&
+      !/^[a-zA-Z][a-zA-Z0-9_.:-]{0,149}$/.test(value)
+    )
+      throw new Error("Enter the server's exact read-only search tool name.");
+    if (name === "mcpSearchArguments") {
+      let parsed;
+      try {
+        parsed = JSON.parse(value);
+      } catch {
+        throw new Error("Search parameters must be valid JSON.");
+      }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+        throw new Error("Search parameters must be a JSON object.");
+    }
+    next[name] = value;
+  }
   return next;
 }
 export function readConnections(filename, storage) {

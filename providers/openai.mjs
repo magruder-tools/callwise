@@ -2,7 +2,7 @@ import { COACH_SCHEMA, SLOW_SCHEMA } from "../core/prompts.mjs";
 import { partialAdvice, sseEvents } from "./stream-json.mjs";
 import { providerError, httpProviderError } from "./errors.mjs";
 export function modelOptions(model, effort = "none") {
-  if (/^gpt-6-astra(?:-|$)/.test(model || ""))
+  if (/^gpt-(?:6-astra|6\.1-sol)(?:-|$)/.test(model || ""))
     return {
       reasoning: { effort: effort === "none" ? "low" : effort },
       verbosity: "low",

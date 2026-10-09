@@ -13,17 +13,23 @@ export function isOwnTurn(row, userName = "") {
     .filter(Boolean)
     .includes(name);
 }
+export function isBackchannel(text) {
+  return /^(yeah|yes|right|okay|ok|got it|mm hm|uh huh|thanks|thank you)(\s+(yeah|yes|right|okay|ok|got it|thanks|thank you))*$/.test(
+    normalize(text),
+  );
+}
 export function classifyTurn(row, mode = "general", userName = "") {
   if (!row || row.gap || isOwnTurn(row, userName)) return null;
   const text = String(row.text || "").trim(),
     normalized = normalize(text);
+  if (isBackchannel(text)) return null;
   if (
-    normalized.split(" ").length < 4 ||
-    /^(yeah|yes|right|okay|ok|got it|mm hm|uh huh|thanks|thank you)(\s+(yeah|yes|right|okay|ok|got it|thanks|thank you))*$/.test(
-      normalized,
+    /\b(anything else|we.re at time|wrap (up|this)|before we (go|finish))\b/i.test(
+      text,
     )
   )
-    return null;
+    return "wrap_up";
+  if (normalized.split(" ").length < 4) return null;
   if (
     /[?？]$/.test(text) ||
     /^(who|what|when|where|why|how|can|could|would|do|does|did|is|are|have|tell me|walk me through|talk about|describe|give me)\b/i.test(

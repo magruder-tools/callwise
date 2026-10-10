@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { app } from "electron";
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
@@ -142,6 +143,21 @@ export async function verifyPanel({ controller, panel, win, artifacts }) {
     Math.abs(panel.getBounds().height - earlier.height) <= 2,
     "transcript did not shrink",
   );
+  // Native synthetic input requires a key window, unlike renderer DOM clicks.
+  // showInactive() deliberately keeps the real call panel from stealing focus.
+  if (process.platform === "darwin") app.focus({ steal: true });
+  await wait(100);
+  win.hide();
+  panel.show();
+  panel.focus();
+  panel.webContents.focus();
+  await wait(100);
+  assert.equal(
+    panel.isFocused(),
+    true,
+    "Native input test needs a focused panel",
+  );
+  console.log("Smoke: panel focused for native input acceptance.");
   await js(
     `window.__stableCard=document.querySelector('.coach-card'); window.__animations=0; window.__opacities=[]; window.__stableCard.addEventListener('animationstart',()=>window.__animations++); window.__opacityTimer=setInterval(()=>window.__opacities.push(getComputedStyle(window.__stableCard).opacity),16); const q=document.querySelector('#question');q.value='Keep my selection';q.focus();q.select();`,
   );
@@ -190,7 +206,7 @@ export async function verifyPanel({ controller, panel, win, artifacts }) {
       });
       await wait(10);
     }
-    assert.equal(pins, 40, "native presses lost");
+    assert.equal(pins, 40, `native presses lost: ${pins}/40 registered`);
     const stability = await js(
       `(() => { clearInterval(window.__opacityTimer); return {same:window.__stableCard===document.querySelector('.coach-card'), animations:window.__animations, opaque:window.__opacities.every(x=>x==='1')}; })()`,
     );

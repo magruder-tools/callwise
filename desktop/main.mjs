@@ -47,9 +47,16 @@ import { importFiles, extractFile } from "./import-files.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const smoke = process.argv.includes("--smoke");
+function reportFailure(message) {
+  console.error(message);
+  if (smoke && process.env.GITHUB_ACTIONS === "true")
+    console.error(
+      `::error title=Callwise desktop smoke::${message.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A")}`,
+    );
+}
 if (smoke)
   setTimeout(() => {
-    console.error("Desktop smoke timed out after 60 seconds.");
+    reportFailure("Desktop smoke timed out after 60 seconds.");
     app.exit(1);
   }, 60_000).unref();
 let win, panel, controller, soundCheck, soundTimer;
@@ -1052,7 +1059,7 @@ else {
     }
   });
   void boot().catch((error) => {
-    console.error(`Callwise startup failed: ${error.message}`);
+    reportFailure(`Callwise startup failed: ${error.message}`);
     app.exit(1);
   });
 }

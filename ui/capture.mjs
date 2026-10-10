@@ -21,7 +21,14 @@ export class AudioCapture {
     this.inputDevice = inputDevice;
     navigator.mediaDevices.addEventListener("devicechange", this.deviceChange);
     try {
-      for (const channel of channels) await this.acquire(channel, generation);
+      for (const channel of channels) {
+        try {
+          await this.acquire(channel, generation);
+        } catch (error) {
+          error.channel = channel;
+          throw error;
+        }
+      }
     } catch (error) {
       if (generation === this.generation) {
         this.stop();
@@ -69,6 +76,7 @@ export class AudioCapture {
       nodes: [],
       generation,
       recovering: false,
+      heard: false,
     };
     this.release(channel);
     this.channels.set(channel, record);
@@ -102,7 +110,7 @@ export class AudioCapture {
     record.timer = setTimeout(() => {
       if (this.active && !heard)
         this.bridge.captureStatus(channel, "No signal yet — verify audio");
-    }, 12000);
+    }, 15000);
     processor.port.onmessage = ({ data }) => {
       if (
         !this.active ||
@@ -112,6 +120,7 @@ export class AudioCapture {
         return;
       if (voice.update(data.rms) && !heard) {
         heard = true;
+        record.heard = true;
         this.bridge.captureStatus(channel, "receiving");
       }
       this.onMeter(channel, data.rms);

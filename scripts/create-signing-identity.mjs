@@ -6,6 +6,7 @@ import {
   rmSync,
   existsSync,
   writeFileSync,
+  readFileSync,
 } from "node:fs";
 import path from "node:path";
 import { homedir } from "node:os";
@@ -85,6 +86,43 @@ try {
   rmSync(key, { force: true });
   rmSync(config, { force: true });
 }
+let published = false;
+try {
+  // gh performs authentication; secrets travel on stdin, never as command arguments or logs.
+  execFileSync(process.env.CALLWISE_GH_BIN || "gh", ["auth", "status"], {
+    stdio: "ignore",
+  });
+  execFileSync(
+    process.env.CALLWISE_GH_BIN || "gh",
+    [
+      "secret",
+      "set",
+      "CALLWISE_SIGNING_P12",
+      "--repo",
+      "magruder-tools/callwise",
+    ],
+    {
+      input: readFileSync(p12).toString("base64"),
+      stdio: ["pipe", "ignore", "ignore"],
+    },
+  );
+  execFileSync(
+    process.env.CALLWISE_GH_BIN || "gh",
+    [
+      "secret",
+      "set",
+      "CALLWISE_SIGNING_PASSWORD",
+      "--repo",
+      "magruder-tools/callwise",
+    ],
+    { input: password, stdio: ["pipe", "ignore", "ignore"] },
+  );
+  published = true;
+} catch {
+  /* Offline or unauthenticated: preserve the private identity for manual setup. */
+}
 console.log(
-  `Persistent certificate created at ${p12}. Store its base64 encoding in the CALLWISE_SIGNING_P12 Actions secret and the password in CALLWISE_SIGNING_PASSWORD. Keep a private backup and reuse this exact certificate for future builds.`,
+  published
+    ? `Signing identity saved at ${p12} and both Actions secrets configured. Next: tag the reviewed version and run Publish signed release for that tag. Keep a private backup and reuse this identity.`
+    : `Persistent certificate created at ${p12}. Automatic Actions setup was unavailable. Configure CALLWISE_SIGNING_P12 (base64 PKCS#12) and CALLWISE_SIGNING_PASSWORD in repository Actions secrets. Keep a private backup and reuse this exact certificate.`,
 );

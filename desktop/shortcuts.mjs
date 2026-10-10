@@ -26,11 +26,20 @@ export class SessionShortcuts {
     }
   }
   sync(status) {
-    const active = status === "running";
-    if (active === this.active) return;
+    if (this.syncing) return;
+    const active = ["running", "paused"].includes(status);
+    if (active === this.active && status === this.status) return;
+    if (this.active) this.close();
+    this.status = status;
     this.active = active; // Error reporting can trigger another state snapshot.
     if (!active) return this.close();
+    this.syncing = true;
     for (const [name, accelerator] of Object.entries(this.shortcuts)) {
+      if (
+        status === "paused" &&
+        !["help", "pause", "visibility"].includes(name)
+      )
+        continue;
       let registered = false;
       try {
         registered = this.globalShortcut.register(
@@ -45,6 +54,7 @@ export class SessionShortcuts {
         this.onSuccess(accelerator);
       } else this.onFailure(accelerator);
     }
+    this.syncing = false;
   }
   close() {
     for (const accelerator of this.registered)

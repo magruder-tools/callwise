@@ -8,8 +8,18 @@ contextBridge.exposeInMainWorld("callwise", {
     ipcRenderer.on("callwise:meters", listener);
     return () => ipcRenderer.removeListener("callwise:meters", listener);
   },
-  command: (name, payload = {}) =>
-    ipcRenderer.invoke("callwise:command", name, payload),
+  command: async (name, payload = {}) => {
+    try {
+      return await ipcRenderer.invoke("callwise:command", name, payload);
+    } catch (error) {
+      throw new Error(
+        error.message.replace(
+          /^Error invoking remote method '[^']+': (?:Error: )?/,
+          "",
+        ),
+      );
+    }
+  },
   audio: (channel, buffer) =>
     ipcRenderer.send("callwise:audio", channel, buffer),
   captureStatus: (channel, status) =>

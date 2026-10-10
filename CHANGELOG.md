@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased — Round 2
+
+- Preserve live controls, selections, transcript scroll and streamed card visibility; size the panel to its content and shrink after notices close.
+- Keep the previous answer during automatic checks; place one expiring notice below the status bar and clean desktop command errors.
+- Recognize sentence-level and short questions, join split turns, skip audio logistics, prioritize questions and tighten commitment candidates.
+- Recover failed starts, offer Cancel, warn about silent call audio, keep Start visible and restore setup after Practice.
+- Adopt preparation completed early in a call; allow 60 seconds and retry for prep and recap. Validate model-selected promises against final transcript evidence.
+- Show a streamed sample call with sources, coverage, bigger-picture advice and a recap with two promises and an email.
+- Improve panel typography and meters, use physical keys for shortcuts, retain pause/resume shortcuts while paused and send transcript deltas.
+- Configure signing secrets automatically when GitHub CLI is authenticated. Add native desktop acceptance checks and the six-minute interview replay.
+
 ## 0.4.0 — Complete call workflow
 
 - Turn-based proactive help, speculative questions, streamed short cards, direct help priority, bounded requests and per-card response timing.

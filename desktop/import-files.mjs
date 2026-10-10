@@ -88,6 +88,6 @@ export async function importFiles(filenames, context, project) {
   return {
     imported,
     skipped,
-    message: `${imported} added${skipped.length ? `, ${skipped.length} skipped: ${[...new Set(skipped.map((s) => s.reason))].join("; ")}` : ""}.`,
+    message: `${imported} added${skipped.length ? `, ${skipped.length} skipped: ${skipped.map((s) => `${s.name}: ${s.reason}`).join("; ")}` : ""}.`,
   };
 }

@@ -15,7 +15,7 @@ import { SessionShortcuts, SESSION_SHORTCUTS } from "../desktop/shortcuts.mjs";
 import { importFiles } from "../desktop/import-files.mjs";
 import { ContextStore } from "../core/context.mjs";
 
-test("shortcuts register only while running, report conflicts, and release on pause and end", () => {
+test("shortcuts keep help, pause and visibility while paused and release after the call", () => {
   const active = new Set(),
     failures = [],
     registered = [];
@@ -53,7 +53,9 @@ test("shortcuts register only while running, report conflicts, and release on pa
     registered.every((accelerator) => accelerator.startsWith("Control+Alt+")),
   );
   shortcuts.sync("paused");
-  assert.equal(active.size, 0);
+  assert.equal(active.size, 2);
+  assert.ok(active.has(SESSION_SHORTCUTS.pause));
+  assert.ok(active.has(SESSION_SHORTCUTS.visibility));
   shortcuts.sync("running");
   assert.equal(active.size, 4);
   shortcuts.sync("ended");
@@ -80,7 +82,7 @@ test("file import handles valid, oversized, missing, and empty files independent
     assert.equal(result.skipped.length, 3);
     assert.match(
       result.message,
-      /2 added, 3 skipped: too large.*could not read.*no extractable text/,
+      /2 added, 3 skipped:.*too large.*could not read.*no extractable text/,
     );
     assert.equal(context.list().length, 2);
     assert.equal(context.docs.values().next().value.project, "Test project");

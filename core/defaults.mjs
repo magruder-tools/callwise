@@ -1,6 +1,6 @@
 export const CALL_DEFAULTS = Object.freeze({
   mode: "general",
-  goal: "Have a useful conversation and agree on clear next steps.",
+  goal: "",
   project: "",
 });
 

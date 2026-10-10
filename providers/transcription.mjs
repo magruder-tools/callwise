@@ -24,7 +24,8 @@ export class LiveTranscriber {
     onAudioSent = () => {},
     diagnostics = () => {},
     WebSocketClass = WebSocket,
-    connectTimeoutMs = 12000,
+    connectTimeoutMs = 10000,
+    initialTimeoutMs = 10000,
     heartbeatMs = 15000,
     finalTimeoutMs = 45000,
     retryBaseMs = 500,
@@ -50,6 +51,7 @@ export class LiveTranscriber {
       diagnostics,
       WS: WebSocketClass,
       connectTimeoutMs,
+      initialTimeoutMs,
       heartbeatMs,
       finalTimeoutMs,
       retryBaseMs,
@@ -77,6 +79,7 @@ export class LiveTranscriber {
       diagnostics,
       WebSocketClass,
       connectTimeoutMs,
+      initialTimeoutMs,
       heartbeatMs,
       finalTimeoutMs,
       retryBaseMs,
@@ -121,6 +124,13 @@ export class LiveTranscriber {
         if (error) reject(error);
         else resolve();
       };
+      this.initialTimer = setTimeout(
+        () =>
+          this.fail(
+            new Error("Couldn't reach OpenAI. Check your internet connection."),
+          ),
+        this.initialTimeoutMs,
+      );
       this.openSocket();
     });
   }
@@ -208,6 +218,7 @@ export class LiveTranscriber {
     if (event.type === "session.updated") {
       if (this.ready) return;
       clearTimeout(this.connectTimer);
+      clearTimeout(this.initialTimer);
       clearTimeout(this.retryDeadline);
       this.ready = true;
       this.openedAt = this.clock();
@@ -574,7 +585,9 @@ export class LiveTranscriber {
         () =>
           this.fail(
             new Error(
-              `${this.channel === "mic" ? "Your voice" : "Call audio"} transcription couldn't reconnect within a minute. Check your internet, then pause and resume.`,
+              this.settle
+                ? "Couldn't reach OpenAI. Check your internet connection."
+                : `${this.channel === "mic" ? "Your voice" : "Call audio"} transcription couldn't reconnect within a minute. Check your internet, then pause and resume.`,
             ),
           ),
         this.retryWindowMs,
@@ -612,7 +625,13 @@ export class LiveTranscriber {
     this.close();
     this.onStatus?.("failed", error);
   }
+  updateHints({ keywords }) {
+    this.keywords = [...keywords];
+    this.rotationOptions.keywords = [...keywords];
+    this.delegate?.updateHints({ keywords });
+  }
   close() {
+    clearTimeout(this.initialTimer);
     this.stopped = true;
     this.standby?.close();
     this.delegate?.close();

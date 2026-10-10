@@ -1,6 +1,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import { setTimeout as wait } from "node:timers/promises";
 import { performance } from "node:perf_hooks";
+import { classifyTurn } from "../core/triggers.mjs";
 import { CoachEngine } from "../core/engine.mjs";
 import { OpenAIProvider } from "../providers/openai.mjs";
 const args = process.argv.slice(2),
@@ -28,7 +29,7 @@ for (const model of models) {
   const samples = [];
   for (const name of (
     await readdir(new URL("../fixtures/replay/", import.meta.url))
-  ).filter((n) => n.endsWith(".json"))) {
+  ).filter((n) => n.endsWith(".json") && n !== "trigger-lines.json")) {
     const fixture = JSON.parse(
       await readFile(
         new URL(`../fixtures/replay/${name}`, import.meta.url),
@@ -81,6 +82,7 @@ for (const model of models) {
         await wait(280);
       }
       engine.ingest({ ...turn, final: true, startMs: turn.at });
+      const sameTick = !turn.sameTick || engine.metrics.fastCalls > before;
       const until = performance.now() + (live ? 16000 : 1000);
       while (engine.inflight.fast && performance.now() < until) await wait(5);
       const card = engine.cards.find((c) => c.trigger?.segmentId === turn.id),
@@ -94,7 +96,7 @@ for (const model of models) {
         : turn.expected === "silent"
           ? !card
           : !!card;
-      if (!ok) failed = true;
+      if (!ok || !sameTick) failed = true;
       console.log(
         JSON.stringify({
           turn: turn.id,
@@ -104,7 +106,7 @@ for (const model of models) {
           delayMs: timing,
           kind: card?.kind,
           lead: card?.lead,
-          ok,
+          ok: ok && sameTick,
         }),
       );
     }
@@ -128,3 +130,29 @@ for (const model of models) {
   if (!live && (median === null || median >= 300)) failed = true;
 }
 if (failed) process.exitCode = 1;
+
+const lines = JSON.parse(
+  await readFile(
+    new URL("../fixtures/replay/trigger-lines.json", import.meta.url),
+    "utf8",
+  ),
+);
+let lineFailures = 0;
+for (const line of lines.needsHelp)
+  if (
+    !classifyTurn({ ...line, speaker: "Them", channel: "system" }, line.mode)
+  ) {
+    lineFailures++;
+    console.error("Missed requested help:", line.text);
+  }
+for (const line of lines.stayQuiet)
+  if (
+    classifyTurn({ ...line, speaker: "Them", channel: "system" }, line.mode)
+  ) {
+    lineFailures++;
+    console.error("Unexpected trigger:", line.text);
+  }
+console.log(
+  `Trigger examples: ${lines.needsHelp.length + lines.stayQuiet.length} checked, ${lineFailures} failed.`,
+);
+if (lineFailures) process.exitCode = 1;

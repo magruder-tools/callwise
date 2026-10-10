@@ -42,8 +42,8 @@ The browser sample runs on loopback only and never loads credentials. `npm start
 
 ## Persistent signing and releases
 
-Run `npm run signing:setup` once on your own Mac with a private `CALLWISE_SIGNING_PASSWORD` of at least 16 characters. The script stores a certificate outside the repository and refuses to overwrite an existing identity. Keep its private backup. Set repository Actions secrets **CALLWISE_SIGNING_P12** (base64 PKCS#12) and **CALLWISE_SIGNING_PASSWORD**. Reuse this exact certificate for every release.
+Run `npm run signing:setup` once on your own Mac with a private `CALLWISE_SIGNING_PASSWORD` of at least 16 characters. If GitHub CLI is signed in and has access to this repository, the script configures both Actions secrets automatically and prints the release step. Otherwise, it explains how to set **CALLWISE_SIGNING_P12** (base64 PKCS#12) and **CALLWISE_SIGNING_PASSWORD** manually. The certificate stays outside the repository; the script refuses to overwrite it. Keep a private backup and reuse this exact certificate for every release.
 
 After reviewing and tagging a version, run **Publish signed release** with the matching tag. It checks the app, imports the certificate into a temporary CI keychain, builds the DMG/ZIP, verifies the actual signed bundle and publishes durable GitHub Release downloads and checksums. It fails closed if no persistent identity is configured. Private keys are never committed or uploaded as artifacts. Test build N then N+1 on a real Mac to verify permission continuity.
 
-[Architecture](docs/ARCHITECTURE.md) · [Validation and outstanding device checks](docs/VALIDATION.md) · [Changelog](CHANGELOG.md)
+[Architecture](docs/ARCHITECTURE.md) · [Round 2 checks and Mac checklist](docs/ROUND_2_VALIDATION.md) · [Earlier validation](docs/VALIDATION.md) · [Changelog](CHANGELOG.md)

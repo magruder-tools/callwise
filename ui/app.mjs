@@ -1,3 +1,5 @@
+import { shortcutKey } from "./shortcuts.mjs";
+import { renderRegions } from "./render.mjs";
 import { state, viewState as ui } from "./state.mjs";
 import { ready } from "./views/ready.mjs";
 import { live } from "./views/live.mjs";
@@ -62,6 +64,20 @@ const clipboard = async (text) => {
   render();
 };
 function receive(s) {
+  if (s.transcriptDelta) {
+    const rows = new Map(
+      (state.get()?.sessionId === s.sessionId
+        ? state.get().transcript
+        : []
+      ).map((row) => [row.id, row]),
+    );
+    for (const id of s.transcriptRemoved || []) rows.delete(id);
+    for (const row of s.transcriptDelta) rows.set(row.id, row);
+    s = {
+      ...s,
+      transcript: [...rows.values()].sort((a, b) => a.startMs - b.startMs),
+    };
+  }
   if (ui.sessionId !== s.sessionId) {
     ui.sessionId = s.sessionId;
     ui.consent = false;
@@ -114,8 +130,20 @@ async function startCapture(s) {
     );
     await capture.start({ inputDevice: s.preferences.inputDevice });
   } catch (error) {
-    run("pause");
-    report(error);
+    const channel = error.channel || "system";
+    const denied = /permission|denied|notallowed/i.test(
+      error.name + " " + error.message,
+    );
+    run("capture.error", {
+      message: denied
+        ? channel === "mic"
+          ? "Callwise can't use the microphone."
+          : "Callwise can't hear the call audio."
+        : error.message,
+      channel,
+      action: denied ? `permissions-${channel}` : "settings",
+      pause: true,
+    });
   } finally {
     captureStarting = false;
   }
@@ -125,7 +153,7 @@ function meter(channel, rms) {
   const node =
     document.getElementById(`meter-${channel}`) ||
     document.getElementById("meter-test");
-  if (node) node.style.transform = `scaleX(${Math.min(1, rms * 12)})`;
+  if (node) node.style.setProperty("--level", Math.min(1, rms * 12));
   bridge.meter?.(channel, rms);
 }
 function clock() {
@@ -144,33 +172,8 @@ function clock() {
 function render() {
   const s = state.get();
   if (!s) return;
-  const active = document.activeElement,
-    focus = active?.id,
-    selection = active?.selectionStart,
-    value = active?.value,
-    scroll = root.scrollTop;
-  const openDetails = new Set(
-    [...root.querySelectorAll("details[data-detail-key][open]")].map(
-      (n) => n.dataset.detailKey,
-    ),
-  );
-  const preserved = {};
-  for (const id of [
-    "question",
-    "openai-key",
-    "fireflies-key",
-    "material-text",
-    "material-title",
-    "fireflies-id",
-    "transcript-text",
-    "speaker",
-    "mcpUrl",
-    "mcpToken",
-    "mcpSearchTool",
-    "mcpSearchArguments",
-  ])
-    if (document.getElementById(id)) preserved[id] = field(id);
   const view = panel ? "live" : ui.screen;
+  root.dataset.view = view;
   let content = { ready, live, recap, settings, welcome }[view](s, ui);
   const notices =
     (s.desktop && !s.desktop.packaged && !s.demoOnly
@@ -192,44 +195,49 @@ function render() {
     (ui.notice && !s.errors.some((e) => e.message === ui.notice)
       ? banner(ui.notice, "dismiss-notice", "Dismiss")
       : "");
-  root.innerHTML = notices + content;
-  for (const node of root.querySelectorAll("details[data-detail-key]"))
-    if (openDetails.has(node.dataset.detailKey)) node.open = true;
-  for (const [id, text] of Object.entries(preserved))
-    if (document.getElementById(id)) document.getElementById(id).value = text;
-  const replacement = focus && document.getElementById(focus);
-  if (replacement && (!document.hasFocus || document.hasFocus())) {
-    if (value !== undefined && active?.tagName !== "SELECT")
-      replacement.value = value;
-    replacement.focus({ preventScroll: true });
-    if (Number.isInteger(selection) && replacement.setSelectionRange)
-      try {
-        replacement.setSelectionRange(selection, selection);
-      } catch {}
-  }
-  root.scrollTop = scroll;
+  renderRegions(
+    root,
+    view === "live"
+      ? content
+      : `<div data-region="notices">${notices}</div><div data-region="${view}">${content}</div>`,
+  );
   clock();
   for (const [channel, rms] of Object.entries(latestMeters))
     meterLocal(channel, rms);
   fitPanel();
 }
+let lastPanelHeight = 0;
 function fitPanel() {
-  if (panel && bridge.desktop)
-    requestAnimationFrame(() =>
-      run("desktop.panel.fit", {
-        height: Math.min(
-          1000,
-          Math.max(320, document.getElementById("app").scrollHeight),
-        ),
-      }),
-    );
+  if (!panel || !bridge.desktop) return;
+  requestAnimationFrame(() => {
+    const wrapper = root.querySelector(".live-view");
+    if (!wrapper) return;
+    const cardRegion = wrapper.querySelector(".card-region");
+    const style = getComputedStyle(wrapper);
+    const children = [...wrapper.children];
+    const padding =
+      parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    const gaps = parseFloat(style.gap) * Math.max(0, children.length - 1);
+    const fixed =
+      padding +
+      gaps +
+      children
+        .filter((n) => n !== cardRegion)
+        .reduce((h, n) => h + n.getBoundingClientRect().height, 0);
+    const height = Math.max(232, Math.ceil(fixed + cardRegion.scrollHeight));
+    cardRegion.style.maxHeight = `${Math.max(0, innerHeight - fixed)}px`;
+    if (Math.abs(lastPanelHeight - height) <= 2) return;
+    lastPanelHeight = height;
+    run("desktop.panel.fit", { height });
+  });
 }
+window.addEventListener("resize", fitPanel);
 root.addEventListener("toggle", fitPanel, true);
 function meterLocal(channel, rms) {
   const node =
     document.getElementById(`meter-${channel}`) ||
     document.getElementById("meter-test");
-  if (node) node.style.transform = `scaleX(${Math.min(1, rms * 12)})`;
+  if (node) node.style.setProperty("--level", Math.min(1, rms * 12));
 }
 state.subscribe(() => {
   if (renderQueued) return;
@@ -352,6 +360,15 @@ async function act(action, node) {
         consent: true,
       });
       break;
+    case "cancel-start":
+      await command("pause");
+      break;
+    case "prep-retry":
+      await command("prep.refresh");
+      break;
+    case "recap-retry":
+      await command("recap.retry");
+      break;
     case "retry-audio":
       await command("desktop.capture.retry");
       break;
@@ -362,8 +379,8 @@ async function act(action, node) {
       await command("end");
       break;
     case "practice":
-      await command("new", { clearContext: true });
-      await command("start", { source: "demo" });
+      await flushEdits();
+      await command("practice");
       break;
     case "new":
       await command("new", { clearContext: true });
@@ -746,8 +763,9 @@ window.addEventListener("keydown", (e) => {
       !["Control", "Alt", "Shift"].includes(e.key)
     ) {
       e.preventDefault();
-      const key = e.code === "Space" ? "Space" : e.key.toUpperCase(),
+      const key = shortcutKey(e.code),
         action = recordingShortcut;
+      if (!key) return;
       recordingShortcut = null;
       void patch("hotkeys", {
         ...state.get().preferences.hotkeys,
@@ -763,7 +781,7 @@ window.addEventListener("keydown", (e) => {
   if (
     e.ctrlKey &&
     e.altKey &&
-    e.key.toLowerCase() === "p" &&
+    e.code === "KeyP" &&
     state.get()?.status === "paused"
   ) {
     e.preventDefault();

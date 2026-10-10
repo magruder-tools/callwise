@@ -51,6 +51,23 @@ try {
     await page.locator("main").waitFor();
     await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(200);
+    if (surface) {
+      await page.evaluate(
+        () => (document.querySelector(".card-region").style.maxHeight = "none"),
+      );
+      height = await page.evaluate(() => {
+        const view = document.querySelector(".live-view"),
+          region = document.querySelector(".card-region");
+        return Math.max(
+          232,
+          Math.ceil(
+            view.scrollHeight +
+              Math.max(0, region.scrollHeight - region.clientHeight),
+          ),
+        );
+      });
+      await page.setViewportSize({ width, height });
+    }
     if (name === "live-640") {
       await page.locator(".source summary").click();
       await page.evaluate(async () => {
@@ -64,6 +81,12 @@ try {
         "Source excerpts must stay open across transcript updates",
       );
     }
+    if (surface) {
+      height = await page.evaluate(() =>
+        Math.max(232, document.querySelector(".live-view").scrollHeight),
+      );
+      await page.setViewportSize({ width, height });
+    }
     await page.screenshot({ path: `${artifacts}/${name}.png` });
     const layout = await page.evaluate(() => {
       const visible = [...document.querySelectorAll("main *")].filter(
@@ -73,7 +96,7 @@ try {
       );
       const essential = [
         ...document.querySelectorAll(
-          ".lead,.points li,#start,.ask-row,.live-status",
+          ".lead,.points li,#start,#consent,.ask-row,.live-status",
         ),
       ];
       return {
@@ -106,6 +129,27 @@ try {
     await page.close();
   }
   await screen("ready", 720, 560, initial);
+  const crowded = {
+    ...initial,
+    prep: {
+      people: [],
+      facts: [],
+      likelyQuestions: [],
+      myPoints: [{ id: "one", text: "Use the real example" }],
+      watchFor: [],
+      glossary: [],
+    },
+    context: Array.from({ length: 8 }, (_, i) => ({
+      id: `material-${i}`,
+      title: `Long evidence file ${i + 1} with an explanatory filename.pdf`,
+    })),
+    sheets: Array.from({ length: 5 }, (_, i) => ({
+      id: `sheet-${i}`,
+      name: `Recent call ${i + 1}`,
+    })),
+  };
+  await screen("ready-crowded-720", 720, 560, crowded);
+  await screen("ready-crowded-580", 580, 480, crowded);
   const live = {
     ...initial,
     status: "running",
@@ -173,6 +217,68 @@ try {
       interview: [],
     },
   });
+  const { readFile } = await import("node:fs/promises");
+  const interviewFixture = JSON.parse(
+    await readFile(
+      new URL("../fixtures/replay/interview-long.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  const interview = new CallController({
+    config: { openaiKey: "TEST_ONLY" },
+    documentProvider: {
+      generate: async ({ schema }) =>
+        schema.properties.email
+          ? {
+              whatHappened: [
+                "Discussed the account rebuild, attribution, and the first ninety days.",
+                "Aligned on reliable tracking and a reporting owner.",
+              ],
+              whoOwesWhat: [
+                {
+                  owner: "Them",
+                  what: "Talk to the team and reply",
+                  due: "By Friday",
+                  segmentIds: ["long-350"],
+                },
+                {
+                  owner: "You",
+                  what: "Send the case study",
+                  due: "By tomorrow",
+                  segmentIds: ["long-363"],
+                },
+              ],
+              stillOpen: ["Confirm whether to introduce the ops lead."],
+              email:
+                "Thanks for the conversation. I'll send the case study by tomorrow. I look forward to hearing from your team by Friday.",
+              interview: [],
+            }
+          : {
+              people: [],
+              facts: [],
+              likelyQuestions: [],
+              myPoints: [],
+              watchFor: [],
+              glossary: [],
+            },
+    },
+  });
+  try {
+    await interview.command("configure", {
+      mode: "interview",
+      goal: interviewFixture.line,
+    });
+    await interview.command("start", { source: "manual", consent: true });
+    interview.engine.settings.quiet = true;
+    for (const row of interviewFixture.turns)
+      interview.engine.ingest({ ...row, startMs: row.at, final: true });
+    await interview.command("end");
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(interview.recap.whoOwesWhat.length, 2);
+    await screen("recap-interview-long", 720, 560, interview.snapshot());
+  } finally {
+    interview.close();
+  }
   assert.deepEqual(failures, []);
   console.log("Browser layout checks passed with synthetic data only.");
 } finally {

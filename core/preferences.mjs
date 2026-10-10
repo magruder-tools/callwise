@@ -30,6 +30,11 @@ export function sanitizePreferences(patch, previous = {}) {
     if (typeof merged[key] !== "string")
       throw new Error("Preferences must contain valid text.");
     next[key] = merged[key].slice(0, limit);
+    if (
+      key === "goal" &&
+      next[key] === "Have a useful conversation and agree on clear next steps."
+    )
+      next[key] = "";
   }
   for (const key of ["quiet", "autoSearch", "contextConsent", "compact"]) {
     if (merged[key] === undefined) continue;
@@ -99,14 +104,13 @@ export function sanitizePreferences(patch, previous = {}) {
       if (
         !/^[-0-9]{1,30}$/.test(id) ||
         !b ||
-        ![b.x, b.y, b.width, b.height].every(Number.isFinite)
+        ![b.x, b.y, b.width].every(Number.isFinite)
       )
         continue;
       next.panelBounds[id] = {
         x: Math.round(b.x),
         y: Math.round(b.y),
         width: Math.max(340, Math.min(640, Math.round(b.width))),
-        height: Math.max(320, Math.min(1000, Math.round(b.height))),
       };
     }
   }

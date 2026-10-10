@@ -10,17 +10,18 @@ export class SuggestionFocus {
     for (const lane of ["fast", "strategy"]) {
       const updated = cards.find((c) => c.id === this.current[lane]?.id);
       if (updated) this.current[lane] = updated;
+      else if (this.current[lane]) this.current[lane] = null;
       if (this.current[lane]?.status === "dismissed") this.current[lane] = null;
       const pending = this.pending(lane);
       const explicit = pending
-        .filter((card) => ["asked", "hotkey"].includes(card.origin))
+        .filter((card) => ["asked", "hotkey", "nudge"].includes(card.origin))
         .at(-1);
       if (explicit) {
         this.current[lane] = explicit;
         for (const card of pending) this.seen[lane].add(card.id);
       } else if (
         !this.current[lane] ||
-        this.current[lane].status !== "accepted"
+        (this.current[lane].status !== "accepted" && !this.current[lane].pinned)
       )
         this.advance(lane);
     }

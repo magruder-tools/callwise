@@ -74,7 +74,8 @@ export function localPrep(materials, line) {
       sourceIds: [d.id],
     })),
     likelyQuestions: [],
-    myPoints: line.trim() ? [{ id: "point-1", text: line }] : [],
+    myPoints: [],
+    fallback: true,
     watchFor: [],
     glossary: [],
   };
@@ -84,7 +85,7 @@ export function localRecap(rows, commitments, type) {
   return {
     whatHappened: finals.slice(-5).map((r) => `${r.speaker}: ${r.text}`),
     whoOwesWhat: commitments.map((c) => ({
-      owner: c.owner,
+      owner: c.owner === "Other" ? "Them" : c.owner,
       what: c.what,
       due: c.due,
       segmentIds: [c.segmentId],
@@ -92,19 +93,7 @@ export function localRecap(rows, commitments, type) {
     stillOpen: rows.some((r) => r.gap)
       ? ["Some audio was missed. Check details with the participants."]
       : [],
-    email: finals.length
-      ? [
-          type === "interview"
-            ? "Thanks for taking the time to speak with me."
-            : "Thanks for the conversation.",
-          "",
-          "Here are the recorded notes from our discussion:",
-          "",
-          ...finals.slice(-5).map((r) => `- ${r.speaker}: “${r.text}”`),
-          "",
-          "Please let me know if I missed anything.",
-        ].join("\n")
-      : "",
+    email: "",
     interview:
       type === "interview"
         ? finals
@@ -123,23 +112,25 @@ export function validateRecap(result, rows, commitments) {
   const allowed = new Set(
     rows.filter((r) => r.final && !r.gap).map((r) => r.id),
   );
-  const safe = (result.whoOwesWhat || []).filter(
-    (c) =>
-      c.segmentIds?.length &&
-      c.segmentIds.every((id) => allowed.has(id)) &&
-      c.segmentIds.some((id) => commitments.some((k) => k.segmentId === id)),
-  );
-  // The recorded verbatim promise is authoritative, even if the model paraphrases it incorrectly.
-  const owes = commitments.map((c) => {
-    const candidate = safe.find((x) => x.segmentIds.includes(c.segmentId));
-    return {
-      owner: c.owner,
-      what: c.what,
-      due: c.due,
-      segmentIds: [c.segmentId],
-      ...(candidate ? { summary: candidate.what } : {}),
-    };
-  });
+  const owes = (result.whoOwesWhat || [])
+    .filter(
+      (c) =>
+        typeof c.owner === "string" &&
+        typeof c.what === "string" &&
+        typeof c.due === "string" &&
+        c.segmentIds?.length &&
+        c.segmentIds.every((id) => allowed.has(id)),
+    )
+    .slice(0, 15)
+    .map((c) => ({
+      owner: c.owner === "Other" ? "Them" : c.owner.slice(0, 100),
+      what: c.what.slice(0, 1000),
+      due: c.due.slice(0, 200),
+      segmentIds: c.segmentIds,
+      evidence: rows
+        .filter((r) => c.segmentIds.includes(r.id))
+        .map((r) => ({ id: r.id, speaker: r.speaker, text: r.text })),
+    }));
   return {
     whatHappened: (result.whatHappened || [])
       .filter((s) => typeof s === "string")
@@ -162,7 +153,7 @@ export function recapMarkdown(recap) {
   return [
     "# Call recap",
     "",
-    "## What happened",
+    recap.fallback ? "## Last lines of the call" : "## What happened",
     ...(recap.whatHappened || []).map((s) => `- ${s}`),
     "",
     "## Who owes what",
@@ -194,7 +185,14 @@ export function prepPrompt({ materials, line, type, profile, history = [] }) {
     input: JSON.stringify({
       profile,
       line,
-      materials: materials.map(({ id, title, text }) => ({ id, title, text })),
+      materials: materials.slice(0, 40).map(({ id, title, text }) => ({
+        id,
+        title,
+        text: text.slice(
+          0,
+          Math.max(1000, Math.floor(60000 / Math.max(1, materials.length))),
+        ),
+      })),
       history,
     }),
   };

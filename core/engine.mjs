@@ -1,13 +1,16 @@
 import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
 import { ContextStore, terms } from "./context.mjs";
-import { makePrompt, validateAdvice, words } from "./prompts.mjs";
+import { makePrompt, validateAdvice, words, concise } from "./prompts.mjs";
 import { CALL_DEFAULTS } from "./defaults.mjs";
 import {
   classifyTurn,
+  commitmentCue,
+  isWrapUp,
   completePartial,
   isOwnTurn,
   isBackchannel,
+  isLogisticsTurn,
   normalize,
   editRatio,
   consumeToken,
@@ -49,6 +52,7 @@ export class CoachEngine extends EventEmitter {
   }
   reset() {
     this.cancel();
+    clearTimeout(this.errorExpiryTimer);
     this.epoch++;
     this.status = "idle";
     this.sessionId = randomUUID();
@@ -65,6 +69,10 @@ export class CoachEngine extends EventEmitter {
     this.autoQueue = [];
     this.lastBackground = this.clock();
     this.lastSlow = -Infinity;
+    this.slowTurns = 0;
+    this.slowActiveAt = 0;
+    this.slowEligibleTurns = 0;
+    this.theirTurn = null;
     this.userSpeechAt = null;
     this.latencies = [];
     this.prep = null;
@@ -102,7 +110,7 @@ export class CoachEngine extends EventEmitter {
   }
   configure(patch) {
     if (this.status === "running")
-      throw new Error("Pause the session before changing its configuration.");
+      throw new Error("Pause the call before changing its settings.");
     if (
       patch.contextBackend !== undefined &&
       !["off", "codex", "mcp"].includes(patch.contextBackend)
@@ -137,14 +145,14 @@ export class CoachEngine extends EventEmitter {
   start({ consent = false, source = "demo" } = {}) {
     if (this.status === "running") return;
     if (this.status === "ended")
-      throw new Error("Create a new session to start again.");
+      throw new Error("Start another call to start again.");
     if (source !== "demo" && !consent)
       throw new Error(
         "Confirm that AI assistance and transcription are permitted before starting.",
       );
     if (this.activeTimeMs() >= this.config.maxSessionMs)
       throw new Error(
-        "Session time limit reached. Export and create a new session.",
+        "Call time limit reached. Export and start another call.",
       );
     this.source = source;
     this.status = "running";
@@ -156,9 +164,7 @@ export class CoachEngine extends EventEmitter {
     this.deadlineTimer = setTimeout(
       () => {
         this.end();
-        this.error(
-          "Session time limit reached. Export and create a new session.",
-        );
+        this.error("Call time limit reached. Export and start another call.");
       },
       Math.max(1, this.config.maxSessionMs - this.activeTimeMs()),
     );
@@ -219,9 +225,7 @@ export class CoachEngine extends EventEmitter {
     if (this.status !== "running") return false;
     if (this.activeTimeMs() >= this.config.maxSessionMs) {
       this.end();
-      this.error(
-        "Session time limit reached. Start a new session to continue.",
-      );
+      this.error("Call time limit reached. Start another call to continue.");
       return false;
     }
     if (this.activeTimeMs() >= this.config.warnSessionMs) this.warnDuration();
@@ -236,7 +240,7 @@ export class CoachEngine extends EventEmitter {
       throw new Error("Transcript segment is too long.");
     if (this.transcript.size >= 5000 && !this.transcript.has(segment.id)) {
       this.pause();
-      this.error("Transcript limit reached. Export and start a new session.");
+      this.error("Transcript limit reached. Export and start another call.");
       return false;
     }
     const prior = this.transcript.get(segment.id);
@@ -263,7 +267,11 @@ export class CoachEngine extends EventEmitter {
     // On speakers, retain the system transcript and remove the microphone echo.
     for (const other of this.transcript.values()) {
       if (echoMatch(row, other)) {
-        if (row.channel === "mic") return false;
+        if (row.channel === "mic") {
+          this.transcript.delete(row.id);
+          this.emitState();
+          return false;
+        }
         this.transcript.delete(other.id);
         this.commitments = this.commitments.filter(
           (c) => c.segmentId !== other.id,
@@ -277,7 +285,33 @@ export class CoachEngine extends EventEmitter {
       this.revision++;
       this.trackStructure(row);
       if (!own && !row.gap && !prior?.final) this.otherTurns++;
-      if (!own) this.userSpeechAt = null;
+      if (!own) {
+        this.userSpeechAt = null;
+        if (
+          !row.gap &&
+          normalize(row.text).split(" ").length >= 4 &&
+          !isBackchannel(row.text)
+        )
+          this.slowEligibleTurns++;
+        const active = this.activeTimeMs();
+        if (
+          active >= 240000 &&
+          active - (this.slowActiveAt || 0) >= 240000 &&
+          this.slowEligibleTurns - this.slowTurns >= 6 &&
+          !this.inflight.strategy &&
+          !this.settings.quiet
+        ) {
+          this.slowActiveAt = active;
+          this.slowTurns = this.slowEligibleTurns;
+          void this.run("strategy", "", {
+            trigger: this.triggerFor(row),
+            triggerKind: "cadence",
+          }).catch((error) => this.error(error));
+        }
+      } else {
+        clearTimeout(this.timers.background);
+        this.theirTurn = null;
+      }
       if (this.speculation?.row.id === row.id) {
         clearTimeout(this.timers.partial);
         delete this.timers.partial;
@@ -335,6 +369,7 @@ export class CoachEngine extends EventEmitter {
           segmentId: row.id,
           endedAtMs: row.endMs ?? row.startMs,
           turnEndedAt: row.receivedAt,
+          kind: classifyTurn(row, this.settings.mode, this.settings.userName),
         }
       : null;
   }
@@ -349,11 +384,7 @@ export class CoachEngine extends EventEmitter {
       )
         this.covered.add(point.id);
     }
-    if (
-      /\b(i.ll|i will|we.ll|we will|i can send|let.s|by (monday|tuesday|wednesday|thursday|friday))\b/i.test(
-        row.text,
-      )
-    ) {
+    if (commitmentCue(row.text)) {
       if (!this.commitments.some((c) => c.segmentId === row.id))
         this.commitments.push({
           owner: row.speaker,
@@ -372,6 +403,28 @@ export class CoachEngine extends EventEmitter {
       this.handledTurns.has(row.id)
     )
       return;
+    if (!restart) {
+      if (
+        !this.theirTurn ||
+        this.theirTurn.speaker !== row.speaker ||
+        row.startMs -
+          (this.theirTurn.rows.at(-1)?.endMs ??
+            this.theirTurn.rows.at(-1)?.startMs ??
+            row.startMs) >
+          1500
+      )
+        this.theirTurn = {
+          rows: [],
+          at: row.receivedAt,
+          speaker: row.speaker,
+          requested: false,
+        };
+      const index = this.theirTurn.rows.findIndex((r) => r.id === row.id);
+      if (index < 0) this.theirTurn.rows.push(row);
+      else this.theirTurn.rows[index] = row;
+      this.theirTurn.at = row.receivedAt;
+      row = { ...row, text: this.theirTurn.rows.map((r) => r.text).join(" ") };
+    }
     const normalized = normalize(row.text),
       now = this.clock();
     for (const [text, at] of this.answered)
@@ -383,35 +436,60 @@ export class CoachEngine extends EventEmitter {
       this.answered.set(normalized, now);
       return;
     }
-    if (
-      !kind &&
-      !isBackchannel(row.text) &&
-      row.final &&
-      normalized.split(" ").length >= 4 &&
-      now - this.lastBackground >= 45000
-    ) {
-      kind = "background";
-      this.lastBackground = now;
+    clearTimeout(this.timers.background);
+    if (!kind) {
+      if (
+        row.final &&
+        !isBackchannel(row.text) &&
+        !isLogisticsTurn(row.text) &&
+        normalized.split(" ").length >= 8
+      ) {
+        const turn = this.theirTurn;
+        this.timers.background = setTimeout(() => {
+          delete this.timers.background;
+          if (
+            this.status !== "running" ||
+            turn?.requested ||
+            this.clock() - this.lastBackground < 20000
+          )
+            return;
+          this.lastBackground = this.clock();
+          if (turn) turn.requested = true;
+          void this.run("fast", "", {
+            trigger: this.triggerFor(row),
+            turnId: row.id,
+            triggerKind: "background",
+          }).catch((error) => this.error(error));
+        }, 1200);
+        this.timers.background.unref?.();
+      }
+      return;
     }
-    if (!kind) return;
-    if (!restart) {
+    if (this.theirTurn?.requested && !restart) return;
+    if (kind === "question" && isWrapUp(row.text)) kind = "wrap_up";
+    if (!restart && !["question", "wrap_up"].includes(kind)) {
       const rate = consumeToken(this.rate, now);
       this.rate = rate.state;
       if (!rate.allowed) return;
     }
+    if (this.theirTurn) this.theirTurn.requested = true;
     this.handledTurns.add(row.id);
     const opts = {
       trigger: this.triggerFor(row),
       turnId: row.id,
       triggerKind: kind,
     };
+    if (
+      ["question", "wrap_up"].includes(kind) &&
+      this.inflight.fast?.triggerKind === "background"
+    ) {
+      this.inflight.fast.controller.abort();
+      this.removeDraft(this.inflight.fast);
+      delete this.inflight.fast;
+    }
     if (this.inflight.fast && !this.inflight.fast.controller.signal.aborted)
       this.autoQueue.push(opts);
     else void this.run("fast", "", opts).catch((error) => this.error(error));
-    if (kind === "decision" && now - this.lastSlow >= 120000) {
-      this.lastSlow = now;
-      void this.run("strategy", "", opts).catch((error) => this.error(error));
-    }
   }
   schedule(lane) {
     // Retained for alternate providers and tests; proactive timing lives in consider().
@@ -476,11 +554,11 @@ export class CoachEngine extends EventEmitter {
     if (!["fast", "strategy"].includes(lane))
       throw new Error("Unknown coaching lane.");
     if (this.status !== "running")
-      throw new Error("Start or resume the session first.");
+      throw new Error("Start or resume the call first.");
     if (this.activeTimeMs() >= this.config.maxSessionMs) {
       this.end();
       throw new Error(
-        "Session time limit reached. Export and create a new session.",
+        "Call time limit reached. Export and start another call.",
       );
     }
     if (explicit) {
@@ -500,16 +578,14 @@ export class CoachEngine extends EventEmitter {
       return { busy: true };
     const metric = `${lane}Calls`;
     if (!this.providers[lane]) {
-      if (explicit) this.fallback(question, origin, presentationLane);
       this.error(`${lane} provider is not configured.`);
       return;
     }
     if (
-      !explicit &&
       this.metrics[metric] >=
-        this.config[lane === "fast" ? "maxFast" : "maxStrategy"]
+      this.config[lane === "fast" ? "maxFast" : "maxStrategy"]
     ) {
-      this.error(`${lane} call limit reached for this session.`);
+      this.error(`${lane} call limit reached for this call.`);
       return;
     }
     const rows = [...this.transcript.values()]
@@ -519,7 +595,7 @@ export class CoachEngine extends EventEmitter {
     trigger = explicit
       ? {
           speaker: "You",
-          text: question,
+          text: origin === "nudge" ? "You asked for help" : question,
           segmentId: "",
           endedAtMs: this.activeTimeMs(),
           turnEndedAt: this.clock(),
@@ -534,6 +610,7 @@ export class CoachEngine extends EventEmitter {
       presentationLane,
       origin,
       trigger,
+      triggerKind,
       turnId,
       cardId: randomUUID(),
       latency: {
@@ -649,10 +726,7 @@ export class CoachEngine extends EventEmitter {
             question,
             trigger: job.trigger,
             kind: partial.kind || "say",
-            lead: words(
-              partial.lead,
-              partial.kind === "bigger_picture" ? 18 : 16,
-            ),
+            lead: concise(partial.lead, 24),
             points: [],
             sourceIds: [],
             sources: [],
@@ -751,7 +825,6 @@ export class CoachEngine extends EventEmitter {
     } catch (error) {
       this.removeDraft(job);
       if (epoch === this.epoch && !job.controller.signal.aborted) {
-        if (explicit) this.fallback(question, origin, presentationLane, job);
         this.error(error, { condition: `provider:${lane}` });
       }
     } finally {
@@ -900,6 +973,7 @@ export class CoachEngine extends EventEmitter {
   ) {
     const safe = String(error?.message || error).slice(0, 400);
     this.diagnostics("provider.error", {
+      condition,
       status: error?.status,
       code: error?.code,
       type: error?.type,
@@ -954,6 +1028,13 @@ export class CoachEngine extends EventEmitter {
         (error) => error.expiresAt === null || error.expiresAt > this.clock(),
       ),
       activity: [...this.activity],
+      pendingOrigin:
+        (
+          this.inflight.fast ||
+          Object.values(this.inflight).find(
+            (job) => job.presentationLane === "fast",
+          )
+        )?.origin || "auto",
       pendingTrigger:
         (
           this.inflight.fast ||
@@ -973,6 +1054,17 @@ export class CoachEngine extends EventEmitter {
     };
   }
   emitState() {
+    clearTimeout(this.errorExpiryTimer);
+    const expiry = this.errors
+      .filter((e) => e.expiresAt !== null && e.expiresAt > this.clock())
+      .map((e) => e.expiresAt);
+    if (expiry.length) {
+      this.errorExpiryTimer = setTimeout(
+        () => this.emitState(),
+        Math.max(1, Math.min(...expiry) - this.clock()),
+      );
+      this.errorExpiryTimer.unref?.();
+    }
     if (this.diagnosticStatus !== this.status) {
       this.diagnosticStatus = this.status;
       this.diagnostics?.("session.state", { state: this.status });

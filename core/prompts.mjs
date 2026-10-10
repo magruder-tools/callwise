@@ -152,6 +152,14 @@ Never invent experience, numbers, names or commitments. Facts require exact sour
     },
   };
 }
+export function concise(text, limit = 24) {
+  const full = String(text || "").trim();
+  if (full.split(/\s+/).length <= limit) return full;
+  const prefix = words(full, limit);
+  const matches = [...prefix.matchAll(/[.!?;,:](?=\s|$)/g)];
+  const end = matches.at(-1)?.index;
+  return end !== undefined ? prefix.slice(0, end + 1) : prefix + "…";
+}
 export function validateAdvice(result) {
   if (typeof result?.speak === "boolean") {
     if (!result.speak) return [];
@@ -162,10 +170,10 @@ export function validateAdvice(result) {
     )
       ? result.kind
       : "say";
-    const lead = words(result.lead, kind === "bigger_picture" ? 18 : 16);
+    const lead = concise(result.lead, 24);
     const points = (Array.isArray(result.points) ? result.points : [])
       .slice(0, 3)
-      .map((p) => ({ label: words(p.label, 2), text: words(p.text, 12) }));
+      .map((p) => ({ label: words(p.label, 2), text: concise(p.text, 16) }));
     return [
       {
         kind,
@@ -197,7 +205,7 @@ export function validateAdvice(result) {
     return {
       ...c,
       legacyShape: true,
-      lead: words(c.say || c.body, 16),
+      lead: concise(c.say || c.body, 24),
       points: [],
       more: c.body,
       sourceIds: Array.isArray(c.sourceIds)

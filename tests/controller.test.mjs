@@ -61,7 +61,7 @@ test("a live session cannot be relabeled as demo after transcripts exist", async
   c.engine.configure = () => {};
   await c.command("transcript", { text: "Real conversation" });
   await c.command("pause");
-  await assert.rejects(c.command("start", { source: "demo" }), /new session/);
+  await assert.rejects(c.command("start", { source: "demo" }), /another call/);
   c.close();
 });
 
@@ -84,7 +84,7 @@ test("a Fireflies transcript can be imported before starting a call but not duri
     await c.command("start", { source: "demo" });
     await assert.rejects(
       c.command("context.fireflies", { id: "past" }),
-      /disabled/,
+      /unavailable during Practice/,
     );
     assert.equal(imports, 1);
   } finally {
@@ -116,7 +116,7 @@ test("typed questions stay in the main lane and help hotkeys bypass the proactiv
     assert.equal(c.engine.cards.at(-1).origin, "asked");
     assert.equal(c.engine.cards.at(-1).question, "What is next?");
     await c.command("nudge");
-    assert.equal(c.engine.cards.at(-1).origin, "hotkey");
+    assert.equal(c.engine.cards.at(-1).origin, "nudge");
     assert.equal(c.engine.cards.length, 2);
   } finally {
     c.close();

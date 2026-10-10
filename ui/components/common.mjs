@@ -61,6 +61,12 @@ const errorActions = {
   "replace-key": "Replace key",
   "open-billing": "Open billing",
   "reset-models": "Use recommended models",
+  "sound-system": "Run sound check",
+  "retry-audio": "Try again",
+  settings: "Open Settings",
+  "permissions-mic": "Open System Settings",
+  "permissions-system": "Open System Settings",
+  start: "Try again",
 };
 export const selfTestResults = (results) =>
   results
@@ -70,7 +76,8 @@ export const selfTestResults = (results) =>
     )
     .join("");
 export const errorBanner = (s) => {
-  const e = s.errors.at(-1);
+  const e =
+    s.errors.filter((e) => e.severity !== "warning").at(-1) || s.errors.at(-1);
   return e
     ? `<div class="banner ${e.severity === "warning" ? "warning" : "error"}" role="alert"><span>${escape(e.message)}</span>${errorActions[e.action] ? button(e.action, errorActions[e.action]) : ""}${button("dismiss-error", "", { iconName: "close", title: "Dismiss notice", attrs: `data-id="${escape(e.id)}"` })}</div>`
     : "";

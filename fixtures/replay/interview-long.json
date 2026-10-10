@@ -1,0 +1,457 @@
+{
+  "type": "interview",
+  "line": "First interview at Brightline for Head of Growth",
+  "materials": [],
+  "turns": [
+    {
+      "id": "long-2",
+      "at": 2000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "Hi Matt, thanks for making the time today.",
+      "expected": "silent",
+      "mustSkip": false,
+      "sameTick": false
+    },
+    {
+      "id": "long-5",
+      "at": 5000,
+      "speaker": "You",
+      "channel": "mic",
+      "text": "Thanks for having me, I'm glad we could make it work.",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    },
+    {
+      "id": "long-9",
+      "at": 9000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "Can you hear me okay?",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    },
+    {
+      "id": "long-11",
+      "at": 11000,
+      "speaker": "You",
+      "channel": "mic",
+      "text": "Yes, loud and clear.",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    },
+    {
+      "id": "long-14",
+      "at": 14000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "Great. So I'll give you a quick overview of the role, and then we'll get into your background.",
+      "expected": "silent",
+      "mustSkip": false,
+      "sameTick": false
+    },
+    {
+      "id": "long-24",
+      "at": 24000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "We're a dental services group with about forty locations, and paid media has been mostly agency-run until now.",
+      "expected": "silent",
+      "mustSkip": false,
+      "sameTick": false
+    },
+    {
+      "id": "long-36",
+      "at": 36000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "So, tell me a little bit about yourself.",
+      "expected": "say",
+      "mustSkip": false,
+      "sameTick": true
+    },
+    {
+      "id": "long-41",
+      "at": 41000,
+      "speaker": "You",
+      "channel": "mic",
+      "text": "Sure. I've spent about ten years in performance marketing, most recently running paid media for multi-location healthcare brands.",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    },
+    {
+      "id": "long-55",
+      "at": 55000,
+      "speaker": "You",
+      "channel": "mic",
+      "text": "The work I'm proudest of is rebuilding a dental group's paid search account.",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    },
+    {
+      "id": "long-63",
+      "at": 63000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "Okay, interesting.",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    },
+    {
+      "id": "long-66",
+      "at": 66000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "Walk me through that rebuild. What did you actually change?",
+      "expected": "say",
+      "mustSkip": false,
+      "sameTick": true
+    },
+    {
+      "id": "long-72",
+      "at": 72000,
+      "speaker": "You",
+      "channel": "mic",
+      "text": "When I came in, about sixty percent of spend was going to branded search, so I'll start there.",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    },
+    {
+      "id": "long-84",
+      "at": 84000,
+      "speaker": "You",
+      "channel": "mic",
+      "text": "We restructured the account around three service lines and cut cost per lead from two hundred twelve dollars to one thirty one.",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    },
+    {
+      "id": "long-97",
+      "at": 97000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "That makes sense to me.",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    },
+    {
+      "id": "long-101",
+      "at": 101000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "And how did you measure whether that actually worked?",
+      "expected": "say",
+      "mustSkip": false,
+      "sameTick": true
+    },
+    {
+      "id": "long-106",
+      "at": 106000,
+      "speaker": "You",
+      "channel": "mic",
+      "text": "We tracked booked appointments, not just form fills, and I'll be honest, that took a quarter to get right.",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    },
+    {
+      "id": "long-120",
+      "at": 120000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "Right, okay, got it.",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    },
+    {
+      "id": "long-125",
+      "at": 125000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "I'm curious how you think about attribution when the reports disagree.",
+      "expected": "say",
+      "mustSkip": false,
+      "sameTick": true
+    },
+    {
+      "id": "long-131",
+      "at": 131000,
+      "speaker": "You",
+      "channel": "mic",
+      "text": "I usually start by lining up the attribution windows, because that explains most disagreements.",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    },
+    {
+      "id": "long-144",
+      "at": 144000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "Yeah, we've been burned by that. Our last agency reported on a thirty day window and finance used seven.",
+      "expected": "silent",
+      "mustSkip": false,
+      "sameTick": false
+    },
+    {
+      "id": "long-158",
+      "at": 158000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "Let's switch gears a little.",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    },
+    {
+      "id": "long-162",
+      "at": 162000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "Tell me about a time you disagreed with a stakeholder. How did you handle it?",
+      "expected": "say",
+      "mustSkip": false,
+      "sameTick": true
+    },
+    {
+      "id": "long-170",
+      "at": 170000,
+      "speaker": "You",
+      "channel": "mic",
+      "text": "A founder wanted to double the social budget after one good week. I asked for two more weeks of data and we'll see, I said, whether it holds.",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    },
+    {
+      "id": "long-186",
+      "at": 186000,
+      "speaker": "You",
+      "channel": "mic",
+      "text": "It didn't hold, and we kept the budget where it was.",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    },
+    {
+      "id": "long-195",
+      "at": 195000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "Ha, that's a familiar story.",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    },
+    {
+      "id": "long-199",
+      "at": 199000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "Okay, great. So how would you approach the first ninety days here.",
+      "expected": "say",
+      "mustSkip": false,
+      "sameTick": true
+    },
+    {
+      "id": "long-205",
+      "at": 205000,
+      "speaker": "You",
+      "channel": "mic",
+      "text": "First month I'd audit the account and tracking. Second month I'd rebuild campaign structure. Third month I'd start testing.",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    },
+    {
+      "id": "long-222",
+      "at": 222000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "And what would you need from us to make that work?",
+      "expected": "say",
+      "mustSkip": false,
+      "sameTick": true
+    },
+    {
+      "id": "long-228",
+      "at": 228000,
+      "speaker": "You",
+      "channel": "mic",
+      "text": "Access to the booking data, and one person on your side who can make decisions quickly.",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    },
+    {
+      "id": "long-240",
+      "at": 240000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "That should be fine. I'll connect you with our ops lead if we move forward.",
+      "expected": "silent",
+      "mustSkip": false,
+      "sameTick": false
+    },
+    {
+      "id": "long-251",
+      "at": 251000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "Explain how you'd handle it if we asked you to cut the budget in half.",
+      "expected": "say",
+      "mustSkip": false,
+      "sameTick": true
+    },
+    {
+      "id": "long-258",
+      "at": 258000,
+      "speaker": "You",
+      "channel": "mic",
+      "text": "I'd protect the campaigns that book appointments and pause the rest, then show you what we lose.",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    },
+    {
+      "id": "long-271",
+      "at": 271000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "Makes sense.",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    },
+    {
+      "id": "long-274",
+      "at": 274000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "What's your biggest weakness?",
+      "expected": "say",
+      "mustSkip": false,
+      "sameTick": true
+    },
+    {
+      "id": "long-279",
+      "at": 279000,
+      "speaker": "You",
+      "channel": "mic",
+      "text": "I can stay in the details too long, so I've learned to set a deadline for the analysis and then decide.",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    },
+    {
+      "id": "long-293",
+      "at": 293000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "Salary expectations?",
+      "expected": "say",
+      "mustSkip": false,
+      "sameTick": true
+    },
+    {
+      "id": "long-297",
+      "at": 297000,
+      "speaker": "You",
+      "channel": "mic",
+      "text": "I'm looking for something in line with a head of growth role, and I'm flexible on structure.",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    },
+    {
+      "id": "long-310",
+      "at": 310000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "Okay. We'll come back to that later in the process.",
+      "expected": "silent",
+      "mustSkip": false,
+      "sameTick": false
+    },
+    {
+      "id": "long-318",
+      "at": 318000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "I think that's most of what I had. We're at time, so do you have any questions for us?",
+      "expected": "say",
+      "mustSkip": false,
+      "sameTick": true
+    },
+    {
+      "id": "long-326",
+      "at": 326000,
+      "speaker": "You",
+      "channel": "mic",
+      "text": "Yes. What would make someone successful in this role in the first year?",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    },
+    {
+      "id": "long-334",
+      "at": 334000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "Honestly, getting the tracking fixed and making the board trust the numbers.",
+      "expected": "silent",
+      "mustSkip": false,
+      "sameTick": false
+    },
+    {
+      "id": "long-345",
+      "at": 345000,
+      "speaker": "You",
+      "channel": "mic",
+      "text": "That's helpful. And what are the next steps?",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    },
+    {
+      "id": "long-350",
+      "at": 350000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "I'll talk to the team this week and we'll get back to you by Friday.",
+      "expected": "silent",
+      "mustSkip": false,
+      "sameTick": false
+    },
+    {
+      "id": "long-358",
+      "at": 358000,
+      "speaker": "Them",
+      "channel": "system",
+      "text": "Let's see, I think that's everything. Thanks again, Matt.",
+      "expected": "silent",
+      "mustSkip": false,
+      "sameTick": false
+    },
+    {
+      "id": "long-363",
+      "at": 363000,
+      "speaker": "You",
+      "channel": "mic",
+      "text": "Thank you, I'll send over the case study I mentioned by tomorrow.",
+      "expected": "silent",
+      "mustSkip": true,
+      "sameTick": false
+    }
+  ]
+}

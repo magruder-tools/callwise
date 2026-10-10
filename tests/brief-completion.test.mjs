@@ -86,7 +86,7 @@ test("unchanged preparation is reused across unrelated settings and is rebuilt a
   }
 });
 
-test("starting a call cancels unfinished preparation and ignores its late result", async () => {
+test("starting a call keeps unfinished preparation and adopts it during the first two minutes", async () => {
   let finish, signal;
   const c = new CallController({
     config: { openaiKey: "TEST_ONLY" },
@@ -106,12 +106,11 @@ test("starting a call cancels unfinished preparation and ignores its late result
     });
     const prep = c.command("prep.refresh");
     await c.command("start", { source: "manual", consent: true });
-    assert.equal(signal.aborted, true);
-    assert.equal(c.preparing, false);
+    assert.equal(signal.aborted, false);
+    assert.equal(c.preparing, true);
     finish({ ...digest, people: ["LATE_PREPARATION"] });
     await prep;
-    assert.doesNotMatch(JSON.stringify(c.engine.prep), /LATE_PREPARATION/);
-    assert.equal(c.engine.prep.facts[0].text, "Verified original context.");
+    assert.match(JSON.stringify(c.engine.prep), /LATE_PREPARATION/);
   } finally {
     c.close();
   }
@@ -149,7 +148,7 @@ test("Fireflies interruptions allow transport recovery, keep the call running, a
   }
 });
 
-test("a wrap-up question immediately surfaces only the points left to cover", () => {
+test("a wrap-up statement immediately surfaces only the points left to cover", () => {
   const e = new CoachEngine({
     providers: {
       fast: { generate: () => assert.fail("Local coverage needs no provider") },
@@ -166,9 +165,13 @@ test("a wrap-up question immediately surfaces only the points left to cover", ()
     e.covered.add("one");
     assert.equal(
       classifyTurn({ channel: "system", text: "Do you have anything else?" }),
-      "wrap_up",
+      "question",
     );
-    e.ingest({ id: "wrap", channel: "system", text: "Anything else?" });
+    e.ingest({
+      id: "wrap",
+      channel: "system",
+      text: "Before we finish, let us wrap up.",
+    });
     assert.equal(e.cards.length, 1);
     assert.equal(e.cards[0].kind, "heads_up");
     assert.deepEqual(e.cards[0].points, [

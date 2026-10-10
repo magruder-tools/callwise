@@ -53,7 +53,7 @@ export class OpenAIProvider {
     const options = modelOptions(this.model, this.effort),
       streamController = new AbortController();
     const fast = lane === "fast",
-      timeout = fast ? this.firstTokenMs : 20000;
+      timeout = schema ? 60000 : fast ? this.firstTokenMs : 20000;
     let token = false,
       text = "",
       completed;

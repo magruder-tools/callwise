@@ -70,6 +70,7 @@ test("every eligible fixture turn gets help promptly; own speech, backchannels a
   for (const name of await readdir(
     new URL("../fixtures/replay/", import.meta.url),
   )) {
+    if (name === "trigger-lines.json") continue;
     const f = JSON.parse(
       await readFile(
         new URL(`../fixtures/replay/${name}`, import.meta.url),
@@ -232,10 +233,10 @@ test("streamed lead paints before completion; unsupported fact citations never s
     e.end();
   }
 });
-test("explicit help cancels proactive work across lanes, skips caps and always shows a fallback", async () => {
+test("explicit help cancels proactive work across lanes and explains model silence", async () => {
   let aborted = 0;
   const e = new CoachEngine({
-    config: { autoCoach: false, maxFast: 0 },
+    config: { autoCoach: false, maxFast: 1 },
     providers: {
       strategy: {
         generate: ({ signal }) =>

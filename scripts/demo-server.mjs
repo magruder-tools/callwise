@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
+import { SnapshotStream } from "../core/snapshot-stream.mjs";
 import { CallController } from "../core/controller.mjs";
 
 const ui = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../ui");
@@ -49,6 +50,8 @@ const server = http.createServer(async (req, res) => {
         Connection: "keep-alive",
       });
       res.write(`data: ${JSON.stringify(controller.snapshot())}\n\n`);
+      res.snapshotStream = new SnapshotStream();
+      res.snapshotStream.pack(controller.snapshot());
       streams.add(res);
       req.on("close", () => streams.delete(res));
       return;
@@ -97,12 +100,14 @@ const server = http.createServer(async (req, res) => {
   }
 });
 controller.on("state", (state) => {
-  const event = `data: ${JSON.stringify(state)}\n\n`;
   for (const stream of streams) {
     if (stream.writableLength > 1_000_000) {
       stream.end();
       streams.delete(stream);
-    } else stream.write(event);
+    } else
+      stream.write(
+        `data: ${JSON.stringify(stream.snapshotStream.pack(state))}\n\n`,
+      );
   }
 });
 const heartbeat = setInterval(() => {

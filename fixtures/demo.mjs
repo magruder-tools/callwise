@@ -58,3 +58,16 @@ export const DEMO_TRANSCRIPT = [
     at: 42000,
   },
 ];
+
+DEMO_TRANSCRIPT.push(
+  {
+    speaker: "Client",
+    text: "I'll share the channel reports by Friday.",
+    at: 48500,
+  },
+  {
+    speaker: "You",
+    text: "I'll send the diagnostic scope by tomorrow.",
+    at: 52500,
+  },
+);

@@ -1,0 +1,266 @@
+{
+  "needsHelp": [
+    {
+      "mode": "interview",
+      "text": "So, tell me a little bit about yourself."
+    },
+    {
+      "mode": "interview",
+      "text": "Okay, great. Walk me through your résumé."
+    },
+    {
+      "mode": "interview",
+      "text": "I'd love to hear about a time you turned around an underperforming account."
+    },
+    {
+      "mode": "interview",
+      "text": "What's your biggest weakness?"
+    },
+    {
+      "mode": "interview",
+      "text": "Why us?"
+    },
+    {
+      "mode": "interview",
+      "text": "Why do you want this role?"
+    },
+    {
+      "mode": "interview",
+      "text": "And how did you measure that?"
+    },
+    {
+      "mode": "interview",
+      "text": "Great. So how would you approach the first ninety days here."
+    },
+    {
+      "mode": "interview",
+      "text": "I'm curious how you think about attribution."
+    },
+    {
+      "mode": "interview",
+      "text": "Talk to me about your management style."
+    },
+    {
+      "mode": "interview",
+      "text": "Can you give me an example?"
+    },
+    {
+      "mode": "interview",
+      "text": "Any questions for us?"
+    },
+    {
+      "mode": "interview",
+      "text": "Any questions?"
+    },
+    {
+      "mode": "interview",
+      "text": "Salary expectations?"
+    },
+    {
+      "mode": "interview",
+      "text": "That's interesting. What did the team look like, and what was your role in it?"
+    },
+    {
+      "mode": "interview",
+      "text": "What was the outcome? I ask because we've had mixed results with agencies."
+    },
+    {
+      "mode": "interview",
+      "text": "We've had mixed results with agencies before. What would you do differently? Just so I understand your approach."
+    },
+    {
+      "mode": "interview",
+      "text": "Right, so, um, could you walk me through how you'd structure the account?"
+    },
+    {
+      "mode": "interview",
+      "text": "Explain how you'd handle a client who wants to cut the budget in half."
+    },
+    {
+      "mode": "interview",
+      "text": "Give me a sense of the scale you were working at."
+    },
+    {
+      "mode": "interview",
+      "text": "Help me understand why you left your last role."
+    },
+    {
+      "mode": "interview",
+      "text": "I'd like to understand your experience with paid social."
+    },
+    {
+      "mode": "interview",
+      "text": "Where do you see yourself in five years?"
+    },
+    {
+      "mode": "interview",
+      "text": "You mentioned a dental group. What were the numbers there?"
+    },
+    {
+      "mode": "interview",
+      "text": "So what would you say is your greatest strength."
+    },
+    {
+      "mode": "interview",
+      "text": "Describe a conflict you had with a stakeholder and how you resolved it."
+    },
+    {
+      "mode": "interview",
+      "text": "Tell me more."
+    },
+    {
+      "mode": "interview",
+      "text": "Let's talk about compensation."
+    },
+    {
+      "mode": "sales",
+      "text": "How much does this cost?"
+    },
+    {
+      "mode": "sales",
+      "text": "And what does onboarding look like."
+    },
+    {
+      "mode": "sales",
+      "text": "Do you work with other dental groups?"
+    },
+    {
+      "mode": "sales",
+      "text": "I guess my question is whether you can guarantee results."
+    },
+    {
+      "mode": "sales",
+      "text": "We're paying about $12,000 a month right now."
+    },
+    {
+      "mode": "sales",
+      "text": "Honestly it feels too expensive for what we get."
+    },
+    {
+      "mode": "sales",
+      "text": "What kind of results have you gotten for practices like ours?"
+    },
+    {
+      "mode": "sales",
+      "text": "Who else have you worked with in our space."
+    },
+    {
+      "mode": "sales",
+      "text": "Send me a proposal and we'll take a look."
+    },
+    {
+      "mode": "sales",
+      "text": "The other thing I wanted to ask about is reporting."
+    },
+    {
+      "mode": "sales",
+      "text": "What about pricing?"
+    },
+    {
+      "mode": "client",
+      "text": "Can you remind me what we agreed on for the Q4 budget?"
+    },
+    {
+      "mode": "client",
+      "text": "Remind me what the monthly retainer is."
+    },
+    {
+      "mode": "client",
+      "text": "I thought we said twelve thousand a month."
+    },
+    {
+      "mode": "client",
+      "text": "What's the status on the landing pages?"
+    },
+    {
+      "mode": "client",
+      "text": "Where are we on the tracking fix."
+    },
+    {
+      "mode": "client",
+      "text": "I need the report by Friday."
+    },
+    {
+      "mode": "client",
+      "text": "So are we still on track for the launch?"
+    },
+    {
+      "mode": "client",
+      "text": "Walk us through the numbers."
+    },
+    {
+      "mode": "client",
+      "text": "Talk us through what changed in September."
+    },
+    {
+      "mode": "client",
+      "text": "Why did leads drop last month?"
+    },
+    {
+      "mode": "client",
+      "text": "And the invoice?"
+    }
+  ],
+  "stayQuiet": [
+    {
+      "mode": "interview",
+      "text": "Yeah."
+    },
+    {
+      "mode": "interview",
+      "text": "Right, okay."
+    },
+    {
+      "mode": "interview",
+      "text": "Got it, thanks."
+    },
+    {
+      "mode": "interview",
+      "text": "Mm-hm."
+    },
+    {
+      "mode": "interview",
+      "text": "That makes sense to me."
+    },
+    {
+      "mode": "interview",
+      "text": "Okay, cool, that's really helpful."
+    },
+    {
+      "mode": "interview",
+      "text": "Sorry, my dog is barking in the background."
+    },
+    {
+      "mode": "interview",
+      "text": "Give me one second."
+    },
+    {
+      "mode": "interview",
+      "text": "Can you hear me okay?"
+    },
+    {
+      "mode": "interview",
+      "text": "Let me share my screen."
+    },
+    {
+      "mode": "client",
+      "text": "I may have to jump off a few minutes early."
+    },
+    {
+      "mode": "client",
+      "text": "We'll see how it goes."
+    },
+    {
+      "mode": "interview",
+      "text": "I'll be honest, I wasn't sure what to expect today."
+    },
+    {
+      "mode": "client",
+      "text": "Let's see, where was I."
+    },
+    {
+      "mode": "sales",
+      "text": "Is this thing on?"
+    }
+  ]
+}

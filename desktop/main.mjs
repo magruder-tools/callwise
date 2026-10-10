@@ -25,12 +25,9 @@ import {
 } from "node:fs";
 import { release as osRelease } from "node:os";
 import { readConfig } from "../core/config.mjs";
-import {
-  readConnections,
-  saveConnections,
-  checkModelAccess,
-} from "../core/connections.mjs";
+import { readConnections, saveConnections } from "../core/connections.mjs";
 import { safeUrl } from "../core/context.mjs";
+import { SnapshotStream } from "../core/snapshot-stream.mjs";
 import { CallController } from "../core/controller.mjs";
 import { CodexLogin } from "./codex-login.mjs";
 import { installDisplayCapture } from "./display-capture.mjs";
@@ -185,12 +182,12 @@ async function boot() {
     String(selectedDisplay.id)
   ] || {
     width: 440,
-    height: 320,
+    height: 232,
     x: area.x + area.width - 464,
     y: area.y + 40,
   };
   bounds.width = Math.min(640, Math.max(340, bounds.width));
-  bounds.height = Math.max(320, Math.min(area.height, bounds.height));
+  bounds.height = 232;
   bounds.x = Math.min(
     area.x + area.width - bounds.width,
     Math.max(area.x, bounds.x),
@@ -203,7 +200,7 @@ async function boot() {
     ...bounds,
     minWidth: 340,
     maxWidth: 640,
-    minHeight: 320,
+    minHeight: 232,
     frame: false,
     ...(process.platform === "darwin" ? { type: "panel" } : {}),
     title: "Callwise live",
@@ -340,10 +337,30 @@ async function boot() {
     globalShortcut,
     {
       help: () =>
-        void controller
-          .command("nudge")
+        void (
+          controller.engine.status === "paused"
+            ? controller.command("start", {
+                source: controller.mode,
+                backend: controller.strategyBackend,
+                consent: true,
+              })
+            : Promise.resolve()
+        )
+          .then(() => controller.command("nudge"))
           .catch((error) => controller.engine.error(error)),
-      pause: () => void controller.command("pause"),
+      pause: () =>
+        void controller
+          .command(
+            controller.engine.status === "paused" ? "start" : "pause",
+            controller.engine.status === "paused"
+              ? {
+                  source: controller.mode,
+                  backend: controller.strategyBackend,
+                  consent: true,
+                }
+              : {},
+          )
+          .catch((error) => controller.engine.error(error)),
       previous: () => send("callwise:navigate", { direction: "previous" }),
       next: () => send("callwise:navigate", { direction: "next" }),
       visibility: () => {
@@ -359,11 +376,15 @@ async function boot() {
     (accelerator) =>
       controller.engine.clearErrors({ condition: `shortcut:${accelerator}` }),
   );
+  const snapshots = new SnapshotStream();
   let windowStatus = "idle";
   controller.on("state", (state) => {
     if (app.isQuitting) return;
     refreshDesktop();
-    send("callwise:state", { ...state, desktop: controller.desktopState });
+    send(
+      "callwise:state",
+      snapshots.pack({ ...state, desktop: controller.desktopState }),
+    );
     shortcuts.configure?.(state.preferences.hotkeys);
     shortcuts.sync(state.status);
     panel?.setAlwaysOnTop(state.preferences.floatPanel !== false, "floating");
@@ -527,16 +548,18 @@ async function boot() {
       if (
         event.sender === panel.webContents &&
         Number.isFinite(payload.height) &&
-        payload.height >= 320 &&
-        payload.height <= 1000
+        payload.height >= 232 &&
+        payload.height <= 10000
       ) {
         const b = panel.getBounds(),
           area = screen.getDisplayMatching(b).workArea,
-          h = Math.min(payload.height, area.height - 24);
+          h = Math.round(
+            Math.max(232, Math.min(payload.height, area.height * 0.7)),
+          );
         if (Math.abs(b.height - h) > 2)
           panel.setBounds({
             height: h,
-            y: Math.min(b.y, area.y + area.height - h),
+            y: b.y,
           });
       }
       return {};
@@ -673,17 +696,9 @@ async function boot() {
       controller.engine.emitState();
       return controller.snapshot();
     }
-    if (name === "desktop.connections.check")
-      return checkModelAccess(controller.config);
     if (name === "desktop.diagnostics") {
       copyDiagnostics();
       return { copied: true };
-    }
-    if (name === "desktop.compact") {
-      controller.rememberPreferences({ compact: !!payload.enabled });
-      win.setAlwaysOnTop(!!payload.enabled, "floating");
-      controller.engine.emitState();
-      return { compact: !!payload.enabled };
     }
     if (name === "desktop.openLink") {
       const url = safeUrl(payload.url);
@@ -895,6 +910,10 @@ async function boot() {
         ? path.join(app.getPath("temp"), "callwise-smoke")
         : path.join(root, "artifacts"));
     mkdirSync(artifacts, { recursive: true });
+    const { verifyPanel, verifyReady } = await import("./panel-smoke.mjs");
+    await verifyPanel({ controller, panel, win, artifacts });
+    await verifyReady({ controller, panel, win, artifacts });
+    panel.showInactive();
     const { DEMO_TRANSCRIPT } = await import("../fixtures/demo.mjs");
     await controller.command("start", { source: "demo" });
     for (let i = 0; i < 3; i++)
@@ -975,12 +994,40 @@ async function boot() {
         (await panel.webContents.capturePage()).toPNG(),
       );
     }
+    for (let i = 3; i < DEMO_TRANSCRIPT.length; i++)
+      controller.engine.ingest({
+        ...DEMO_TRANSCRIPT[i],
+        id: `demo:${i}`,
+        startMs: DEMO_TRANSCRIPT[i].at,
+        final: true,
+      });
     await controller.command("end");
     console.log("Smoke: automatic recap completed.");
     win.showInactive();
     await new Promise((r) => setTimeout(r, 350));
     writeFileSync(
       path.join(artifacts, "recap.png"),
+      (await win.webContents.capturePage()).toPNG(),
+    );
+    if (controller.recap?.whoOwesWhat.length !== 2 || !controller.recap.email)
+      throw new Error(
+        "The sample recap must include two promises and an email.",
+      );
+    await win.webContents.executeJavaScript(`(() => {
+      const source = document.querySelector('[data-detail-key^="promise:"]');
+      if (source) source.open = true;
+    })()`);
+    await new Promise((r) => setTimeout(r, 120));
+    writeFileSync(
+      path.join(artifacts, "recap-source.png"),
+      (await win.webContents.capturePage()).toPNG(),
+    );
+    await win.webContents.executeJavaScript(
+      "document.querySelector('.email-draft').scrollIntoView({block: 'start'})",
+    );
+    await new Promise((r) => setTimeout(r, 120));
+    writeFileSync(
+      path.join(artifacts, "recap-email.png"),
       (await win.webContents.capturePage()).toPNG(),
     );
     await controller.command("new", { clearContext: true });

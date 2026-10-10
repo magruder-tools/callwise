@@ -39,7 +39,12 @@ export async function runSelfTest(
       results.push({
         label,
         ok: false,
-        detail: error.message,
+        detail:
+          /fetch failed|network|ECONN|ENOTFOUND|timed out|timeout/i.test(
+            error.message,
+          ) || error.name === "TimeoutError"
+            ? "Couldn't reach OpenAI. Check your internet connection."
+            : error.message,
         action: error.action || "",
       });
     }

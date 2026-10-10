@@ -79,7 +79,14 @@ test("sample calls never reach saved recent calls; ending a real call creates a 
       if (schema.properties.whatHappened)
         return {
           whatHappened: ["Discussed a real project."],
-          whoOwesWhat: [],
+          whoOwesWhat: [
+            {
+              owner: "You",
+              what: "Send the notes",
+              due: "by Friday",
+              segmentIds: ["promise"],
+            },
+          ],
           stillOpen: ["Budget still open."],
           email: "Thanks for talking. I will send the notes.",
           interview: [],
@@ -116,6 +123,7 @@ test("sample calls never reach saved recent calls; ending a real call creates a 
     await c.command("start", { source: "manual", consent: true });
     c.engine.settings.quiet = true;
     await c.command("transcript", {
+      id: "promise",
       speaker: "You",
       text: "I'll send the notes by Friday.",
     });
@@ -164,7 +172,7 @@ test("every prep fallback fact in all three fixtures has an exact source; invent
     assert.equal(checked.facts.length, prep.facts.length);
   }
 });
-test("recap commitments retain verbatim owner, promise and date even when the model invents alternatives", () => {
+test("recap uses model summaries only with final transcript evidence, and retains the source words", () => {
   const rows = [
       {
         id: "p",
@@ -181,9 +189,9 @@ test("recap commitments retain verbatim owner, promise and date even when the mo
       whatHappened: ["Notes"],
       whoOwesWhat: [
         {
-          owner: "Client",
-          what: "Pay $1000",
-          due: "Monday",
+          owner: "You",
+          what: "Send the notes",
+          due: "by Friday",
           segmentIds: ["p"],
         },
       ],
@@ -195,7 +203,8 @@ test("recap commitments retain verbatim owner, promise and date even when the mo
     commitments,
   );
   assert.equal(result.whoOwesWhat[0].owner, "You");
-  assert.equal(result.whoOwesWhat[0].what, rows[0].text);
+  assert.equal(result.whoOwesWhat[0].what, "Send the notes");
+  assert.equal(result.whoOwesWhat[0].evidence[0].text, rows[0].text);
   assert.equal(result.whoOwesWhat[0].due, "by Friday");
 });
 test("preparation and rolling memory discard late completions after call state changes", async () => {

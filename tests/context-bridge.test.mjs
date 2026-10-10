@@ -609,7 +609,7 @@ test("fictional demo never uses connected searches", async () => {
     await c.command("start", { source: "demo" });
     await assert.rejects(
       c.command("context.connected", { query: options.query }),
-      /fictional demo/,
+      /unavailable during Practice/,
     );
     assert.equal(c.retrieval.snapshot().searches, 0);
   } finally {
@@ -681,7 +681,7 @@ test("changing clients after conversation starts requires a new session", async 
     c.engine.pause();
     await assert.rejects(
       c.command("configure", { project: "B" }),
-      /new session/,
+      /another call/,
     );
     assert.equal(c.engine.settings.project, "A");
   } finally {

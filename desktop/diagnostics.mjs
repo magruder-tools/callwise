@@ -53,7 +53,14 @@ export function diagnosticFields(fields = {}) {
       safe[key] = value;
     else if (key === "lane" && ["fast", "strategy"].includes(value))
       safe[key] = value;
-    else if (key === "origin" && ["auto", "asked", "hotkey"].includes(value))
+    else if (key === "origin" && ["auto", "asked", "nudge"].includes(value))
+      safe[key] = value;
+    else if (
+      key === "condition" &&
+      /^(?:provider:(?:fast|strategy)|connection:(?:mic|system|fireflies)|capture:(?:mic|system)|prep|recap|silent-system|device-change|save-calls)$/.test(
+        value,
+      )
+    )
       safe[key] = value;
     else if (["code", "type"].includes(key) && safeErrorLabel(value))
       safe[key] = value;
@@ -132,7 +139,7 @@ export class Diagnostics {
         : "off",
       quiet: preferences.quiet === true,
       autoSearch: preferences.autoSearch === true,
-      floatingPanel: preferences.compact === true,
+      floatingPanel: preferences.floatPanel !== false,
     };
     const safeLines = lines.flatMap((line) => {
       try {

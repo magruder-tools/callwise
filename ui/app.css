@@ -379,7 +379,6 @@ small,
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-height: 100vh;
 }
 .live-status {
   display: flex;
@@ -1080,4 +1079,198 @@ body.mac:not(.panel) .banner:first-child {
   .ready-footer button {
     min-height: 28px;
   }
+}
+/* Live height follows natural content. Only the card body absorbs overflow. */
+body.panel,
+body.panel #app {
+  overflow: hidden;
+}
+.live-view {
+  min-height: 232px;
+  gap: 6px;
+}
+.card-region {
+  min-height: 0;
+  max-height: calc(70vh - 86px);
+  overflow-y: auto;
+}
+body.panel .card-region {
+  max-height: calc(100vh - 100px);
+}
+.coach-card {
+  animation: none;
+  padding: 16px 18px 12px;
+  opacity: 1;
+}
+.coach-card.arriving {
+  animation: arrive var(--motion) ease-out;
+}
+@keyframes arrive {
+  from {
+    transform: translateY(4px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+.lead {
+  line-height: 1.22;
+}
+.points {
+  font-size: 15px;
+  line-height: 1.35;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.points strong {
+  font-weight: 600;
+  color: var(--text);
+}
+.points span {
+  color: var(--muted);
+}
+.trigger {
+  font-size: 13px;
+  white-space: normal;
+  overflow: visible;
+}
+.card-heading {
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+.sources summary {
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 3px 8px;
+}
+.sources summary::-webkit-details-marker {
+  display: none;
+}
+.status.checking .light {
+  outline: 2px solid var(--mint);
+  outline-offset: 3px;
+  animation: pulse 1s infinite;
+}
+.live-view .quiet {
+  min-height: 120px;
+}
+.live-view .ask-row {
+  margin-top: 0;
+}
+.live-status {
+  gap: 8px;
+}
+.live-status .end {
+  min-height: 24px;
+  padding: 2px 6px;
+}
+#app[data-view="ready"] {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#app[data-view="ready"] > [data-region="ready"] {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#app[data-view="ready"] .app-header {
+  flex: none;
+}
+#app[data-view="ready"] .ready-view {
+  flex: 1;
+  overflow: auto;
+  padding-bottom: 170px;
+}
+.start-area {
+  position: fixed;
+  z-index: 3;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 16px 24px;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+}
+.start-area .row {
+  gap: 6px;
+}
+.start-area #start {
+  width: 100%;
+}
+.start-area .check {
+  margin-bottom: 8px;
+}
+.drop-zone .chips {
+  width: 100%;
+  max-height: 72px;
+  overflow: hidden;
+  margin: 0;
+}
+.drop-zone {
+  flex-wrap: wrap;
+}
+.chip > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 140px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .coach-card.arriving {
+    animation: none;
+  }
+}
+.meter {
+  height: 12px;
+  width: 20px;
+  background: none;
+}
+.meter b {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  background: none;
+}
+.meter em {
+  width: 3px;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--mint);
+}
+.meter em:nth-child(1) {
+  height: 35%;
+}
+.meter em:nth-child(2) {
+  height: 65%;
+}
+.meter em:nth-child(4) {
+  height: 50%;
+}
+.bigger-picture summary {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+.meter b {
+  transform: none;
+}
+.meter em {
+  opacity: calc(0.25 + var(--level, 0) * 0.75);
+}
+.drop-zone .chips {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  max-height: none;
+}
+.drop-zone .chip {
+  min-width: 0;
+  gap: 4px;
+}
+.drop-zone .chip > span {
+  min-width: 0;
 }

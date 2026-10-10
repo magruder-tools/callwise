@@ -3,6 +3,16 @@ import { app, screen } from "electron";
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
+async function waitForValue(read, expected, description) {
+  const deadline = Date.now() + 3000;
+  let actual;
+  do {
+    actual = await read();
+    if (actual === expected) return;
+    await wait(25);
+  } while (Date.now() < deadline);
+  assert.equal(actual, expected, description);
+}
 const advice = {
   speak: true,
   kind: "say",
@@ -283,14 +293,13 @@ export async function verifyPanel({ controller, panel, win, artifacts }) {
   );
   await controller.command("pause");
   await js(`document.querySelector('[data-action="resume"]').click()`);
-  await wait(200);
   const clean =
     "The browser demo does not connect to accounts or record audio. Open the desktop app for live mode.";
-  assert.equal(
-    await js(
-      `document.body.textContent.split(${JSON.stringify(clean)}).length-1`,
-    ),
+  await waitForValue(
+    () =>
+      js(`document.body.textContent.split(${JSON.stringify(clean)}).length-1`),
     1,
+    "Resume failure must show its clean command error exactly once",
   );
   assert.equal(
     await js(
@@ -345,9 +354,20 @@ export async function verifyReady({ controller, panel, win, artifacts }) {
   controller.engine.clearErrors();
   const demoOnly = controller.demoOnly,
     config = controller.config,
-    factory = controller.transcriberFactory;
+    factory = controller.transcriberFactory,
+    documentProvider = controller.documentProvider;
   controller.demoOnly = false;
   controller.config = { ...config, openaiKey: "SMOKE_TEST_ONLY" };
+  controller.documentProvider = {
+    generate: async () => ({
+      people: [],
+      facts: [],
+      likelyQuestions: [],
+      myPoints: [],
+      watchFor: [],
+      glossary: [],
+    }),
+  };
   try {
     controller.transcriberFactory = (options) => ({
       connect: async () => {
@@ -363,14 +383,15 @@ export async function verifyReady({ controller, panel, win, artifacts }) {
     await js(
       `document.querySelector('#consent').click();document.querySelector('#start').click();`,
     );
-    await wait(200);
-    assert.equal(controller.connecting, false);
-    assert.equal(
-      await js(
-        `document.body.textContent.split("OpenAI didn't accept this key.").length-1`,
-      ),
+    await waitForValue(
+      () =>
+        js(
+          `document.body.textContent.split("OpenAI didn't accept this key.").length-1`,
+        ),
       1,
+      "Failed startup must show the wrong-key message exactly once",
     );
+    assert.equal(controller.connecting, false);
     assert.equal(await js(`document.querySelector('#start').disabled`), false);
     await capture(win, "start-wrong-key");
     controller.engine.clearErrors();
@@ -415,6 +436,7 @@ export async function verifyReady({ controller, panel, win, artifacts }) {
     controller.demoOnly = demoOnly;
     controller.config = config;
     controller.transcriberFactory = factory;
+    controller.documentProvider = documentProvider;
   }
   await controller.command("new", { clearContext: true });
   await controller.command("configure", {

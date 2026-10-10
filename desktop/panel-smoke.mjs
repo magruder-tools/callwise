@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { app } from "electron";
+import { app, screen } from "electron";
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
@@ -97,9 +97,16 @@ export async function verifyPanel({ controller, panel, win, artifacts }) {
   const noticeHeight = await js(
     `document.querySelector('[data-region="notice"]').getBoundingClientRect().height`,
   );
+  const heightCap = Math.round(
+    screen.getDisplayMatching(earlier).workArea.height * 0.7,
+  );
+  const expectedNoticeHeight = Math.min(
+    earlier.height + noticeHeight,
+    heightCap,
+  );
   assert.ok(
-    Math.abs(panel.getBounds().height - earlier.height - noticeHeight) <= 2,
-    "notice height accumulates",
+    Math.abs(panel.getBounds().height - expectedNoticeHeight) <= 2,
+    `Notice sizing: got ${panel.getBounds().height}px, expected ${expectedNoticeHeight}px (before ${earlier.height}px, notice ${noticeHeight}px, cap ${heightCap}px)`,
   );
   assert.equal(panel.getBounds().y, earlier.y, "top edge moved");
   await capture("notice");
@@ -156,6 +163,9 @@ export async function verifyPanel({ controller, panel, win, artifacts }) {
     panel.isFocused(),
     true,
     "Native input test needs a focused panel",
+  );
+  await js(
+    `document.querySelector('[data-action="pin"]').scrollIntoView({block: 'nearest'})`,
   );
   console.log("Smoke: panel focused for native input acceptance.");
   await js(

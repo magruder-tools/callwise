@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — Round 2
+## 0.4.1 — Round 2
 
 - Preserve live controls, selections, transcript scroll and streamed card visibility; size the panel to its content and shrink after notices close.
 - Keep the previous answer during automatic checks; place one expiring notice below the status bar and clean desktop command errors.
@@ -10,6 +10,7 @@
 - Show a streamed sample call with sources, coverage, bigger-picture advice and a recap with two promises and an email.
 - Improve panel typography and meters, use physical keys for shortcuts, retain pause/resume shortcuts while paused and send transcript deltas.
 - Configure signing secrets automatically when GitHub CLI is authenticated. Add native desktop acceptance checks and the six-minute interview replay.
+- Publish version-tagged personal Mac builds as GitHub Releases with verified installers, checksums, signing status and an exact build commit. Native checks account for capped display height and wait for command results in packaged builds.
 
 ## 0.4.0 — Complete call workflow
 

@@ -6,7 +6,7 @@ A quiet second thought for your calls. Callwise listens to your microphone and c
 
 Use the Apple Silicon DMG from [GitHub Releases](https://github.com/magruder-tools/callwise/releases). Requires macOS 14.2 or later. Drag Callwise to Applications and launch it from there. Personal self-signed builds may need **System Settings → Privacy & Security → Open Anyway**. Developer ID and notarization are optional for maintainers with an Apple Developer account.
 
-Until a stable signing certificate is configured, development DMGs are available from the **Mac download** workflow's **Callwise-Apple-Silicon** artifact. These previews use an ad-hoc signature; upgrading them can require fresh permission approvals.
+Versioned personal builds are published to GitHub Releases after the Mac checks and packaged-app test pass. Each release states its signing status. Until a persistent signing certificate is configured, these builds use an ad-hoc signature; upgrading them can require fresh permission approvals. Untagged development DMGs are available from the **Mac download** workflow's **Callwise-Apple-Silicon** artifact.
 
 Real calls are supported in the installed app. Terminal and IDE launches may produce silent call audio even when a stream exists. The app flags development launches and its sound check detects silence.
 
@@ -45,5 +45,7 @@ The browser sample runs on loopback only and never loads credentials. `npm start
 Run `npm run signing:setup` once on your own Mac with a private `CALLWISE_SIGNING_PASSWORD` of at least 16 characters. If GitHub CLI is signed in and has access to this repository, the script configures both Actions secrets automatically and prints the release step. Otherwise, it explains how to set **CALLWISE_SIGNING_P12** (base64 PKCS#12) and **CALLWISE_SIGNING_PASSWORD** manually. The certificate stays outside the repository; the script refuses to overwrite it. Keep a private backup and reuse this exact certificate for every release.
 
 After reviewing and tagging a version, run **Publish signed release** with the matching tag. It checks the app, imports the certificate into a temporary CI keychain, builds the DMG/ZIP, verifies the actual signed bundle and publishes durable GitHub Release downloads and checksums. It fails closed if no persistent identity is configured. Private keys are never committed or uploaded as artifacts. Test build N then N+1 on a real Mac to verify permission continuity.
+
+Pushing a reviewed `v` tag that matches `package.json` also runs **Mac download** and publishes that exact personal build as the latest GitHub Release. It preserves the configured signing identity when available, otherwise explicitly labels the ad-hoc build in the release notes and `SIGNING.txt`. Publication happens only after native and packaged-app checks pass and installer checksums are verified. This personal-build path does not replace the persistent-identity requirement of **Publish signed release**.
 
 [Architecture](docs/ARCHITECTURE.md) · [Round 2 checks and Mac checklist](docs/ROUND_2_VALIDATION.md) · [Earlier validation](docs/VALIDATION.md) · [Changelog](CHANGELOG.md)

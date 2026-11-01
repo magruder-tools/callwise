@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.5.0 — 2026-10-31
+
+- Local Apple speech and on-device recaps with no required AI account; optional existing coaching remains separate.
+- Participant-notice gate, meeting notebook, final-word draining, encrypted searchable history and recovery.
+- Optional encrypted audio/playback, local group speaker labels, evidence-linked recaps and reviewed actions.
+- Notes/Reminders export previews with duplicate prevention, calendar fill and read-only saved-meeting MCP connections.
+- Retention, encrypted backup/restore, native helper/model packaging, and synthetic-only device validation.
+- Preserves the newer local 0.4.2 draft, audio and connected-context fixes.
+
+This is a local test build. Real-call accuracy, permission/export flows, long-call performance, battery use, and public-distribution trust remain separate checks.
+
+
+## 0.4.2 — Upgrade and quit repair
+
+- Stop audio and providers once before windows close; ignore events for destroyed window contents during shutdown.
+- Recover legacy connection settings from the app's own user-data file into encrypted storage, preserving newer saved choices and unreadable files.
+- Isolate native acceptance checks from the user's running app and saved data.
+- Use Electron 44's documented ScreenCaptureKit loopback backend with the existing macOS screen/audio grant; reject denied capture requests cleanly.
+- Report a context connection failure when no selected-app read actually completes, instead of showing a false empty search result.
+- Bundle Codex's matching native tool host and enable selected-app tool discovery without enabling shell, browser, writes, or unselected apps.
+- Supply exact runtime connector identifiers for source verification instead of relying on the model to infer them from tool names.
+- Give connection setup its existing discovery deadline, then start the bounded source-lookup timer after the connection is ready.
+- Accept the transcriber's observed “Calwise” spelling of the sound-check phrase while still requiring actual signal and the expected phrase.
+- Allow 30 seconds for the microphone phrase, retain separate transcription segments without duplicating revisions, and offer a visible Finish check control.
+
 ## 0.4.1 — Round 2
 
 - Preserve live controls, selections, transcript scroll and streamed card visibility; size the panel to its content and shrink after notices close.

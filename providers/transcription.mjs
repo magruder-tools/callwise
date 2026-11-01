@@ -630,6 +630,20 @@ export class LiveTranscriber {
     this.rotationOptions.keywords = [...keywords];
     this.delegate?.updateHints({ keywords });
   }
+  async finish({ timeoutMs = 8000 } = {}) {
+    if (this.delegate) return this.delegate.finish({ timeoutMs });
+    if (this.voiceMs > 0) this.commit();
+    const deadline = Date.now() + timeoutMs;
+    while (
+      !this.stopped &&
+      (this.awaitingFinal.size || this.pendingCommits.length) &&
+      Date.now() < deadline
+    )
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    const flushed = !this.awaitingFinal.size && !this.pendingCommits.length;
+    this.close();
+    return { flushed };
+  }
   close() {
     clearTimeout(this.initialTimer);
     this.stopped = true;

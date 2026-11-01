@@ -33,14 +33,11 @@ test("demo starts, coaches with source context, pauses, and clears fictional con
   assert.equal(c.engine.transcript.size, 0);
   c.close();
 });
-test("live mode fails clearly without keys and does not silently use demo advice", async () => {
+test("manual transcription works without a key and does not silently use demo advice", async () => {
   const c = new CallController();
-  await assert.rejects(
-    c.command("start", { source: "manual", consent: true }),
-    /OpenAI API key/,
-  );
+  await c.command("start", { source: "manual", consent: true });
   assert.equal(c.engine.cards.length, 0);
-  assert.equal(c.engine.status, "idle");
+  assert.equal(c.engine.status, "running");
   c.close();
 });
 test("public configuration never exposes credentials or private paths", () => {

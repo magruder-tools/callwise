@@ -13,6 +13,8 @@ import {
   Menu,
   clipboard,
   screen,
+  Tray,
+  nativeImage,
 } from "electron";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
@@ -22,15 +24,21 @@ import {
   existsSync,
   unlinkSync,
   rmSync,
+  readFileSync,
 } from "node:fs";
 import { release as osRelease } from "node:os";
 import { readConfig } from "../core/config.mjs";
-import { readConnections, saveConnections } from "../core/connections.mjs";
+import { saveConnections } from "../core/connections.mjs";
+import { readConnectionsWithMigration } from "../core/connection-migration.mjs";
+import { sendToWindows, closeOnce } from "./lifecycle.mjs";
 import { safeUrl } from "../core/context.mjs";
 import { SnapshotStream } from "../core/snapshot-stream.mjs";
 import { CallController } from "../core/controller.mjs";
 import { CodexLogin } from "./codex-login.mjs";
-import { installDisplayCapture } from "./display-capture.mjs";
+import {
+  installDisplayCapture,
+  configureAudioBackend,
+} from "./display-capture.mjs";
 import { readPreferences, savePreferences } from "../core/preferences.mjs";
 import { CodexContextProvider } from "../providers/codex-context.mjs";
 import { CodexProvider } from "../providers/codex.mjs";
@@ -42,9 +50,24 @@ import { recapMarkdown } from "../core/preparation.mjs";
 import { runSelfTest } from "./self-test.mjs";
 import { LiveTranscriber, pcmRms } from "../providers/transcription.mjs";
 import { readReadiness, saveReadiness, keySignature } from "./readiness.mjs";
+import {
+  SOUND_CHECK_TIMES,
+  SoundCheckTranscript,
+  soundCheckPassed,
+} from "../core/sound-check.mjs";
 import { checkForUpdate } from "./updates.mjs";
 import { importFiles, extractFile } from "./import-files.mjs";
+import { MeetingStore } from "../core/meetings/store.mjs";
+import { MeetingService } from "../core/meetings/service.mjs";
+import { MeetingSearch } from "./meeting-search.mjs";
+import { MeetingRecorder } from "./meeting-recorder.mjs";
+import { MeetingDiarizer } from "./meeting-diarizer.mjs";
+import { NativeServices, nativePaths } from "./native-host.mjs";
+import { AppleSpeechSession } from "../providers/apple-speech.mjs";
+import { createMeetingCommands } from "./meeting-commands.mjs";
 
+const headlessMcp = process.argv.includes("--mcp-server");
+if (!headlessMcp) configureAudioBackend(app.commandLine);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const smoke = process.argv.includes("--smoke");
 function reportFailure(message) {
@@ -54,12 +77,19 @@ function reportFailure(message) {
       `::error title=Callwise desktop smoke::${message.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A")}`,
     );
 }
-if (smoke)
+if (smoke) {
+  const smokeData = path.join(
+    app.getPath("temp"),
+    `callwise-native-smoke-${process.pid}`,
+  );
+  mkdirSync(smokeData, { recursive: true, mode: 0o700 });
+  app.setPath("userData", smokeData);
   setTimeout(() => {
     reportFailure("Desktop smoke timed out after 60 seconds.");
     app.exit(1);
   }, 60_000).unref();
-let win, panel, controller, soundCheck, soundTimer;
+}
+let win, panel, controller, soundCheck, soundTimer, tray;
 const page = path.join(root, "ui", "index.html");
 const trustedFrame = (frame) =>
   !!frame && frame.url.split("?")[0] === pathToFileURL(page).href;
@@ -69,6 +99,23 @@ async function boot() {
   const dataDir = app.getPath("userData"),
     workDir = path.join(dataDir, "codex-work");
   mkdirSync(workDir, { recursive: true });
+  const paths = nativePaths({
+    root,
+    packaged: app.isPackaged,
+    executable: process.execPath,
+    resourcesPath: process.resourcesPath,
+  });
+  const native = new NativeServices(paths);
+  let meetingStore = null,
+    libraryWarning = "";
+  if (!smoke)
+    try {
+      meetingStore = new MeetingStore(path.join(dataDir, "meetings"), {
+        storage: safeStorage,
+      });
+    } catch (error) {
+      libraryWarning = error.message;
+    }
   const diagnostics = new Diagnostics(path.join(dataDir, "logs"), {
     versions: {
       app: app.getVersion(),
@@ -98,6 +145,22 @@ async function boot() {
     } catch (error) {
       preferencesWarning = error.message;
     }
+  preferences = {
+    speechEngine: "apple",
+    language: "en-US",
+    liveHelp: false,
+    retainAudio: false,
+    meetingMcpEnabled: false,
+    meetingRetentionDays: 0,
+    audioRetentionDays: 30,
+    ...preferences,
+  };
+  if (meetingStore)
+    meetingStore.prune({
+      meetingDays: preferences.meetingRetentionDays,
+      audioDays: preferences.audioRetentionDays,
+    });
+  let speechSession;
   const baseConfig = smoke
     ? {
         fastModel: "gpt-5.6-luna",
@@ -114,7 +177,7 @@ async function boot() {
   let vaultWarning = "";
   if (!smoke)
     try {
-      saved = readConnections(vault, safeStorage);
+      saved = readConnectionsWithMigration(dataDir, safeStorage);
     } catch (error) {
       vaultWarning = error.message;
     }
@@ -130,6 +193,27 @@ async function boot() {
             sheets = next;
           },
       diagnostics: (event, fields) => diagnostics.write(event, fields),
+      speechFactory: smoke
+        ? null
+        : (options) => {
+            if (controller.preferences.speechEngine === "openai")
+              return new LiveTranscriber(options);
+            if (
+              !speechSession ||
+              speechSession.stopped ||
+              speechSession.captureEpoch !== options.captureEpoch
+            ) {
+              speechSession?.close();
+              speechSession = new AppleSpeechSession({
+                ...paths,
+                language: controller.preferences.language || "en-US",
+                hints: options.keywords,
+                epoch: options.captureEpoch,
+              });
+              speechSession.captureEpoch = options.captureEpoch;
+            }
+            return speechSession.adapter(options);
+          },
       onPreferences: smoke
         ? () => {}
         : (next) => {
@@ -154,6 +238,32 @@ async function boot() {
           }),
     });
   controller = makeController(controllerConfig(baseConfig, saved));
+  const meetings = smoke
+    ? null
+    : new MeetingService({
+        store: meetingStore,
+        native,
+        search: meetingStore ? new MeetingSearch(meetingStore) : null,
+        recorder: new MeetingRecorder(),
+        diarizer: new MeetingDiarizer(paths),
+      });
+  if (meetings) {
+    meetings.warning = libraryWarning;
+    controller.meetingService = meetings;
+    meetings.attach(controller);
+    meetings.migrateSheets(sheets);
+  }
+  const meetingCommands = createMeetingCommands({
+    meetings,
+    native,
+    paths,
+    controller,
+    app,
+    dialog,
+    getWindow: () => win,
+    dataDir,
+    storage: safeStorage,
+  });
   const codexLogin = new CodexLogin({
     bin: controller.config.codexBin,
     cwd: workDir,
@@ -162,10 +272,10 @@ async function boot() {
   if (vaultWarning) controller.engine.error(vaultWarning);
   if (preferencesWarning) controller.engine.error(preferencesWarning);
   win = new BrowserWindow({
-    width: 720,
-    height: 560,
-    minWidth: 580,
-    minHeight: 480,
+    width: smoke ? 720 : 980,
+    height: smoke ? 560 : 700,
+    minWidth: smoke ? 580 : 640,
+    minHeight: smoke ? 480 : 520,
     ...(process.platform === "darwin"
       ? { titleBarStyle: "hiddenInset", trafficLightPosition: { x: 16, y: 25 } }
       : {}),
@@ -247,6 +357,7 @@ async function boot() {
     if (url.split("?")[0] !== pathToFileURL(page).href) event.preventDefault();
   });
   panel.webContents.on("render-process-gone", () => {
+    if (app.isQuitting) return;
     controller.stopInputs();
     controller.engine.pause();
     win?.show();
@@ -255,8 +366,15 @@ async function boot() {
     if (!app.isQuitting) {
       event.preventDefault();
       panel.hide();
-      if (controller.engine.status === "running")
-        void controller.command("pause");
+    }
+  });
+  win.on("close", (event) => {
+    if (
+      !app.isQuitting &&
+      ["running", "paused", "finishing"].includes(controller.engine.status)
+    ) {
+      event.preventDefault();
+      win.hide();
     }
   });
   const refreshDesktop = () => {
@@ -275,6 +393,7 @@ async function boot() {
       version: app.getVersion(),
       permissions: { microphone, screen: screenStatus },
       readiness: {
+        core: !!controller.desktopState?.native?.speech,
         ai:
           !!controller.config.openaiKey &&
           readiness.aiSignature === keySignature(controller.config),
@@ -292,15 +411,9 @@ async function boot() {
     if (url.split("?")[0] !== pathToFileURL(page).href) event.preventDefault();
   });
   win.webContents.on("render-process-gone", () => {
+    if (app.isQuitting) return;
     controller.stopInputs();
     controller.engine.pause();
-  });
-  win.on("closed", () => {
-    app.isQuitting = true;
-    codexLogin.close();
-    controller.close();
-    panel?.destroy();
-    win = null;
   });
   win.once("ready-to-show", () => {
     if (!smoke) win.show();
@@ -336,10 +449,7 @@ async function boot() {
         (controller.mode === "audio" &&
           controller.engine.status === "running")),
   );
-  const send = (name, data) => {
-    for (const target of [win, panel])
-      if (target && !target.isDestroyed()) target.webContents.send(name, data);
-  };
+  const send = (name, data) => sendToWindows([win, panel], name, data);
   const shortcuts = new SessionShortcuts(
     globalShortcut,
     {
@@ -384,9 +494,28 @@ async function boot() {
       controller.engine.clearErrors({ condition: `shortcut:${accelerator}` }),
   );
   const snapshots = new SnapshotStream();
+  const shutdown = closeOnce(() => {
+    app.isQuitting = true;
+    clearTimeout(soundTimer);
+    soundCheck?.transcriber.close();
+    soundCheck = null;
+    codexLogin.close();
+    shortcuts.close();
+    controller.close();
+    meetings?.close();
+    native.close();
+    tray?.destroy();
+  });
+  win.on("closed", () => {
+    win = null;
+    shutdown();
+    if (panel && !panel.isDestroyed()) panel.destroy();
+    panel = null;
+  });
   let windowStatus = "idle";
   controller.on("state", (state) => {
     if (app.isQuitting) return;
+    if (meetings) state = { ...state, meetings: meetings.snapshot() };
     refreshDesktop();
     send(
       "callwise:state",
@@ -397,8 +526,8 @@ async function boot() {
     panel?.setAlwaysOnTop(state.preferences.floatPanel !== false, "floating");
     if (state.status !== windowStatus) {
       if (state.status === "running" && !smoke) {
-        win.hide();
-        panel.showInactive();
+        win.showInactive();
+        if (state.preferences.liveHelp) panel.showInactive();
       }
       if (state.status === "ended") {
         panel.hide();
@@ -409,6 +538,42 @@ async function boot() {
         win.showInactive();
       }
       windowStatus = state.status;
+    }
+    if (!smoke && ["running", "paused", "finishing"].includes(state.status)) {
+      if (!tray) {
+        const image = nativeImage.createFromBuffer(
+          Buffer.from(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"><circle cx="9" cy="9" r="6" fill="black"/></svg>',
+          ),
+        );
+        image.setTemplateImage(true);
+        tray = new Tray(image);
+        tray.on("click", () => win?.show());
+      }
+      tray.setToolTip(
+        `Callwise — ${state.status === "running" ? "Transcribing" : state.status}`,
+      );
+      tray.setContextMenu(
+        Menu.buildFromTemplate([
+          { label: "Open meeting", click: () => win?.show() },
+          {
+            label: state.status === "paused" ? "Resume" : "Pause",
+            enabled: state.status !== "finishing",
+            click: () =>
+              void controller
+                .command(state.status === "paused" ? "start" : "pause", {
+                  source: controller.mode,
+                  consent: true,
+                  backend: controller.strategyBackend,
+                })
+                .catch((e) => controller.engine.error(e)),
+          },
+          { label: "End meeting", click: () => void controller.command("end") },
+        ]),
+      );
+    } else if (tray) {
+      tray.destroy();
+      tray = null;
     }
   });
   const copyDiagnostics = () =>
@@ -439,6 +604,76 @@ async function boot() {
       throw new Error("Untrusted app frame.");
     if (typeof name !== "string" || JSON.stringify(payload).length > 2200000)
       throw new Error("Invalid request.");
+    if (meetings && name.startsWith("desktop.meeting.")) {
+      if (name === "desktop.meeting.coach") {
+        if (!controller.preferences.liveHelp)
+          throw new Error("Enable optional live help first.");
+        panel.showInactive();
+        return { shown: true };
+      }
+      return meetingCommands(name, payload);
+    }
+    if (meetings && name.startsWith("meeting."))
+      return meetings.command(name, payload);
+    if (
+      meetings &&
+      name === "configure" &&
+      ["running", "paused", "finishing"].includes(controller.engine.status) &&
+      [
+        "retainAudio",
+        "liveHelp",
+        "speechEngine",
+        "noticeWording",
+        "preferredSource",
+        "language",
+      ].some(
+        (key) =>
+          payload[key] !== undefined &&
+          payload[key] !== controller.preferences[key],
+      )
+    )
+      throw new Error(
+        "End this meeting before changing recording, speech language or cloud assistance. Its participant notice stays tied to the choices you confirmed.",
+      );
+    if (
+      meetings &&
+      name === "configure" &&
+      (payload.meetingRetentionDays !== undefined ||
+        payload.audioRetentionDays !== undefined)
+    ) {
+      if (payload.confirmRetention !== true)
+        throw new Error("Review and confirm retention changes first.");
+      delete payload.confirmRetention;
+      await controller.command("configure", payload);
+      meetingStore?.prune({
+        meetingDays: controller.preferences.meetingRetentionDays,
+        audioDays: controller.preferences.audioRetentionDays,
+      });
+      meetings.clearCache();
+      controller.engine.emitState();
+      return controller.snapshot();
+    }
+    if (meetings && name === "start" && payload.source !== "demo") {
+      const resuming =
+        controller.engine.status === "paused" && meetings.activeId;
+      if (!resuming && controller.engine.status !== "running") {
+        if (payload.withoutSaving && payload.retainAudio)
+          throw new Error(
+            "Audio cannot be retained when starting without saving.",
+          );
+        meetings.begin({ preferences: controller.preferences, ...payload });
+        for (const id of payload.prior || []) {
+          const old = meetings.current(id);
+          if (old?.recap)
+            controller.engine.context.add({
+              id: `meeting:${id}`,
+              title: old.title,
+              kind: "recap",
+              text: meetings.export(id).slice(0, 16000),
+            });
+        }
+      }
+    }
     if (name === "desktop.codex.signin") {
       if (
         smoke ||
@@ -546,8 +781,7 @@ async function boot() {
     }
     if (name === "desktop.settings.close") {
       if (["running", "paused"].includes(controller.engine.status)) {
-        win.hide();
-        panel.showInactive();
+        win.show();
       }
       return {};
     }
@@ -613,22 +847,31 @@ async function boot() {
         throw new Error("Pause the call before a sound check.");
       if (!["mic", "system"].includes(payload.channel))
         throw new Error("Choose an audio channel.");
-      if (!controller.config.openaiKey)
-        throw new Error("Save and test your OpenAI key first.");
       endSound(false);
       const channel = payload.channel;
-      const transcriber = new LiveTranscriber({
+      const soundSession = new AppleSpeechSession({
+        ...paths,
+        channels: [channel],
+        language: controller.preferences.language || "en-US",
+      });
+      const transcriber = soundSession.adapter({
         apiKey: controller.config.openaiKey,
         model: controller.config.transcriptionModel,
         channel,
         onSegment: (row) => {
           if (!soundCheck || soundCheck.transcriber !== transcriber) return;
-          controller.desktopState.testText = row.text;
+          controller.desktopState.testText = soundCheck.transcript.update(row);
           controller.engine.emitState();
         },
         onStatus: () => {},
       });
-      soundCheck = { channel, transcriber, level: 0 };
+      soundCheck = {
+        channel,
+        transcriber,
+        level: 0,
+        transcript: new SoundCheckTranscript(),
+      };
+      soundCheck.startedAt = Date.now();
       controller.desktopState.testText = "";
       controller.desktopState.soundResult = "Listening for the test phrase…";
       try {
@@ -637,7 +880,10 @@ async function boot() {
         endSound(false);
         throw error;
       }
-      soundTimer = setTimeout(() => endSound(true), 20000);
+      soundTimer = setTimeout(
+        () => endSound(true),
+        SOUND_CHECK_TIMES[channel].deadlineMs,
+      );
       return {};
     }
     if (name === "desktop.sound.play") {
@@ -680,6 +926,9 @@ async function boot() {
         if (existsSync(file)) unlinkSync(file);
       rmSync(path.join(dataDir, "logs"), { recursive: true, force: true });
       rmSync(workDir, { recursive: true, force: true });
+      if (meetingStore)
+        for (const m of meetingStore.all("meetings"))
+          meetingStore.deleteMeeting(m.id);
       baseConfig.openaiKey = baseConfig.firefliesKey = baseConfig.mcpToken = "";
       saved = {};
       preferences = {};
@@ -802,7 +1051,30 @@ async function boot() {
       return { saved: true };
     }
     if (["start", "pause", "end", "new"].includes(name)) endSound(false);
-    return controller.command(name, payload);
+    try {
+      return await controller.command(name, payload);
+    } catch (error) {
+      if (
+        meetings &&
+        name === "start" &&
+        meetings.activeId &&
+        controller.engine.status !== "running"
+      ) {
+        const m = meetings.get("meetings", meetings.activeId);
+        if (m) {
+          meetings.put("meetings", m.id, m.id, {
+            ...m,
+            status: "ended",
+            interrupted: true,
+            endedAt: Date.now(),
+          });
+          meetings.event(m.id, "capture.start-failed");
+          meetings.invalidate();
+          controller.engine.emitState();
+        }
+      }
+      throw error;
+    }
   });
   ipcMain.on("callwise:audio", (event, channel, buffer) => {
     if (
@@ -815,7 +1087,7 @@ async function boot() {
       const data = Buffer.from(buffer);
       if (soundCheck?.channel === channel) {
         soundCheck.level = Math.max(soundCheck.level, pcmRms(data));
-        soundCheck.transcriber.push(data, Date.now());
+        soundCheck.transcriber.push(data, Date.now() - soundCheck.startedAt);
       } else controller.audio(channel, data);
     }
   });
@@ -828,10 +1100,7 @@ async function boot() {
     send("callwise:stop-capture");
     if (evaluate) {
       const text = controller.desktopState.testText || "",
-        passed =
-          check.level > 0.004 &&
-          /ready.*(?:call|my)/i.test(text) &&
-          /callwise|call wise/i.test(text);
+        passed = soundCheckPassed(check.level, text);
       readiness[check.channel] = passed;
       const permission =
         process.platform === "darwin"
@@ -879,17 +1148,90 @@ async function boot() {
         );
       }
     });
-  app.on("before-quit", () => {
-    app.isQuitting = true;
+  let quitInProgress = false,
+    flushPending;
+  ipcMain.on("callwise:notes-flushed", (event, token, ok) => {
+    if (
+      event.sender === win?.webContents &&
+      trustedFrame(event.senderFrame) &&
+      flushPending?.token === token
+    )
+      flushPending.resolve(ok === true);
   });
-  app.on("will-quit", () => {
-    app.isQuitting = true;
-    clearTimeout(soundTimer);
-    soundCheck?.transcriber.close();
-    codexLogin.close();
-    shortcuts.close();
-    controller.close();
+  const flushNotebook = () =>
+    new Promise((resolve) => {
+      if (!win || win.isDestroyed()) {
+        resolve(false);
+        return;
+      }
+      const token = `flush-${Date.now()}`,
+        timer = setTimeout(() => {
+          flushPending = null;
+          resolve(false);
+        }, 5000);
+      flushPending = {
+        token,
+        resolve: (ok) => {
+          clearTimeout(timer);
+          flushPending = null;
+          resolve(ok);
+        },
+      };
+      win.webContents.send("callwise:flush-notes", token);
+    });
+  app.on("before-quit", (event) => {
+    if (smoke || app.isQuitting) {
+      shutdown();
+      return;
+    }
+    event.preventDefault();
+    if (quitInProgress) return;
+    quitInProgress = true;
+    void (async () => {
+      if (
+        ["running", "paused", "finishing"].includes(controller.engine.status)
+      ) {
+        const r = await dialog.showMessageBox(win, {
+          type: "question",
+          message: "End this meeting and quit Callwise?",
+          detail:
+            meetings.current()?.saving === false
+              ? "This meeting was started without saving. Export it before quitting if you want to keep it."
+              : "Audio capture will stop and your meeting will be saved.",
+          buttons: ["Keep meeting open", "End and quit"],
+          defaultId: 0,
+          cancelId: 0,
+        });
+        if (r.response !== 1) return;
+      }
+      if (!(await flushNotebook()) || meetings.pendingWrites.size > 0) {
+        win?.show();
+        await dialog.showMessageBox(win, {
+          type: "warning",
+          message: "Your latest notes could not be saved yet.",
+          detail: "Keep Callwise open and copy your notes before quitting.",
+          buttons: ["Keep open"],
+        });
+        return;
+      }
+      if (["running", "paused", "finishing"].includes(controller.engine.status))
+        await controller.command("end");
+      await Promise.allSettled(
+        [...meetings.finishingConsumers].map((c) => c.recorder?.finish()),
+      );
+      app.isQuitting = true;
+      app.quit();
+    })()
+      .catch(() => {
+        controller.engine.error(
+          "Callwise could not finish saving. Keep it open and export your notes before quitting.",
+        );
+      })
+      .finally(() => {
+        quitInProgress = false;
+      });
   });
+  app.on("will-quit", shutdown);
   app.on("window-all-closed", () => app.quit());
   app.on("activate", () => {
     if (win && !win.isDestroyed()) {
@@ -901,6 +1243,21 @@ async function boot() {
     win.loadFile(page),
     panel.loadFile(page, { query: { surface: "panel" } }),
   ]);
+  if (!smoke)
+    void native
+      .run("capabilities")
+      .then((value) => {
+        controller.desktopState.native = value;
+        refreshDesktop();
+        controller.engine.emitState();
+      })
+      .catch(() => {
+        controller.desktopState.native = {
+          speech: false,
+          localAI: "unavailable",
+        };
+        controller.engine.emitState();
+      });
   if (smoke) console.log("Smoke: main and live pages loaded.");
   if (!smoke)
     void checkForUpdate(app.getVersion()).then((update) => {
@@ -1049,10 +1406,31 @@ async function boot() {
     app.quit();
   }
 }
-if (!app.requestSingleInstanceLock()) app.quit();
+if (headlessMcp) {
+  const directory = app.getPath("userData");
+  const sessionDir = path.join(
+    app.getPath("temp"),
+    `callwise-mcp-${process.pid}`,
+  );
+  mkdirSync(sessionDir, { recursive: true, mode: 0o700 });
+  app.setPath("sessionData", sessionDir);
+  app.on("will-quit", () =>
+    rmSync(sessionDir, { recursive: true, force: true }),
+  );
+  void app
+    .whenReady()
+    .then(async () => {
+      const { runMeetingMcp } = await import("./meeting-mcp.mjs");
+      await runMeetingMcp({ app, storage: safeStorage, directory });
+    })
+    .catch(() => {
+      console.error("Callwise saved-meeting access could not start.");
+      app.exit(1);
+    });
+} else if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on("second-instance", () => {
-    if (win) {
+    if (win && !win.isDestroyed() && !app.isQuitting) {
       if (win.isMinimized()) win.restore();
       win.show();
       win.focus();

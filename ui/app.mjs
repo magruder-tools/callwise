@@ -6,8 +6,20 @@ import { live } from "./views/live.mjs";
 import { recap } from "./views/recap.mjs";
 import { settings } from "./views/settings.mjs";
 import { welcome } from "./views/welcome.mjs";
+const SOUND_CHECK_TIMES = {
+  mic: { captureMs: 30000 },
+  system: { captureMs: 12000 },
+};
 import { banner, errorBanner, escape, button } from "./components/common.mjs";
 import { AudioCapture } from "./capture.mjs";
+import {
+  meetingReady,
+  notebook,
+  meetingHistory,
+  localWelcome,
+  localSettings,
+} from "./views/meetings.mjs";
+import { createMeetingUi } from "./meetings.mjs";
 const root = document.getElementById("app"),
   panel =
     new URLSearchParams(window.location?.search || "").get("surface") ===
@@ -78,6 +90,11 @@ function receive(s) {
       transcript: [...rows.values()].sort((a, b) => a.startMs - b.startMs),
     };
   }
+  if (s.meetings?.current?.liveTranscript)
+    s.meetings.current = {
+      ...s.meetings.current,
+      segments: s.transcript || [],
+    };
   if (ui.sessionId !== s.sessionId) {
     ui.sessionId = s.sessionId;
     ui.consent = false;
@@ -89,7 +106,10 @@ function receive(s) {
   }
   if (s.status === "ended" && lastStatus !== "ended") ui.screen = "recap";
   if (s.status === "running" && lastStatus !== "running") ui.notice = "";
-  if (["running", "paused"].includes(s.status) && ui.screen !== "settings")
+  if (
+    ["running", "paused", "finishing"].includes(s.status) &&
+    !["settings", "history"].includes(ui.screen)
+  )
     ui.screen = "live";
   if (s.status === "idle" && lastStatus !== "idle" && ui.screen !== "settings")
     ui.screen = "ready";
@@ -98,7 +118,7 @@ function receive(s) {
     bridge.desktop &&
     !panel &&
     !s.preferences.setupDismissed &&
-    (!s.desktop?.readiness?.ai ||
+    (!(s.meetings ? s.desktop?.readiness?.core : s.desktop?.readiness?.ai) ||
       !s.desktop?.readiness?.mic ||
       !s.desktop?.readiness?.system)
   )
@@ -159,6 +179,12 @@ function meter(channel, rms) {
 function clock() {
   const s = state.get();
   if (!s) return;
+  if (
+    !panel &&
+    s.meetings?.current &&
+    s.meetings.current.id !== s.meetings.activeId
+  )
+    return;
   const ms =
       s.activeTimeMs +
       (s.status === "running" ? Math.max(0, Date.now() - s.snapshotAt) : 0),
@@ -174,7 +200,33 @@ function render() {
   if (!s) return;
   const view = panel ? "live" : ui.screen;
   root.dataset.view = view;
-  let content = { ready, live, recap, settings, welcome }[view](s, ui);
+  let content;
+  if (s.meetings && !panel && s.source !== "demo") {
+    content =
+      view === "ready"
+        ? meetingReady(s, ui)
+        : view === "history"
+          ? meetingHistory(s, ui)
+          : view === "settings"
+            ? localSettings(s, ui, settings)
+            : view === "welcome"
+              ? localWelcome(s, ui)
+              : notebook(s, ui);
+  } else if (
+    s.meetings &&
+    !panel &&
+    ["ready", "history", "settings", "welcome"].includes(view) &&
+    s.status === "idle"
+  ) {
+    content =
+      view === "ready"
+        ? meetingReady(s, ui)
+        : view === "history"
+          ? meetingHistory(s, ui)
+          : view === "settings"
+            ? localSettings(s, ui, settings)
+            : localWelcome(s, ui);
+  } else content = { ready, live, recap, settings, welcome }[view](s, ui);
   const notices =
     (s.desktop && !s.desktop.packaged && !s.demoOnly
       ? banner(
@@ -197,11 +249,15 @@ function render() {
       : "");
   renderRegions(
     root,
-    view === "live"
+    view === "live" && (!s.meetings || panel || s.source === "demo")
       ? content
       : `<div data-region="notices">${notices}</div><div data-region="${view}">${content}</div>`,
   );
   clock();
+  for (const id of ["meeting-notice", "apple-export", "delete-meeting"]) {
+    const dialog = document.getElementById(id);
+    if (dialog && !dialog.open) dialog.showModal();
+  }
   for (const [channel, rms] of Object.entries(latestMeters))
     meterLocal(channel, rms);
   fitPanel();
@@ -298,7 +354,10 @@ async function sound(channel) {
       channels: [channel],
     });
     if (channel === "system") await command("desktop.sound.play");
-    testTimer = setTimeout(() => void endSound(), 12000);
+    testTimer = setTimeout(
+      () => void endSound(),
+      SOUND_CHECK_TIMES[channel].captureMs,
+    );
   } catch (error) {
     await endSound();
     throw error;
@@ -333,6 +392,9 @@ async function testAI(save) {
 }
 async function act(action, node) {
   const s = state.get();
+  if (action.startsWith("m-")) return meetingUi.act(action, node);
+  if (s.meetings && ["pause", "end", "new", "export"].includes(action))
+    await meetingUi.flushNotes();
   switch (action) {
     case "call-type":
       await patch("mode", node.dataset.value);
@@ -500,6 +562,9 @@ async function act(action, node) {
     case "sound-system":
       await sound("system");
       break;
+    case "sound-stop":
+      await endSound();
+      break;
     case "permissions-system":
       await command("desktop.permissions.open", { pane: "system" });
       break;
@@ -507,7 +572,7 @@ async function act(action, node) {
       await command("desktop.permissions.open", { pane: "mic" });
       break;
     case "welcome-next":
-      ui.welcomeStep = Math.min(2, ui.welcomeStep + 1);
+      ui.welcomeStep = Math.min(s.meetings ? 3 : 2, ui.welcomeStep + 1);
       render();
       if (ui.welcomeStep === 1) await listDevices();
       break;
@@ -671,6 +736,16 @@ root.addEventListener("change", (e) => {
   }
 });
 const edits = new Map();
+const meetingUi = createMeetingUi({
+  root,
+  ui,
+  state,
+  command,
+  render,
+  clipboard,
+  flushEdits,
+});
+bridge.onFlushNotes?.(() => meetingUi.flushNotes());
 async function flushEdits() {
   const pending = [...edits.entries()];
   edits.clear();

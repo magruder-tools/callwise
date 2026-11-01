@@ -1,29 +1,19 @@
-# Privacy
+# Callwise 0.5 privacy
 
-Callwise listens only when you start a call with consent or run a short sound check. Pause, End, sleep, lock and quitting stop capture and close input sockets. No analytics, background microphone, screen reading, raw audio files, stealth mode or hidden screen-share features are implemented.
+Audio capture begins only after you explicitly start a transcribed meeting and confirm that you shared the current participant notice and obtained agreement. A notes-only meeting does not capture audio. Setup sound checks capture only when you run them. Pause, End, sleep and screen lock stop capture; End drains audio already received. Callwise does not listen in the background between meetings.
 
-## What leaves your Mac
+Apple SpeechAnalyzer transcribes on this Mac. Apple Foundation Models uses an explicitly constructed on-device SystemLanguageModel for local recaps and note editing. No private-cloud model or automatic cloud fallback is selected. Speech language preparation may download Apple assets. Bundled speaker models are downloaded and hash-verified at build time; runtime inference loads local Core ML files directly.
 
-While listening, microphone and call audio go to OpenAI Realtime transcription. Coaching requests include your supplied profile, call line, materials, prep, relevant transcript and rolling memory. With a saved key, preparation reads supplied materials before Start as you edit the setup; recaps use the conversation after End. These requests set `store:false`. OpenAI's applicable API retention and account policies still apply; this setting is not a guarantee of zero retention.
+Meeting content is encrypted with AES-256-GCM using a random library key wrapped by Electron safeStorage and the macOS keychain. Record-specific authenticated data prevents ciphertext from being moved between meetings or record types. An unreadable or missing existing key is preserved and fails closed. SQLite/WAL contains ciphertext and basic record identifiers/timestamps, not plaintext titles, people, transcript text, notes or actions. Working content and the search index exist decrypted in app/worker memory while needed. Diagnostic logs contain safe codes, not transcripts or API keys.
 
-Saving and testing the API key makes a metadata request, two tiny billed inference requests, and a transcription-session handshake. Sound checks send the short test audio to transcription and display the returned words. They stop automatically and do not become saved conversations.
+Retained audio is off by default. When enabled it is encoded into independently encrypted MP3 chunks on this Mac. Group-call speaker processing can retain up to two active hours of remote-channel PCM in memory even when audio retention is off; it is discarded after processing or cancellation. Playback is deliberate and reads only the selected meeting's retained chunks.
 
-Optional Codex, Fireflies or a custom read-only server may receive the queries and material you explicitly request. Connected-app research is pre-call or on explicit questions during a call. Nothing sends emails or other messages for you. The app checks GitHub Releases on launch without transmitting call content or credentials.
+Transcripts/notes are kept until deleted by default. Retained audio defaults to 30 days. Privacy settings require confirmation before new limits apply to existing ended meetings. A meeting deletion removes local records and audio; exported files and prior backups are separate copies. Filesystem deletion cannot promise forensic erasure on an SSD or removal from independent device backups.
 
-## What is saved
+Markdown/JSON exports are plaintext and saved to a location you choose. Apple Notes/Reminders exports show a preview and destination; content then follows those apps' storage/iCloud settings. Stable export markers prevent duplicates. Calendar reads require a deliberate action. No emails, chat messages or reminders are sent automatically from a recap.
 
-The macOS keychain-backed encryption mechanism stores connection keys, setup defaults, readiness results and the last five call setups with their extracted material text. A recap is saved only if you check **Bring this recap into the next call**. Old carried recaps appear as preparation evidence when you reuse that call. Full transcripts and suggestion arrays are never serialized to saved calls. Encrypted storage is required; no plaintext fallback is used.
+Optional OpenAI/Codex coaching and Advanced OpenAI transcription have separate privacy implications. When enabled, relevant materials/excerpts or transcription audio are sent to that provider. Credentials stay encrypted in the main process and are not exposed to the renderer or saved meeting export. Core local meetings work with these connections off.
 
-Transcript rows, suggestions, prep, memory and audio buffers are temporary process memory. Reconnection keeps at most 15 seconds of PCM per channel and clears it after acknowledged final transcription or stopping. Raw video frames are never read, stored or sent; the display track exists solely because Electron's capture API requires it for this loopback path.
+Saved meeting MCP access is off by default and checked on every tool call. The headless app opens the same encrypted library read-only. It exposes bounded metadata, search results, notes, recaps, actions and transcript excerpts, not capture, audio playback, writes or deletion. Access logs contain time, tool, client label and meeting IDs only. The requesting assistant's provider may process returned excerpts. Connecting Callwise does not copy raw Claude/ChatGPT chat history, alter the separate personal_mac connection, or grant arbitrary filesystem access.
 
-Diagnostic logs include version, state, timing and constrained error codes/status. They exclude credentials, prompts, transcripts, goals, material text, upstream error bodies and private paths. Logs rotate across five 1 MB files. Copy diagnostics produces a sanitized summary and 200 recent events. Cost is an estimate based on token usage and submitted audio duration at editable rates, not a billing statement.
-
-**Delete everything on this Mac** requires confirmation and removes Callwise's saved calls, materials, carried recaps, keys, settings, test results, private work directory and logs. Files you explicitly exported and shared Codex/ChatGPT authentication outside Callwise's data directory remain under your control.
-
-Markdown exports can contain the transcript, recap and source provenance in plaintext; choose where to save them. Callwise does not upload exported files.
-
-## Screen sharing and permission checks
-
-The panel is visible in whole-screen sharing. Share one meeting window if you want the panel outside the share. macOS may call the loopback permission Screen & System Audio Recording because this API requests a display source, even though no frames are used. Development launches can create a silent stream; use the installed app and run the sound check.
-
-Check that participants and the meeting or interview rules permit AI assistance before listening. The consent checkbox resets for every new or reused call. Saved setup never supplies consent.
+Participant notification is user-delivered. Callwise cannot verify remote delivery and does not create a platform recording indicator. It stores your confirmation and settings as a receipt, not proof of delivery or a legal determination.

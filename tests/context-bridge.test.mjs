@@ -72,6 +72,9 @@ class FakeRpc extends EventEmitter {
     hold = false,
     forged = false,
     secondPage = false,
+    noTools = false,
+    noMatches = false,
+    failedLookup = false,
   } = {}) {
     super();
     Object.assign(this, {
@@ -81,6 +84,9 @@ class FakeRpc extends EventEmitter {
       hold,
       forged,
       secondPage,
+      noTools,
+      noMatches,
+      failedLookup,
     });
     this.calls = [];
     this.closed = 0;
@@ -134,6 +140,8 @@ class FakeRpc extends EventEmitter {
           plugins: { anything: { enabled: true } },
         },
       };
+    if (method === "mcpServerStatus/list")
+      return { data: [], nextCursor: null };
     if (method === "thread/start") return { thread: { id: "thread-1" } };
     if (method === "turn/start") {
       this.turn = params;
@@ -150,20 +158,35 @@ class FakeRpc extends EventEmitter {
     });
   }
   complete() {
-    this.notify("item/started", item({ status: "inProgress", result: null }));
-    this.notify("item/completed", item());
+    if (!this.noTools) {
+      this.notify("item/started", item({ status: "inProgress", result: null }));
+      this.notify(
+        "item/completed",
+        this.failedLookup
+          ? item({
+              status: "failed",
+              error: { message: "Connection failed" },
+              result: null,
+            })
+          : this.noMatches
+            ? item({ result: { structuredContent: { results: [] } } })
+            : item(),
+      );
+    }
     this.notify("item/completed", {
       id: "msg-1",
       type: "agentMessage",
       text: JSON.stringify(
-        answer(
-          this.forged
-            ? {
-                excerpt:
-                  "This fabricated budget has never appeared in any actual source.",
-              }
-            : {},
-        ),
+        this.noTools || this.noMatches || this.failedLookup
+          ? { sources: [] }
+          : answer(
+              this.forged
+                ? {
+                    excerpt:
+                      "This fabricated budget has never appeared in any actual source.",
+                  }
+                : {},
+            ),
       ),
     });
     this.emit("notification", {
@@ -182,6 +205,28 @@ test("only explicitly enabled read-only tools are admitted", () => {
   assert.deepEqual(
     readOnlyTools(APP).map((x) => x.name),
     ["search_email"],
+  );
+});
+test("unattended lookups do not grant Slack private-channel or DM search consent", () => {
+  const slack = {
+    ...APP,
+    toolSummaries: [
+      { name: "slack_search_public", isEnabled: true, isReadOnly: true },
+      {
+        name: "slack_search_public_and_private",
+        isEnabled: true,
+        isReadOnly: true,
+      },
+    ],
+  };
+  assert.deepEqual(
+    readOnlyTools(slack).map((t) => t.name),
+    ["slack_search_public"],
+  );
+  assert.equal(
+    contextPolicy({}, [slack]).apps[slack.id].tools
+      .slack_search_public_and_private.enabled,
+    false,
   );
 });
 test("per-tool policy overrides broad inherited approvals and disables unselected apps/MCP/plugins", () => {
@@ -222,6 +267,8 @@ test("per-tool policy overrides broad inherited approvals and disables unselecte
   assert.equal(policy.plugins.hook.enabled, false);
   assert.equal(policy["features.shell_tool"], false);
   assert.equal(policy["features.code_mode.enabled"], false);
+  assert.equal(policy["features.code_mode_host"], true);
+  assert.equal(policy["features.tool_suggest"], true);
 });
 test("context policy preserves explicit open-world restrictions", () => {
   assert.equal(
@@ -229,6 +276,68 @@ test("context policy preserves explicit open-world restrictions", () => {
       .apps[APP.id].open_world_enabled,
     false,
   );
+});
+test("qualified tool aliases require both runtime identity and verified read-only action metadata", () => {
+  const tool = (name, action, readOnlyHint, id = APP.id) => ({
+    name,
+    annotations: { readOnlyHint },
+    _meta: {
+      connector_id: id,
+      _codex_apps: { resource_uri: `/${id}/link-test/${action}` },
+    },
+  });
+  const catalog = [
+    { name: "plugin-server", pluginId: "server-plugin@official", tools: {} },
+    {
+      name: "codex_apps",
+      tools: {
+        read: tool("gmail.search_email", "search_email", true),
+        write: tool("gmail.send_email", "send_email", true),
+        unknown: tool("gmail.unknown_action", "unknown_action", true),
+        disabled: tool("gmail.disabled_search", "disabled_search", true),
+        noHint: tool("gmail.no_hint", "search_email", false),
+        other: tool("slack.search", "search_email", true, "other"),
+      },
+    },
+  ];
+  const policy = contextPolicy(
+    { mcp_servers: { "plugin-server": { enabled: true } } },
+    [APP],
+    catalog,
+  );
+  const controls = policy.apps[APP.id].tools;
+  for (const name of [
+    "gmail.search_email",
+    "gmail_search_email",
+    "mcp__codex_apps__gmail_search_email",
+  ])
+    assert.deepEqual(controls[name], {
+      enabled: true,
+      approval_mode: "writes",
+    });
+  for (const name of [
+    "gmail.send_email",
+    "gmail.unknown_action",
+    "gmail.disabled_search",
+    "gmail.no_hint",
+  ])
+    assert.deepEqual(controls[name], {
+      enabled: false,
+      approval_mode: "prompt",
+    });
+  assert.equal(controls["slack.search"], undefined);
+  assert.equal(policy.mcp_servers["plugin-server"].enabled, false);
+  assert.equal(policy.plugins["server-plugin@official"].enabled, false);
+  assert.equal(policy.apps._default.enabled, false);
+});
+test("tool catalog discovery rejects a repeated cursor and missing inventory", async () => {
+  const rpc = new FakeRpc(),
+    p = provider(rpc);
+  rpc.request = async () => ({ data: [], nextCursor: "same" });
+  await assert.rejects(p.toolCatalog(), /discovery did not finish/);
+  rpc.request = async () => ({});
+  await assert.rejects(p.toolCatalog(), /verified app tool catalog/);
+  p.close();
 });
 for (const [label, change] of [
   ["failed", { status: "failed" }],
@@ -311,6 +420,7 @@ test("Codex discovery paginates and exposes runtime ready state without changing
   assert.equal(result.apps[0].readOnlyToolCount, 1);
   assert.equal(rpc.calls.filter((c) => c.method === "app/list").length, 2);
   assert.ok(rpc.calls.every((c) => !c.method.includes("write")));
+  assert.ok(rpc.closed > 0);
   p.close();
 });
 test("discovery handles catalogs beyond 2100 entries and still rejects repeated cursors", async () => {
@@ -342,9 +452,54 @@ test("retrieval scopes a dedicated thread, uses exact app mentions, and accepts 
   assert.equal(thread.ephemeral, true);
   assert.equal(thread.config.apps[APP.id].tools.send_email.enabled, false);
   assert.equal(rpc.turn.input[1].path, `app://${APP.id}`);
+  assert.deepEqual(
+    rpc.turn.outputSchema.properties.sources.items.properties.appId.enum,
+    [APP.id],
+  );
   assert.equal(rpc.turn.sandboxPolicy.networkAccess, false);
   assert.equal(rpc.calls.at(-1).method, "thread/unsubscribe");
   assert.equal(p.busy, false);
+  assert.ok(rpc.closed > 0);
+  p.close();
+});
+test("a failed app-list lookup closes its connection and a later lookup can reconnect", async () => {
+  const rpc = new FakeRpc(),
+    p = provider(rpc);
+  const request = rpc.request.bind(rpc);
+  let failed = false;
+  rpc.request = async (method, ...args) => {
+    if (method === "app/list" && !failed) {
+      failed = true;
+      throw new Error("Codex app/list timed out.");
+    }
+    return request(method, ...args);
+  };
+  try {
+    await assert.rejects(p.search(options), /app\/list timed out/);
+    assert.ok(rpc.closed > 0);
+    assert.equal(p.busy, false);
+    assert.equal((await p.search(options)).length, 1);
+    assert.ok(rpc.closed > 1);
+  } finally {
+    p.close();
+  }
+});
+for (const options of [{ noTools: true }, { failedLookup: true }])
+  test(`an empty model response cannot hide a missing or failed search: ${JSON.stringify(options)}`, async () => {
+    const rpc = new FakeRpc(options),
+      p = provider(rpc);
+    await assert.rejects(
+      p.search({ query: "Find the known record", appIds: [APP.id] }),
+      /didn't complete a search/,
+    );
+    assert.equal(p.busy, false);
+    assert.equal(rpc.calls.at(-1).method, "thread/unsubscribe");
+    p.close();
+  });
+test("a completed selected-app search can return a genuinely empty result", async () => {
+  const rpc = new FakeRpc({ noMatches: true }),
+    p = provider(rpc);
+  assert.deepEqual(await p.search(options), []);
   p.close();
 });
 for (const [label, config, pattern] of [
@@ -386,6 +541,25 @@ test("retrieval times out and recovers for the next lookup", async () => {
     assert.equal((await p.search(options)).length, 1);
   } finally {
     clearInterval(keepalive);
+    p.close();
+  }
+});
+test("connection setup does not consume the bounded model lookup time", async () => {
+  const rpc = new FakeRpc(),
+    original = rpc.request.bind(rpc);
+  rpc.request = async (method, ...args) => {
+    if (method === "app/list") await wait(80);
+    return original(method, ...args);
+  };
+  const p = new CodexContextProvider({
+    rpc,
+    cwd: "/tmp/test",
+    timeoutMs: 40,
+    discoveryTimeoutMs: 1000,
+  });
+  try {
+    assert.equal((await p.search(options)).length, 1);
+  } finally {
     p.close();
   }
 });

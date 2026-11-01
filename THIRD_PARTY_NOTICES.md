@@ -37,3 +37,13 @@ PDF.js (pdfjs-dist), Apache-2.0: https://github.com/mozilla/pdf.js
 Mammoth, BSD-2-Clause: https://github.com/mwilliamson/mammoth.js
 
 Their license notices remain with installed dependencies. DOCX extraction uses raw text rather than HTML. The Mammoth CLI-only argparse dependency is overridden to 2.0.1 to avoid its old sprintf-js dependency.
+
+
+## Local meeting components added in 0.5
+
+- **FluidAudio v0.12.4** — Apache-2.0; https://github.com/FluidInference/FluidAudio/tree/v0.12.4. Used for local offline diarization. The exact transitive source revisions are in `native/CallwiseNative/Package.resolved`; this tag has no NemoTextProcessing binary target. Sources/licenses for FluidAudio, FastCluster, swift-transformers/Tokenizers, swift-huggingface, swift-jinja, EventSource, yyjson, swift-crypto, swift-asn1 and swift-collections remain with their packages. A packaged copy of source dependency license files is in the native notices folder.
+- **Community-1 Core ML conversions** — supported artifacts only, CC-BY-4.0. Attribution: pyannote, WeSpeaker, Brno University of Technology / BUT Speech@FIT, and Fluid Inference. Fluid Inference modified the source models into Core ML graphs, separated feature extraction, adjusted shapes/precision and compiled Apple-platform artifacts. See `native/resources/MODEL-NOTICE.md`, bundled model `NOTICE.md`, `LICENSE`, and `provenance.json` for exact scope, historical provenance limitations, citations and source references. https://huggingface.co/FluidInference/speaker-diarization-coreml and https://creativecommons.org/licenses/by/4.0/ . Legacy wespeaker/segmentation models are not bundled.
+- **MiniSearch 7.2.0** — MIT; https://github.com/lucaong/minisearch. In-memory meeting retrieval.
+- **@breezystack/lamejs 1.2.7** — LGPL-3.0; https://github.com/shijinyu/lamejs. Unmodified JavaScript MP3 encoder, retained separately in installed dependencies/app resources with its license. The GPL-3.0-or-later Callwise source and exact dependency lock permit rebuilding/replacing this component.
+
+Apple Speech, Foundation Models, EventKit, Core ML and AVFoundation are system frameworks, not redistributed model libraries. Their availability depends on the user's Mac and installed Apple assets. Only SystemLanguageModel is selected for local generation.

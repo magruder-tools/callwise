@@ -72,7 +72,7 @@ test("signing setup configures both Actions secrets through authenticated gh std
     log = path.join(dir, "gh-calls.jsonl");
   writeFileSync(
     fake,
-    `#!/usr/bin/env node
+    `#!${process.execPath}
 import { readFileSync, appendFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 const input = process.argv[2] === 'secret' ? readFileSync(0) : Buffer.alloc(0);

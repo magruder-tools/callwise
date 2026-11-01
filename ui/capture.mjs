@@ -52,12 +52,7 @@ export class AudioCapture {
           })
         : await navigator.mediaDevices.getDisplayMedia({
             video: { frameRate: 1 },
-            audio: {
-              echoCancellation: false,
-              noiseSuppression: false,
-              autoGainControl: false,
-            },
-            systemAudio: "include",
+            audio: true,
           });
     if (!this.active || generation !== this.generation) {
       stream.getTracks().forEach((t) => t.stop());

@@ -1,15 +1,15 @@
 {
   "name": "callwise",
   "productName": "Callwise",
-  "version": "0.4.1",
-  "description": "A personal thinking copilot for live conversations",
+  "version": "0.5.0",
+  "description": "Local meeting notes, transcripts and optional live coaching",
   "private": true,
   "type": "module",
   "main": "desktop/main.mjs",
   "license": "GPL-3.0-or-later",
   "author": "Callwise contributors",
   "engines": {
-    "node": ">=22.12"
+    "node": ">=24.15"
   },
   "scripts": {
     "start": "electron .",
@@ -19,18 +19,24 @@
     "check": "node scripts/check.mjs",
     "format": "prettier --write .",
     "doctor": "node scripts/doctor.mjs",
-    "dist:mac": "node scripts/bundle-codex.mjs && electron-builder --mac dmg zip --arm64 --publish never",
+    "dist:mac": "node scripts/fetch-diarization-models.mjs && node scripts/build-native.mjs && node scripts/bundle-codex.mjs && electron-builder --mac dmg zip --arm64 --publish never",
     "dist:win": "electron-builder --win zip --x64 --publish never",
     "package:source": "node scripts/package-source.mjs",
     "bundle:codex": "node scripts/bundle-codex.mjs",
     "replay": "node scripts/replay.mjs",
-    "signing:setup": "node scripts/create-signing-identity.mjs"
+    "signing:setup": "node scripts/create-signing-identity.mjs",
+    "build:native": "node scripts/build-native.mjs",
+    "models:fetch": "node scripts/fetch-diarization-models.mjs",
+    "test:meetings": "node scripts/verify-meeting-ui.mjs",
+    "bench:local": "node scripts/bench-speech.mjs"
   },
   "dependencies": {
     "mammoth": "1.13.0",
     "pdfjs-dist": "6.4.299",
     "socket.io-client": "4.8.3",
-    "ws": "8.21.3"
+    "ws": "8.21.3",
+    "minisearch": "7.2.0",
+    "@breezystack/lamejs": "1.2.7"
   },
   "devDependencies": {
     "@electron/osx-sign": "2.7.1",
@@ -38,7 +44,8 @@
     "electron": "44.2.0",
     "electron-builder": "26.15.3",
     "linkedom": "0.18.13",
-    "prettier": "3.6.2"
+    "prettier": "3.6.2",
+    "npm": "12.2.1"
   },
   "build": {
     "appId": "local.callwise.desktop",
@@ -67,9 +74,14 @@
       "extendInfo": {
         "NSMicrophoneUsageDescription": "Callwise transcribes your voice while you explicitly run a call session.",
         "NSAudioCaptureUsageDescription": "Callwise transcribes meeting audio while you explicitly run a call session.",
-        "NSScreenCaptureUsageDescription": "Callwise uses system capture to hear your selected meeting. Video frames are not sent to AI."
+        "NSScreenCaptureUsageDescription": "Callwise uses system capture to hear your selected meeting. Video frames are not sent to AI.",
+        "NSSpeechRecognitionUsageDescription": "Callwise transcribes the meetings you start, on this Mac.",
+        "NSRemindersFullAccessUsageDescription": "Callwise saves only reminders you review and choose to export.",
+        "NSRemindersUsageDescription": "Callwise saves only reminders you choose to export.",
+        "NSCalendarsFullAccessUsageDescription": "Callwise can use a selected calendar event to fill in a meeting title and people.",
+        "NSAppleEventsUsageDescription": "Callwise creates or updates only the Apple Notes you choose to export."
       },
-      "minimumSystemVersion": "14.2",
+      "minimumSystemVersion": "26.0",
       "identity": "-",
       "sign": "scripts/sign-mac.mjs",
       "entitlements": "build/entitlements.mac.plist",
@@ -83,6 +95,10 @@
       {
         "from": "README.md",
         "to": "README.md"
+      },
+      {
+        "from": "native/resources",
+        "to": "native"
       }
     ],
     "dmg": {
@@ -99,7 +115,13 @@
           "path": "/Applications"
         }
       ]
-    }
+    },
+    "extraFiles": [
+      {
+        "from": "native/build/callwise-native",
+        "to": "MacOS/callwise-native"
+      }
+    ]
   },
   "overrides": {
     "argparse": "2.0.1"

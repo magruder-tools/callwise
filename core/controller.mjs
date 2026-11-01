@@ -33,6 +33,7 @@ export class CallController extends EventEmitter {
     preferences = {},
     onPreferences = () => {},
     transcriberFactory = null,
+    speechFactory = null,
     diagnostics = () => {},
     sheets = [],
     onSheets = () => {},
@@ -59,7 +60,8 @@ export class CallController extends EventEmitter {
     this.preferences = sanitizePreferences(preferences);
     this.onPreferences = onPreferences;
     this.diagnostics = diagnostics;
-    this.transcriberFactory = transcriberFactory;
+    this.transcriberFactory = speechFactory || transcriberFactory;
+    this.captureEpoch = 0;
     this.demoStarted = false;
     if (
       this.preferences.goal === DEMO_SETTINGS.goal &&
@@ -82,6 +84,30 @@ export class CallController extends EventEmitter {
     this.pendingSearch = null;
     this.engine = new CoachEngine({ diagnostics });
     this.engine.configure(this.preferences);
+    const matchesDraft = (s) =>
+      s.line === this.engine.settings.goal &&
+      s.type === this.engine.settings.mode &&
+      s.project === (this.engine.settings.project || "");
+    const savedDraft = this.preferences.activeSheetId
+      ? this.sheets.find(
+          (s) => s.id === this.preferences.activeSheetId && matchesDraft(s),
+        )
+      : this.engine.settings.goal.trim()
+        ? this.sheets
+            .filter(matchesDraft)
+            .sort((a, b) => b.updatedAt - a.updatedAt)[0]
+        : null;
+    if (savedDraft && !demoOnly) {
+      this.sheetId = savedDraft.id;
+      // Restore the user's prepared materials. Connected-app evidence is
+      // retrieved again rather than reusing old permission/provenance state.
+      for (const material of savedDraft.materials)
+        if (!material.provenance)
+          this.engine.context.add({
+            ...material,
+            project: this.engine.settings.project || "",
+          });
+    }
     this.engine.recordUsage = (usage, lane) => this.addUsage(usage, lane);
     this.lastEngineStatus = this.engine.status;
     this.engine.on("state", () => {
@@ -91,7 +117,8 @@ export class CallController extends EventEmitter {
       if (this.engine.status === "ended" && wasActive && !this.closing)
         void this.makeRecap();
       if (this.engine.status === "running") this.maybeSummarize();
-      if (wasRunning && this.engine.status !== "running") this.stopInputs();
+      if (wasRunning && this.engine.status !== "running" && !this.draining)
+        this.stopInputs();
       this.emit("state", this.snapshot());
     });
     this.fireflies = new FirefliesClient({ apiKey: config.firefliesKey });
@@ -100,25 +127,33 @@ export class CallController extends EventEmitter {
     this.captureInputs = { mic: "off", system: "off" };
     this.demoProvider = new DemoProvider();
     this.setProviders();
+    if (savedDraft && !demoOnly) this.schedulePrep();
   }
   setProviders() {
     this.engine.providers =
       this.mode === "demo"
         ? { fast: this.demoProvider, strategy: this.demoProvider }
-        : {
-            fast: new OpenAIProvider({
-              apiKey: this.config.openaiKey,
-              model: this.config.fastModel,
-            }),
-            strategy:
-              this.strategyBackend === "codex"
-                ? this.codex
-                : new OpenAIProvider({
+        : this.preferences.liveHelp === false ||
+            (!this.config.openaiKey && !this.codex)
+          ? {}
+          : {
+              fast: this.config.openaiKey
+                ? new OpenAIProvider({
                     apiKey: this.config.openaiKey,
-                    model: this.config.strategyModel,
-                    effort: "low",
-                  }),
-          };
+                    model: this.config.fastModel,
+                  })
+                : this.codex,
+              strategy:
+                this.strategyBackend === "codex"
+                  ? this.codex
+                  : new OpenAIProvider({
+                      apiKey: this.config.openaiKey,
+                      model: this.config.strategyModel,
+                      effort: "low",
+                    }),
+            };
+    this.engine.config.autoCoach =
+      this.mode === "demo" || !!this.engine.providers.fast;
     this.engine.retriever =
       this.mode !== "demo" && this.engine.settings.contextConsent
         ? async ({ query, signal, recent, project, sessionId }) => {
@@ -291,6 +326,9 @@ export class CallController extends EventEmitter {
       connecting: !!this.connecting,
       contextApps: this.contextApps.map((a) => ({ ...a })),
       retrieval: this.retrieval.snapshot(),
+      ...(this.meetingService
+        ? { meetings: this.meetingService.snapshot() }
+        : {}),
     };
   }
   async command(name, payload = {}) {
@@ -355,19 +393,19 @@ export class CallController extends EventEmitter {
           this.schedulePrep();
         }
         this.setProviders();
+        if (!payload.practice)
+          this.rememberPreferences({ activeSheetId: this.sheetId });
         this.engine.emitState();
         return this.snapshot();
       }
       case "start":
         return this.start(payload);
       case "pause":
-        this.stopInputs();
-        this.engine.pause();
+        await this.drainInputs({ timeoutMs: 3000, ending: false });
         this.engine.emitState();
         return this.snapshot();
       case "end":
-        this.stopInputs();
-        this.engine.end();
+        await this.drainInputs({ timeoutMs: 8000, ending: true });
         return this.snapshot();
       case "ask": {
         if (typeof payload.question !== "string" || !payload.question.trim())
@@ -529,7 +567,11 @@ export class CallController extends EventEmitter {
       throw new Error(
         "Confirm that AI assistance and transcription are permitted.",
       );
-    if (source !== "demo" && !this.config.openaiKey)
+    if (
+      source === "audio" &&
+      !this.transcriberFactory &&
+      !this.config.openaiKey
+    )
       throw new Error(
         "Open Settings and save your OpenAI API key. Practice works without a key.",
       );
@@ -547,6 +589,8 @@ export class CallController extends EventEmitter {
     this.setProviders();
     this.stopInputs();
     const generation = ++this.generation;
+    const captureEpoch = ++this.captureEpoch;
+    this.engine.captureEpoch = captureEpoch;
     this.connecting = true;
     this.engine.emitState();
     try {
@@ -610,12 +654,25 @@ export class CallController extends EventEmitter {
               apiKey: this.config.openaiKey,
               model: this.config.transcriptionModel,
               channel,
+              captureEpoch,
               keywords: this.engine.prep?.glossary || [],
               languages: [this.preferences.language || "en"],
               prompt: this.engine.settings.goal.slice(0, 800),
               delay: this.preferences.transcriptionDelay || "low",
               onSegment: (row) => {
-                if (generation === this.generation) this.engine.ingest(row);
+                if (generation === this.generation)
+                  this.engine.ingest(
+                    {
+                      ...row,
+                      captureEpoch,
+                      engine:
+                        row.engine ||
+                        (this.preferences.speechEngine === "openai"
+                          ? "openai"
+                          : "apple"),
+                    },
+                    { drain: this.draining },
+                  );
               },
               diagnostics: this.diagnostics,
               onAudioSent: (ms) => {
@@ -721,6 +778,7 @@ export class CallController extends EventEmitter {
   audio(channel, buffer) {
     if (this.mode !== "audio" || this.engine.status !== "running") return;
     this.transcribers.get(channel)?.push(buffer, this.engine.activeTimeMs());
+    this.meetingService?.audio(channel, buffer, this.engine.activeTimeMs());
   }
   captureStatus(channel, status) {
     if (!["mic", "system"].includes(channel)) return;
@@ -762,6 +820,52 @@ export class CallController extends EventEmitter {
     this.captureInputs = { mic: "off", system: "off" };
     this.emit("stop-capture");
     this.summaryJob?.abort();
+  }
+  async drainInputs({ timeoutMs = 8000, ending = false } = {}) {
+    if (this.drainJob) return this.drainJob;
+    if (!this.transcribers.size) {
+      this.stopInputs();
+      ending ? this.engine.end() : this.engine.pause();
+      return;
+    }
+    this.draining = true;
+    this.emit("stop-capture");
+    ending ? this.engine.beginFinish() : this.engine.pause();
+    const generation = this.generation;
+    this.drainJob = (async () => {
+      let timer;
+      try {
+        await Promise.race([
+          Promise.allSettled(
+            [...this.transcribers.values()].map((t) =>
+              t.finish?.({ timeoutMs }),
+            ),
+          ),
+          new Promise((resolve) => {
+            timer = setTimeout(resolve, timeoutMs);
+          }),
+        ]);
+        if (generation !== this.generation) return;
+        for (const row of this.engine.transcript.values())
+          if (!row.final)
+            this.engine.ingest(
+              {
+                ...row,
+                final: true,
+                unfinalized: true,
+                captureEpoch: this.engine.captureEpoch,
+              },
+              { drain: true },
+            );
+        this.stopInputs();
+        if (ending) this.engine.end();
+      } finally {
+        clearTimeout(timer);
+        this.draining = false;
+        this.drainJob = null;
+      }
+    })();
+    return this.drainJob;
   }
   async searchMcp(query) {
     if (
@@ -904,7 +1008,11 @@ export class CallController extends EventEmitter {
         this.engine.prep = null;
         return;
       }
-      if (this.demoOnly || (!this.config.openaiKey && !this.documentProvider))
+      if (
+        this.demoOnly ||
+        (!this.documentProvider &&
+          (this.preferences.liveHelp === false || !this.config.openaiKey))
+      )
         this.engine.prep = localPrep(materials, line);
       else {
         const result = await this.auxiliary().generate({
@@ -961,6 +1069,7 @@ export class CallController extends EventEmitter {
           ? "client"
           : this.engine.settings.mode,
       line: this.engine.settings.goal,
+      project: this.engine.settings.project || "",
       materials: [...this.engine.context.docs.values()]
         .filter((d) => d.kind !== "recap")
         .map(({ id, title, text, url, kind, provenance, retrievedAt }) => ({
@@ -980,6 +1089,7 @@ export class CallController extends EventEmitter {
       );
       this.onSheets(sheets);
       this.sheets = sheets;
+      this.rememberPreferences({ activeSheetId: this.sheetId });
     } catch (error) {
       this.engine.error(error, { condition: "save-calls" });
     }
@@ -991,9 +1101,19 @@ export class CallController extends EventEmitter {
     if (!sheet) throw new Error("That saved call is no longer available.");
     await this.command("new", { clearContext: true });
     this.sheetId = sheet.id;
-    this.engine.configure({ mode: sheet.type, goal: sheet.line });
-    this.rememberPreferences({ mode: sheet.type, goal: sheet.line });
-    for (const material of sheet.materials) this.engine.context.add(material);
+    this.engine.configure({
+      mode: sheet.type,
+      goal: sheet.line,
+      project: sheet.project,
+    });
+    this.rememberPreferences({
+      mode: sheet.type,
+      goal: sheet.line,
+      project: sheet.project,
+      activeSheetId: sheet.id,
+    });
+    for (const material of sheet.materials)
+      this.engine.context.add({ ...material, project: sheet.project });
     for (const h of sheet.history)
       this.engine.context.add({
         id: `recap:${sheet.id}:${h.at}`,
@@ -1019,7 +1139,7 @@ export class CallController extends EventEmitter {
     try {
       if (
         (this.mode === "demo" ||
-          this.config.openaiKey ||
+          (this.preferences.liveHelp !== false && this.config.openaiKey) ||
           this.documentProvider) &&
         rows.length
       ) {
@@ -1095,6 +1215,7 @@ export class CallController extends EventEmitter {
   maybeSummarize() {
     if (
       this.mode === "demo" ||
+      this.preferences.liveHelp === false ||
       (!this.config.openaiKey && !this.documentProvider) ||
       this.summaryJob ||
       this.engine.activeTimeMs() - this.lastSummaryMs < 180000

@@ -18,7 +18,7 @@ Full implementation adjustments, environment, and remaining checks are in [VALID
 
 ## App archive identity
 
-File: `Callwise-0.5.0-Apple-Silicon.zip` (280,517,293 bytes).
+File: `Callwise-0.5.0-Apple-Silicon.zip` (280,517,218 bytes).
 
 SHA256: `17127f12b011600338ca28c913323fc3ef2b017a8dd2d04a8a00295c829a5833`.
 

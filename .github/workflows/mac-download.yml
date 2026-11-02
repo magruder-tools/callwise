@@ -39,7 +39,7 @@ jobs:
             BUILD_COMMIT.txt
           retention-days: 30
   mac:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 20
     defaults:
       run:
@@ -50,7 +50,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: "22.16.0"
+          node-version: "24.22.1"
           cache: npm
       - name: Install locked dependencies
         run: npm ci
@@ -64,6 +64,10 @@ jobs:
           npm run check 2>&1 | tee check.log
           npm test 2>&1 | tee test.log
           npm audit --omit=dev --audit-level=high 2>&1 | tee audit.log
+      - name: Verify pinned local speaker assets
+        run: npm run models:fetch
+      - name: Build native meeting engine
+        run: npm run build:native
       - name: Native Electron smoke test without keys or recording
         run: npm start -- --smoke 2>&1 | tee smoke.log
       - name: Import persistent identity when configured
@@ -161,7 +165,7 @@ jobs:
           if (!change) throw new Error('Missing release notes for the tagged version');
           const changes = change.slice(change.indexOf('\n')).trim();
           const signing = fs.readFileSync('release/SIGNING.txt', 'utf8').trim();
-          fs.writeFileSync('release/RELEASE_NOTES.md', `${changes}\n\nDownload the Apple Silicon DMG below, open it and drag Callwise into Applications. Requires macOS 14.2 or later.\n\n${signing}\n\nNative and packaged-app checks passed: ${process.env.BUILD_URL}\n\nBuild commit: ${process.env.BUILD_COMMIT}\n\nSHA256SUMS.txt contains the installer checksums.\n`);
+          fs.writeFileSync('release/RELEASE_NOTES.md', `${changes}\n\nDownload the Apple Silicon DMG below, open it and drag Callwise into Applications. Requires macOS 26.0 or later.\n\n${signing}\n\nNative and packaged-app checks passed: ${process.env.BUILD_URL}\n\nBuild commit: ${process.env.BUILD_COMMIT}\n\nSHA256SUMS.txt contains the installer checksums.\n`);
           JS
       - name: Publish installer downloads as the latest release
         env:

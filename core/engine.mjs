@@ -207,6 +207,12 @@ export class CoachEngine extends EventEmitter {
     this.log("session", "Session ended. Export only if you want to keep it.");
     this.emitState();
   }
+  beginFinish() {
+    this.freezeClock();
+    this.status = "finishing";
+    this.cancel();
+    this.emitState();
+  }
   cancel() {
     clearTimeout(this.warningTimer);
     clearTimeout(this.deadlineTimer);
@@ -221,9 +227,13 @@ export class CoachEngine extends EventEmitter {
     this.autoQueue = [];
     this.speculation = null;
   }
-  ingest(segment) {
-    if (this.status !== "running") return false;
-    if (this.activeTimeMs() >= this.config.maxSessionMs) {
+  ingest(segment, { drain = false } = {}) {
+    const draining =
+      drain &&
+      ["paused", "finishing"].includes(this.status) &&
+      segment?.captureEpoch === this.captureEpoch;
+    if (this.status !== "running" && !draining) return false;
+    if (!draining && this.activeTimeMs() >= this.config.maxSessionMs) {
       this.end();
       this.error("Call time limit reached. Start another call to continue.");
       return false;
@@ -262,6 +272,12 @@ export class CoachEngine extends EventEmitter {
         : this.activeTimeMs(),
       endMs: Number.isFinite(segment.endMs) ? segment.endMs : undefined,
       gap: segment.gap === true,
+      captureEpoch: segment.captureEpoch,
+      engine: segment.engine,
+      confidence: segment.confidence,
+      unfinalized: segment.unfinalized === true,
+      speakerKey:
+        segment.speakerKey || (segment.channel === "mic" ? "you" : "them"),
       receivedAt: this.clock(),
     };
     // On speakers, retain the system transcript and remove the microphone echo.
@@ -279,6 +295,11 @@ export class CoachEngine extends EventEmitter {
       }
     }
     this.transcript.set(row.id, row);
+    if (draining) {
+      if (row.final) this.revision++;
+      this.emitState();
+      return true;
+    }
     const own = isOwnTurn(row, this.settings.userName);
     if (own && this.userSpeechAt === null) this.userSpeechAt = this.clock();
     if (row.final) {
@@ -578,7 +599,8 @@ export class CoachEngine extends EventEmitter {
       return { busy: true };
     const metric = `${lane}Calls`;
     if (!this.providers[lane]) {
-      this.error(`${lane} provider is not configured.`);
+      if (explicit)
+        this.error("Enable optional live help in Settings to use coaching.");
       return;
     }
     if (

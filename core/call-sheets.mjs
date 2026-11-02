@@ -53,6 +53,7 @@ export function sanitizeSheets(sheets) {
         ? s.type
         : "general",
       line: String(s.line || "").slice(0, 2000),
+      project: String(s.project || "").slice(0, 100),
       materials,
       history: (Array.isArray(s.history) ? s.history : [])
         .slice(-3)

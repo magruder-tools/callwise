@@ -1,0 +1,32 @@
+✔ H1: a reopened library is visible and queued document jobs resume serially (459.596583ms)
+✔ H2: helper crash then pause/resume preserves all earlier final speech (41.374416ms)
+✔ H3: concurrent start rejection cannot end the first meeting or prevent saving (10.681417ms)
+✔ H4: the notebook never invokes the legacy cloud summary or recap (0.361416ms)
+✔ H5 and L2: only selected recap evidence leaves the notebook, with trusted preferences (4.520792ms)
+✔ H6 and M1: streamed backup preserves more than 100,000 rows under a new key (6346.162ms)
+✔ H7: recovery retains the last indexed audio file beyond the old cap (1702.64825ms)
+✔ M1: truncated streamed backups roll back, while legacy backups still restore (1052.154209ms)
+✔ M2: delete all clears decrypted state, key, backups and stale editing targets (4.248041ms)
+✔ M3: a long-lived reader sees newly saved meetings in search (15.941167ms)
+✔ M4/M5: negotiate old MCP versions, allow legacy metadata, and enforce per-meeting consent (3.050792ms)
+✔ M7: an owner suggestion is a speaker name with separate evidence (0.105666ms)
+✔ M8: renaming 1,500 lines emits once and preserves diarization eligibility (53.259917ms)
+✔ M9: history questions use bounded relevant excerpts with a cancel signal (30.034792ms)
+✔ M10/L4: one failed speech channel does not restart the other and discards retain run identity (0.15475ms)
+✔ L1: End waits for Pause's drain and still reaches ended (0.480375ms)
+✔ L8: colon-containing identifiers cannot alias encrypted record identities (1.662375ms)
+✔ L10: crash recovery creates a transcript gap and queues exactly one recap (2.176958ms)
+✔ L11: an unrelated title edit cannot hide the first recap as a draft (2.553542ms)
+✔ L12: deleted meetings reject late audio writes and remove finishing chunks (14.227625ms)
+✔ M6: an objection prevents resume and offers deletion before notes-only continuation (4.375833ms)
+✔ L3: adopted enhanced notes refresh while ordinary snapshots retain a typed draft (1.933042ms)
+✔ L5: a second Notes save cannot race an in-flight export (2.40625ms)
+✔ L5: large Notes export text travels over stdin, never command arguments (0.978333ms)
+ℹ tests 24
+ℹ suites 0
+ℹ pass 24
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 9883.216708

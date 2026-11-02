@@ -42,6 +42,8 @@ export const banner = (text, action = "", label = "", tone = "") =>
   `<div class="banner ${tone}" role="status"><span>${escape(text)}</span>${action ? button(action, label) : ""}</div>`;
 export function header(s, title = "Callwise") {
   const r = s.desktop?.readiness || {};
+  if (s.meetings)
+    return `<header class="app-header"><div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><strong>${escape(title)}</strong></div><span class="local-badge">${s.preferences.speechEngine === "openai" ? "Cloud speech selected" : "On this Mac"}</span><div class="row">${button("m-history", "Meetings", { className: "text-button" })}${button("settings", "", { iconName: "settings", title: "Settings", className: "icon-button" })}</div></header>`;
   return `<header class="app-header"><div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><strong>${escape(title)}</strong></div><div class="readiness">${[
     ["AI", r.ai, "AI"],
     ["Mic", r.mic, "Mic"],

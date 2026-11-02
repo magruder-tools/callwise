@@ -13,8 +13,8 @@ export default async function signMac(options) {
     identityValidation: false,
     preAutoEntitlements: false,
     preEmbedProvisioningProfile: false,
-    optionsForFile: () => ({
-      entitlements: "build/entitlements.mac.plist",
+    optionsForFile: (file) => ({
+      entitlements: file.endsWith('/callwise-native') ? 'build/entitlements.native.plist' : "build/entitlements.mac.plist",
       hardenedRuntime: true,
     }),
     ...(process.env.CALLWISE_SIGN_KEYCHAIN

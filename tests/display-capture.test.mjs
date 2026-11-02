@@ -1,31 +1,104 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import { installDisplayCapture } from '../desktop/display-capture.mjs';
-import { describeAudioCapture } from '../ui/capture.mjs';
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  installDisplayCapture,
+  configureAudioBackend,
+} from "../desktop/display-capture.mjs";
+import { describeAudioCapture } from "../ui/capture.mjs";
 function harness(getSources, canCapture = () => true) {
   let handler, options;
-  installDisplayCapture({setDisplayMediaRequestHandler(h,o){handler=h;options=o;}}, {getSources}, canCapture);
-  return { options, request: async () => { let result; await handler({frame:{}}, value=>{result=value;}); return result; } };
+  installDisplayCapture(
+    {
+      setDisplayMediaRequestHandler(h, o) {
+        handler = h;
+        options = o;
+      },
+    },
+    { getSources },
+    canCapture,
+  );
+  return {
+    options,
+    request: async () => {
+      let result;
+      await handler({ frame: {} }, (value) => {
+        result = value;
+      });
+      return result;
+    },
+  };
 }
-test('audio capture grants video plus nonmuting loopback through its handler', async () => {
-  const screen = {id:'screen:1',name:'Screen'};
-  const h=harness(async()=>[screen]);
-  assert.equal(h.options.useSystemPicker,false);
-  assert.deepEqual(await h.request(), {video:screen,audio:'loopback'});
+test("audio capture grants video plus nonmuting loopback through its handler", async () => {
+  const screen = { id: "screen:1", name: "Screen" };
+  const h = harness(async () => [screen]);
+  assert.equal(h.options.useSystemPicker, false);
+  assert.deepEqual(await h.request(), { video: screen, audio: "loopback" });
 });
-test('a capture request cannot outlive its authorized session', async () => {
-  let active=true;
-  const h=harness(async()=>{active=false;return [{id:'screen:1'}];},()=>active);
-  assert.deepEqual(await h.request(),{});
+test("a capture request cannot outlive its authorized session", async () => {
+  let active = true;
+  const h = harness(
+    async () => {
+      active = false;
+      return [{ id: "screen:1" }];
+    },
+    () => active,
+  );
+  assert.equal(await h.request(), null);
 });
-test('failed or denied display capture grants no stream', async () => {
-  assert.deepEqual(await harness(async()=>{throw Error('denied');}).request(),{});
-  let called=false;
-  assert.deepEqual(await harness(async()=>{called=true;return [];},()=>false).request(),{});
-  assert.equal(called,false);
+test("failed or denied display capture grants no stream", async () => {
+  assert.equal(
+    await harness(async () => {
+      throw Error("denied");
+    }).request(),
+    null,
+  );
+  let called = false;
+  assert.equal(
+    await harness(
+      async () => {
+        called = true;
+        return [];
+      },
+      () => false,
+    ).request(),
+    null,
+  );
+  assert.equal(called, false);
 });
-test('connected transcription sockets are not reported as captured audio', () => {
-  assert.equal(describeAudioCapture({mic:'connected',system:'connected'}),'Mic: starting · Computer: starting');
-  assert.equal(describeAudioCapture({mic:'receiving',system:'listening'}),'Mic: receiving · Computer: listening');
-  assert.equal(describeAudioCapture({mic:'listening',system:'No signal yet — verify audio'}),'Mic: listening · Computer: no signal yet');
+test("an empty display source rejects cleanly", async () => {
+  const h = harness(async () => []);
+  assert.equal(h.options.useSystemPicker, false);
+  assert.equal(await h.request(), null);
+});
+test("Mac loopback uses the supported ScreenCaptureKit backend without changing other platform flags", () => {
+  let value = "ExistingFeature";
+  const commandLine = {
+    getSwitchValue: () => value,
+    appendSwitch: (name, next) => {
+      assert.equal(name, "disable-features");
+      value = next;
+    },
+  };
+  configureAudioBackend(commandLine, "win32");
+  assert.equal(value, "ExistingFeature");
+  configureAudioBackend(commandLine, "darwin");
+  configureAudioBackend(commandLine, "darwin");
+  assert.equal(value, "ExistingFeature,MacCatapLoopbackAudioForScreenShare");
+});
+test("connected transcription sockets are not reported as captured audio", () => {
+  assert.equal(
+    describeAudioCapture({ mic: "connected", system: "connected" }),
+    "Mic: starting · Computer: starting",
+  );
+  assert.equal(
+    describeAudioCapture({ mic: "receiving", system: "listening" }),
+    "Mic: receiving · Computer: listening",
+  );
+  assert.equal(
+    describeAudioCapture({
+      mic: "listening",
+      system: "No signal yet — verify audio",
+    }),
+    "Mic: listening · Computer: no signal yet",
+  );
 });

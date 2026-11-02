@@ -39,4 +39,12 @@ contextBridge.exposeInMainWorld("callwise", {
     ipcRenderer.on("callwise:stop-capture", listener);
     return () => ipcRenderer.removeListener("callwise:stop-capture", listener);
   },
+  onFlushNotes: (callback) => {
+    const listener = (_event, token) =>
+      Promise.resolve(callback())
+        .then(() => ipcRenderer.send("callwise:notes-flushed", token, true))
+        .catch(() => ipcRenderer.send("callwise:notes-flushed", token, false));
+    ipcRenderer.on("callwise:flush-notes", listener);
+    return () => ipcRenderer.removeListener("callwise:flush-notes", listener);
+  },
 });

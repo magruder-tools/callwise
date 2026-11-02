@@ -19,3 +19,7 @@ bundled/
 *.pfx
 *.key
 *.dmg
+
+native/CallwiseNative/.build/
+native/build/
+native/resources/models/

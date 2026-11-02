@@ -1,0 +1,13 @@
+{
+  "syntheticOnly": true,
+  "audioSeconds": 11.076166666666667,
+  "processingMs": 4314,
+  "turns": [
+    {
+      "cluster": "S1",
+      "endMs": 10899.829864501953,
+      "startMs": 0
+    }
+  ],
+  "note": "One synthetic voice: verifies offline model loading and inference, not real group-call diarization accuracy."
+}

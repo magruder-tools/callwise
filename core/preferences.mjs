@@ -24,7 +24,9 @@ export function sanitizePreferences(patch, previous = {}) {
     project: 100,
     userName: 100,
     inputDevice: 300,
-    language: 10,
+    language: 35,
+    noticeWording: 2000,
+    activeSheetId: 200,
   })) {
     if (merged[key] === undefined) continue;
     if (typeof merged[key] !== "string")
@@ -36,7 +38,15 @@ export function sanitizePreferences(patch, previous = {}) {
     )
       next[key] = "";
   }
-  for (const key of ["quiet", "autoSearch", "contextConsent", "compact"]) {
+  for (const key of [
+    "quiet",
+    "autoSearch",
+    "contextConsent",
+    "compact",
+    "liveHelp",
+    "retainAudio",
+    "meetingMcpEnabled",
+  ]) {
     if (merged[key] === undefined) continue;
     if (typeof merged[key] !== "boolean")
       throw new Error("Invalid preference switch.");
@@ -46,11 +56,23 @@ export function sanitizePreferences(patch, previous = {}) {
     contextBackend: ["off", "codex", "mcp"],
     preferredSource: ["demo", "audio", "manual", "fireflies"],
     preferredBackend: ["openai", "codex"],
+    speechEngine: ["apple", "openai"],
   })) {
     if (merged[key] === undefined) continue;
     if (!allowed.includes(merged[key]))
       throw new Error("Choose a supported preference.");
     next[key] = merged[key];
+  }
+  for (const [key, allowed] of Object.entries({
+    meetingRetentionDays: [0, 30, 90, 365],
+    audioRetentionDays: [0, 7, 30, 90],
+  })) {
+    if (merged[key] !== undefined) {
+      const value = Number(merged[key]);
+      if (!allowed.includes(value))
+        throw new Error("Choose a supported retention period.");
+      next[key] = value;
+    }
   }
   if (merged.contextApps !== undefined) {
     if (

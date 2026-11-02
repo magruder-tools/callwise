@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>local.callwise.desktop.native</string>
+<key>CFBundleName</key><string>Callwise</string>
+<key>CFBundleVersion</key><string>0.5.0</string>
+<key>CFBundleShortVersionString</key><string>0.5.0</string>
+<key>NSRemindersFullAccessUsageDescription</key><string>Callwise saves only reminders you review and choose to export.</string>
+<key>NSRemindersUsageDescription</key><string>Callwise saves only reminders you choose to export.</string>
+<key>NSCalendarsFullAccessUsageDescription</key><string>Callwise reads a selected calendar event to fill in a meeting title and people.</string>
+<key>NSSpeechRecognitionUsageDescription</key><string>Callwise transcribes meeting audio on this Mac only when you start a meeting.</string>
+</dict></plist>

@@ -1,0 +1,11 @@
+{
+  "syntheticOnly": true,
+  "meetings": 300,
+  "transcriptSegmentsPerMeeting": 60,
+  "totalTranscriptSegments": 18000,
+  "firstIndexAndQueryMs": 212.586458,
+  "warmQueryP50Ms": 14.180082999999968,
+  "warmQueryP90Ms": 22.403125000000045,
+  "matchedMeetings": 100,
+  "note": "Synthetic bounded corpus, not a measured library of 300 hour-long real calls."
+}

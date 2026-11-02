@@ -1,0 +1,39 @@
+Building for production...
+[Computing dependencies]
+[Pre-planning 1 / 454]
+[Planning deferred tasks]
+[3 / 35]
+[9 / 38] yyjson
+[14 / 39] MachTaskSelfWrapper
+[18 / 41] FastClusterWrapper
+[19 / 41] Crypto
+[23 / 42] InternalCollectionsUtilities
+[28 / 46] OrderedCollections
+[30 / 47] EventSource
+[35 / 51] HuggingFace
+[37 / 52] yyjson
+[43 / 56] Jinja
+[45 / 57] HuggingFace
+[49 / 58] Jinja
+[54 / 62] Hub
+[56 / 87]
+[62 / 87]
+[64 / 87]
+[70 / 87]
+[71 / 87]
+[73 / 87]
+[75 / 87]
+[79 / 87]
+[80 / 87] Hub
+[85 / 91] Tokenizers
+[87 / 92] Tokenizers
+[92 / 96] FluidAudio
+[94 / 97] FluidAudio
+[99 / 102] callwise-native-product
+[100 / 103] callwise-native-product
+<repository>/native/CallwiseNative/Package.swift: callwise-native-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/usr/lib' not found
+<repository>/native/CallwiseNative/Package.swift: callwise-native-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[102 / 103] callwise-native-product
+[103 / 103] callwise-native-product
+Build complete! (52.97 sec)
+Built the local Callwise meeting engine.

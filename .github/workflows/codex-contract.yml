@@ -22,7 +22,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.16.0'
+          node-version: '24.22.1'
       - name: Install the verified public CLI version
         run: npm install --prefix /tmp/callwise-contract @openai/codex@0.153.4
       - name: Verify handshake and restrictive configuration without credentials or inference

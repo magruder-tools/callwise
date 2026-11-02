@@ -1,0 +1,165 @@
+{
+  "syntheticOnly": true,
+  "expected": "Thanks for joining our meeting today. We agreed to send the updated proposal on Friday. Taylor will review the budget and Morgan will prepare the launch notes. Our next conversation is about the design and the schedule. Please keep the original notes and check every action before sharing it.",
+  "transcript": "Thanks for joining our meeting today. We agreed to send the updated proposal on Friday. Taylor will review the budget and Morgan will prepare the launch nodes. Our next conversation is about the design and the schedule. Please keep the original notes and check every action before sharing it.",
+  "wordErrorRate": 0.02040816326530612,
+  "audioSeconds": 15.684541666666666,
+  "asrDrainMs": 70,
+  "finalRows": 5,
+  "capabilities": {
+    "diarization": true,
+    "installedLocales": [
+      "en_US",
+      "en_AU",
+      "en_SG",
+      "en_GB",
+      "en_ZA",
+      "en_CA",
+      "en_NZ",
+      "en_IN",
+      "en_IE"
+    ],
+    "localAI": "available",
+    "speech": true,
+    "supportedLocales": [
+      "ks_IN",
+      "en_NZ",
+      "it_CH",
+      "es_MX",
+      "de_CH",
+      "yue_CN",
+      "de_AT",
+      "zh_TW",
+      "es_US",
+      "ml_IN",
+      "mr_IN",
+      "bn_IN",
+      "ja_JP",
+      "kn_IN",
+      "en_IN",
+      "ko_KR",
+      "it_IT",
+      "zh_HK",
+      "zh_CN",
+      "pt_PT",
+      "hi_IN",
+      "ne_IN",
+      "fr_CA",
+      "en_ZA",
+      "fr_FR",
+      "en_SG",
+      "es_ES",
+      "en_IE",
+      "fr_CH",
+      "te_IN",
+      "en_GB",
+      "mul_IN",
+      "de_DE",
+      "gu_IN",
+      "ta_IN",
+      "en_AU",
+      "pa_IN",
+      "en_US",
+      "or_IN",
+      "fr_BE",
+      "ur_IN",
+      "es_CL",
+      "pt_BR",
+      "mai_IN",
+      "en_CA"
+    ],
+    "version": 1
+  },
+  "localDocument": {
+    "actions": [
+      {
+        "dueQuote": "",
+        "ownerQuote": "Taylor",
+        "segmentIds": [
+          "e0:4"
+        ],
+        "text": "Keep the original notes and check every action before sharing it."
+      },
+      {
+        "dueQuote": "",
+        "ownerQuote": "Taylor",
+        "segmentIds": [
+          "e0:2"
+        ],
+        "text": "Taylor will review the budget."
+      },
+      {
+        "dueQuote": "",
+        "ownerQuote": "Morgan",
+        "segmentIds": [
+          "e0:2"
+        ],
+        "text": "Morgan will prepare the launch nodes."
+      }
+    ],
+    "answer": "The meeting concluded with agreement to send the updated proposal on Friday, Taylor reviewing the budget, Morgan preparing launch nodes, and a discussion on design and schedule.",
+    "answerSegmentIds": [
+      "e0:1",
+      "e0:2",
+      "e0:3",
+      "e0:4"
+    ],
+    "decisions": [
+      {
+        "segmentIds": [
+          "e0:1"
+        ],
+        "text": "We agreed to send the updated proposal on Friday."
+      },
+      {
+        "segmentIds": [
+          "e0:2"
+        ],
+        "text": "Taylor will review the budget and Morgan will prepare the launch nodes."
+      }
+    ],
+    "enhancedNotes": "Original notes to be kept and every action checked before sharing.",
+    "openQuestions": [
+      {
+        "segmentIds": [
+          "e0:3"
+        ],
+        "text": "Our next conversation is about the design and the schedule."
+      }
+    ],
+    "summary": [
+      {
+        "segmentIds": [
+          "e0:0"
+        ],
+        "text": "Thanks for joining our meeting today."
+      },
+      {
+        "segmentIds": [
+          "e0:1"
+        ],
+        "text": "We agreed to send the updated proposal on Friday."
+      },
+      {
+        "segmentIds": [
+          "e0:2"
+        ],
+        "text": "Taylor will review the budget and Morgan will prepare the launch nodes."
+      },
+      {
+        "segmentIds": [
+          "e0:3"
+        ],
+        "text": "Our next conversation is about the design and the schedule."
+      },
+      {
+        "segmentIds": [
+          "e0:4"
+        ],
+        "text": "Please keep the original notes and check every action before sharing it."
+      }
+    ],
+    "title": "Meeting Recap"
+  },
+  "note": "Synthetic TTS file input; not evidence of real-call accuracy, speaker diarization quality, battery life or sustained performance."
+}

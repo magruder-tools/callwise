@@ -1,0 +1,2 @@
+# Retain upstream license notices verbatim, including their original whitespace.
+native/resources/licenses/** -whitespace

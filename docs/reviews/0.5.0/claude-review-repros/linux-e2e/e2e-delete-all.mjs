@@ -1,0 +1,32 @@
+// End-to-end: "Delete all Callwise data" in the real app, then look at History in the same session.
+import { createRequire } from "node:module";
+import { mkdirSync, rmSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
+const require = createRequire(`${process.env.CALLWISE_ROOT}/package.json`);
+const { _electron } = require("playwright");
+const data = `${process.cwd()}/data-del`; rmSync(data, { recursive: true, force: true }); mkdirSync(data);
+const app = await _electron.launch({ executablePath: `${process.env.CALLWISE_ROOT}/node_modules/electron/dist/electron`,
+  args: ["--no-sandbox", `${process.cwd()}/wrapper`], env: { DISPLAY: ":99", HOME: process.env.HOME, PATH: process.env.PATH, CALLWISE_TEST_DATA: data }, timeout: 60000 });
+const win = await app.firstWindow();
+await win.waitForSelector("[data-action]", { timeout: 30000 });
+if (await win.locator('[data-action="skip-setup"]').count()) await win.locator('[data-action="skip-setup"]').first().click();
+await win.waitForSelector('[data-action="m-notes-only"]', { timeout: 15000 });
+await win.fill("#meeting-title", "Salary negotiation prep");
+await win.click('[data-action="m-notes-only"]');
+await win.waitForSelector("textarea[data-meeting-notes]");
+await win.locator("textarea[data-meeting-notes]").type("My floor is 180k.");
+await win.waitForTimeout(1200);
+await win.click('[data-action="end"]'); await win.waitForTimeout(1200);
+await win.locator('[data-action="settings"]').first().click(); await win.waitForTimeout(500);
+await win.locator('[data-action="settings-tab"][data-tab="Privacy"]').click(); await win.waitForTimeout(300);
+await win.locator('[data-action="delete-everything"]').click(); await win.waitForTimeout(300);
+await win.locator('[data-action="confirm-delete"]').click(); await win.waitForTimeout(1500);
+const db = new DatabaseSync(`${data}/meetings/library.db`, { readOnly: true });
+console.log("meeting rows in SQLite after Delete all:", db.prepare("SELECT count(*) c FROM meetings").get().c); db.close();
+if (await win.locator('[data-action="skip-setup"]').count()) await win.locator('[data-action="skip-setup"]').first().click();
+await win.locator('[data-action="m-history"]').first().click(); await win.waitForTimeout(800);
+console.log("History right after Delete all:", await win.locator(".history-meeting h2").allInnerTexts());
+await win.locator('.history-meeting [data-action="m-open"]').first().click(); await win.waitForTimeout(800);
+console.log("Opened meeting shows notes:", await win.locator("textarea[data-meeting-notes]").inputValue().catch(() => "(not shown)"));
+await win.screenshot({ path: `${process.cwd()}/after-delete-all.png` });
+await app.close();

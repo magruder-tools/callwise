@@ -166,15 +166,23 @@ test("Notes text is passed as JSON data to the fixed script, including quotes an
     native: {},
     run: (binary, args, options, cb) => {
       calls.push({ binary, args, options });
-      const request = JSON.parse(args[3]);
-      cb(
-        null,
-        JSON.stringify(
-          request.op === "folders"
-            ? [{ id: "folder", title: "Personal" }]
-            : { id: "saved-note", existing: false },
-        ),
-      );
+      return {
+        stdin: {
+          on() {},
+          end(input) {
+            calls.at(-1).input = input;
+            const request = JSON.parse(input);
+            cb(
+              null,
+              JSON.stringify(
+                request.op === "folders"
+                  ? [{ id: "folder", title: "Personal" }]
+                  : { id: "saved-note", existing: false },
+              ),
+            );
+          },
+        },
+      };
     },
   });
   const preview = await apple.preview({
@@ -188,7 +196,7 @@ test("Notes text is passed as JSON data to the fixed script, including quotes an
   });
   assert.equal(calls[1].binary, "/usr/bin/osascript");
   assert.equal(calls[1].args[2], "/fixed/resources/apple-notes.js");
-  assert.match(JSON.parse(calls[1].args[3]).text, /\$\(touch no\)/);
+  assert.match(JSON.parse(calls[1].input).text, /\$\(touch no\)/);
   assert.equal(calls[1].options.shell, undefined);
 });
 test("disk-full writes stay visible in the bounded retry buffer and are retried", () => {

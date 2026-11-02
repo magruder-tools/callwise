@@ -554,6 +554,7 @@ export class CallController extends EventEmitter {
     consent = false,
     transcriptId = "",
   } = {}) {
+    if (this.drainJob) await this.drainJob;
     if (!["demo", "manual", "audio", "fireflies"].includes(source))
       throw new Error("Choose a supported audio source.");
     if (this.demoOnly && source !== "demo")
@@ -822,7 +823,11 @@ export class CallController extends EventEmitter {
     this.summaryJob?.abort();
   }
   async drainInputs({ timeoutMs = 8000, ending = false } = {}) {
-    if (this.drainJob) return this.drainJob;
+    if (this.drainJob) {
+      await this.drainJob;
+      if (ending && this.engine.status === "paused") this.engine.end();
+      return;
+    }
     if (!this.transcribers.size) {
       this.stopInputs();
       ending ? this.engine.end() : this.engine.pause();
@@ -1126,6 +1131,7 @@ export class CallController extends EventEmitter {
     return this.snapshot();
   }
   async makeRecap() {
+    if (this.meetingService) return;
     this.cancelDocuments();
     const job = new AbortController();
     this.recapJob = job;
@@ -1214,6 +1220,7 @@ export class CallController extends EventEmitter {
   }
   maybeSummarize() {
     if (
+      this.meetingService ||
       this.mode === "demo" ||
       this.preferences.liveHelp === false ||
       (!this.config.openaiKey && !this.documentProvider) ||

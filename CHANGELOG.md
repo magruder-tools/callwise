@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.1 — 2026-11-02
+
+- Restore saved History and queued local documents after restart; prevent duplicate starts and transcript ID collisions after speech-helper recovery.
+- Bind assistant access to each meeting's participant notice; name OpenAI in live-help notices, remove legacy cloud summaries/recaps, and reuse only selected recaps, decisions and confirmed actions.
+- Stream authenticated encrypted backups without the 100,000-row cap or a single giant audio JSON string; retain recordings during large-library recovery.
+- Clear decrypted caches, archive keys and local backups on Delete all; prevent late recording chunks from surviving a meeting deletion.
+- Refresh long-lived assistant search, negotiate legacy MCP traffic, separate speech-channel failures, and bound/cancel meeting-history questions.
+- Preserve speaker-diarization eligibility on rename, separate action-owner evidence from names and confirmations, refresh adopted enhanced notes, and complete objection handling with notes-only continuation.
+- Serialize Apple exports, send Notes content over stdin, improve export formatting, durably save keys, and authenticate record identity with unambiguous versioned AAD.
+
+Existing 0.5.0 libraries and backups remain readable. New records and backups require 0.5.1; do not downgrade after writing with this version. The app is an ad-hoc signed development build, not a notarized release. Real-call, permissions/export, macOS 26 dual-channel, and long-session validation remain separate checks.
+
 ## 0.5.0 — 2026-10-31
 
 - Local Apple speech and on-device recaps with no required AI account; optional existing coaching remains separate.

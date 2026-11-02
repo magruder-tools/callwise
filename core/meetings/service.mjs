@@ -24,6 +24,9 @@ export class MeetingService extends EventEmitter {
     this.pendingWrites = new Map();
     this.selectedId = null;
     this.activeId = null;
+    this.unsavedMeeting = null;
+    this.actionCounts = new Map();
+    this.deletedMeetings = new Set();
     this.warning = "";
     this.libraryRevision = 0;
     this.memory = new Map();
@@ -38,15 +41,16 @@ export class MeetingService extends EventEmitter {
     controller.on("state", (s) => this.observe(s));
     this.on("state", () => controller.engine.emitState());
     this.wireConsumers(this.recorder, this.diarizer);
-    const resume = setTimeout(() => {
+    const resume = setTimeout(async () => {
       if (!this.closed)
         for (const job of this.all("jobs"))
           if (
+            !this.closed &&
             job.status === "queued" &&
             ["recap", "enhance"].includes(job.id) &&
             this.get("meetings", job.meetingId)
           )
-            void this.generate(job.meetingId, job.id);
+            await this.generate(job.meetingId, job.id);
     }, 250);
     resume.unref?.();
   }
@@ -59,7 +63,7 @@ export class MeetingService extends EventEmitter {
         this.emit("state");
       });
     recorder?.on("chunk", (record) => {
-      if (this.closed) return;
+      if (this.closed || this.deletedMeetings.has(recorder.meetingId)) return;
       const id = recorder.meetingId;
       this.cacheRecord("audio_chunks", id, {
         ...record,
@@ -109,7 +113,7 @@ export class MeetingService extends EventEmitter {
       .map(([, v]) => structuredClone(v));
     const base = this.store
       ? [
-          ...(meetingId === this.unsavedMeeting
+          ...(meetingId != null && meetingId === this.unsavedMeeting
             ? []
             : this.store.all(table, meetingId)),
           ...memory,
@@ -129,12 +133,14 @@ export class MeetingService extends EventEmitter {
     return [...records.values()];
   }
   cacheRecord(table, meetingId, record) {
+    if (table === "actions") this.actionCounts.delete(meetingId);
     for (const group of [`${table}|${meetingId}`, `${table}|*`])
       this.recordCache.get(group)?.set(`${meetingId}:${record.id}`, record);
     return record;
   }
   clearCache() {
     this.recordCache.clear();
+    this.actionCounts.clear();
     this.invalidate();
   }
   put(table, meetingId, id, value, expected) {
@@ -219,15 +225,23 @@ export class MeetingService extends EventEmitter {
       .slice(0, 300)
       .map((m) => ({
         ...m,
-        openActions: this.all("actions", m.id).filter(
-          (a) => a.state !== "dismissed" && !a.completed,
-        ).length,
+        openActions: this.openActionCount(m.id),
       })));
   }
   invalidate() {
     this.lastLibrary = null;
     this.libraryRevision++;
     this.search?.invalidate();
+  }
+  openActionCount(id) {
+    if (!this.actionCounts.has(id))
+      this.actionCounts.set(
+        id,
+        this.all("actions", id).filter(
+          (a) => a.state !== "dismissed" && !a.completed,
+        ).length,
+      );
+    return this.actionCounts.get(id);
   }
   begin({
     preferences = {},
@@ -244,7 +258,8 @@ export class MeetingService extends EventEmitter {
       this.activeId &&
       this.get("meetings", this.activeId)?.status !== "ended"
     )
-      return this.get("meetings", this.activeId);
+      throw new Error("A meeting is already active.");
+    if (captureMode === "notes-only") source = "manual";
     if (!this.store && !withoutSaving)
       throw new Error(
         "The library is locked. Unlock your keychain, or explicitly choose Start without saving.",
@@ -283,6 +298,8 @@ export class MeetingService extends EventEmitter {
         .slice(0, 3)
         .filter((p) => this.get("meetings", p)?.status === "ended"),
       liveHelp: preferences.liveHelp === true,
+      assistantAccess:
+        captureMode !== "notes-only" && preferences.meetingMcpEnabled === true,
       retainAudio:
         preferences.retainAudio === true &&
         captureMode !== "notes-only" &&
@@ -443,7 +460,7 @@ export class MeetingService extends EventEmitter {
         if (recorder) this.recorder = new recorder.constructor();
         if (diarizer) this.diarizer = new diarizer.constructor(diarizer.paths);
         this.wireConsumers(this.recorder, this.diarizer);
-        const finishing = { recorder, diarizer };
+        const finishing = { recorder, diarizer, meetingId: id };
         this.finishingConsumers.add(finishing);
         void Promise.allSettled([recorder?.finish(), diarizer?.finish()]).then(
           () => {
@@ -509,7 +526,7 @@ export class MeetingService extends EventEmitter {
       warning: this.warning,
       locked: !this.store,
       libraryRevision: this.libraryRevision,
-      unsaved: !!this.current() && this.current().saving === false,
+      unsaved: !!current && current.saving === false,
     };
   }
   saveNotes(id, { text: value, version, lineTimes = [] }) {
@@ -579,9 +596,12 @@ export class MeetingService extends EventEmitter {
       confirmed: true,
       nameSource: "user",
     });
-    for (const r of this.all("segments", id))
-      if (r.speakerKey === speakerKey)
-        this.editSegment(id, { segmentId: r.id, speakerKey });
+    this.updateSpeakerRows(
+      id,
+      speakerKey,
+      speakerKey,
+      name.trim().slice(0, 100),
+    );
     this.event(id, "speaker.renamed", { speakerKey });
     this.touch(id);
     this.emit("state");
@@ -607,11 +627,31 @@ export class MeetingService extends EventEmitter {
       throw new Error("Those speakers are already merged.");
     const s = this.get("speakers", id, from);
     this.put("speakers", id, from, { ...s, mergedInto: target.id });
-    for (const r of this.all("segments", id))
-      if (r.speakerKey === from)
-        this.editSegment(id, { segmentId: r.id, speakerKey: target.id });
+    this.updateSpeakerRows(id, from, target.id, target.name || target.label);
     this.event(id, "speaker.merged", { from, into: target.id });
     this.emit("state");
+  }
+  updateSpeakerRows(id, from, into, label) {
+    const update = () => {
+      for (const row of this.all("segments", id)) {
+        if (row.speakerKey !== from) continue;
+        const next = this.put("segments", id, row.id, {
+          ...row,
+          speakerKey: into,
+          speaker: label,
+        });
+        if (
+          id === this.activeId &&
+          this.controller?.engine.transcript.has(row.id)
+        ) {
+          this.controller.engine.transcript.set(row.id, next);
+          this.cachedRows.set(row.id, signature(next));
+        }
+      }
+    };
+    if (this.store && id !== this.unsavedMeeting)
+      this.store.transaction(update);
+    else update();
   }
   applyTurns(id, turns) {
     if (!this.get("meetings", id)) return;
@@ -688,10 +728,15 @@ export class MeetingService extends EventEmitter {
             changed || latest.enhanced?.editedAt
               ? "notes:enhancedDraft"
               : "notes:enhanced",
-            { text: generated.enhancedNotes, basedOn, engine: "apple" },
+            {
+              text: generated.enhancedNotes,
+              basedOn,
+              engine: "apple",
+              version: (latest.enhanced?.version || 0) + 1,
+            },
           );
       } else {
-        const draft = changed || latest.recap?.editedAt;
+        const draft = !!latest.recap?.editedAt;
         this.put("docs", id, draft ? "recap:draft" : "recap", {
           ...generated,
           basedOn,
@@ -784,6 +829,13 @@ export class MeetingService extends EventEmitter {
       throw new Error("End the meeting before deleting it.");
     for (const [key, controller] of this.jobs)
       if (key.startsWith(`${id}:`)) controller.abort();
+    this.deletedMeetings.add(id);
+    this.actionCounts.delete(id);
+    const stopping = [];
+    for (const consumers of this.finishingConsumers)
+      if (consumers.meetingId === id) {
+        stopping.push(consumers.recorder?.close(), consumers.diarizer?.close());
+      }
     this.store?.deleteMeeting(id);
     for (const [key, entry] of this.pendingWrites)
       if (entry.meetingId === id) this.pendingWrites.delete(key);
@@ -796,7 +848,43 @@ export class MeetingService extends EventEmitter {
     for (const key of this.memory.keys())
       if (key.includes(`:${id}:`)) this.memory.delete(key);
     if (this.selectedId === id) this.selectedId = null;
-    if (this.activeId === id) this.activeId = null;
+    if (this.activeId === id) {
+      this.activeId = null;
+      if (this.controller?.engine.sessionId === this.activeSessionId)
+        this.controller.engine.transcript.clear();
+    }
+    this.invalidate();
+    this.emit("state");
+    return Promise.allSettled(stopping).then(() => {
+      if (!this.closed && this.store && !this.store.closed)
+        this.store.deleteMeeting(id);
+    });
+  }
+  async deleteAll() {
+    const active = this.activeId && this.get("meetings", this.activeId);
+    if (active && active.status !== "ended")
+      throw new Error("End the meeting before deleting data.");
+    this.askJob?.abort();
+    for (const job of this.jobs.values()) job.abort();
+    this.jobs.clear();
+    for (const m of this.all("meetings")) this.deletedMeetings.add(m.id);
+    await Promise.allSettled([
+      this.recorder?.close(),
+      this.diarizer?.close(),
+      ...[...this.finishingConsumers].flatMap((c) => [
+        c.recorder?.close(),
+        c.diarizer?.close(),
+      ]),
+    ]);
+    this.finishingConsumers.clear();
+    this.search?.close();
+    this.pendingWrites.clear();
+    this.memory.clear();
+    this.recordCache.clear();
+    this.cachedRows.clear();
+    this.actionCounts.clear();
+    this.selectedId = this.activeId = this.unsavedMeeting = null;
+    this.store?.reset();
     this.invalidate();
     this.emit("state");
   }
@@ -877,7 +965,7 @@ export class MeetingService extends EventEmitter {
           source = kind === "recap" ? "recap:draft" : "notes:enhancedDraft";
         const d = this.get("docs", id, source);
         if (d) {
-          this.put("docs", id, kind, { ...d, editedAt: this.clock() });
+          this.put("docs", id, kind, { ...d, editedAt: undefined });
           if (kind === "recap")
             for (const a of mergeActions(
               this.all("actions", id),
@@ -892,9 +980,13 @@ export class MeetingService extends EventEmitter {
         const m = this.get("meetings", id);
         if (p.objection === true) {
           await this.controller.command("pause");
+          this.put("meetings", id, id, {
+            ...this.get("meetings", id),
+            objection: true,
+          });
           this.event(id, "capture.objection");
           this.warning =
-            "Capture is paused. Resolve the objection before resuming.";
+            "Capture stopped after an objection. Choose whether to keep or delete the captured content.";
         } else {
           if (!p.confirmed)
             throw new Error("Confirm that the participant heard the notice.");
@@ -904,35 +996,76 @@ export class MeetingService extends EventEmitter {
         }
         break;
       }
+      case "meeting.objection.resolve": {
+        const m = this.get("meetings", id);
+        if (!m?.objection || !["keep", "delete"].includes(p.choice))
+          throw new Error("Choose how to handle the objection.");
+        await this.controller.command("end");
+        if (p.choice === "delete") await this.delete(id);
+        this.warning =
+          "Capture has ended. You can continue with a notes-only meeting.";
+        break;
+      }
       case "meeting.delete":
         if (p.confirm !== true) throw new Error("Confirm deletion first.");
-        this.delete(id);
+        await this.delete(id);
         break;
       case "meeting.search":
         return this.search?.search(p.query || "", p.filters || {}) || [];
       case "meeting.ask": {
-        const hits =
-          (await this.search?.search(p.question || "", p.filters || {})) || [];
-        const selected = hits.slice(0, 5);
-        const rows = selected.flatMap((h) =>
-          this.all("segments", h.id).map((r) => ({
-            ...r,
-            id: `${h.id}:${r.id}`,
-          })),
-        );
-        const generated = await this.documents.generate(rows, {
-          task: "answer",
-          question: text(p.question, 1000),
-        });
-        return {
-          answer:
-            generated.answer ||
-            "Here are matching transcript excerpts. Local AI could not produce a grounded answer.",
-          refs: generated.answerRefs,
-          meetings: selected,
-          engine: generated.engine,
-        };
+        this.askJob?.abort();
+        const cancellation = new AbortController();
+        this.askJob = cancellation;
+        const timer = setTimeout(() => cancellation.abort(), 30000);
+        try {
+          const hits =
+            (await this.search?.search(p.question || "", p.filters || {})) ||
+            [];
+          const selected = hits.slice(0, 5);
+          const rows = selected
+            .flatMap((h) => {
+              const all = this.all("segments", h.id)
+                .filter((r) => r.final && !r.gap)
+                .sort((a, b) => a.startMs - b.startMs);
+              const selectedRows = new Set();
+              for (const excerpt of h.excerpts || []) {
+                const at = all.findIndex((r) => r.id === excerpt.segmentId);
+                if (at >= 0)
+                  for (
+                    let i = Math.max(0, at - 1);
+                    i <= Math.min(all.length - 1, at + 1);
+                    i++
+                  )
+                    selectedRows.add(i);
+              }
+              return [...selectedRows].slice(0, 6).map((i) => ({
+                ...all[i],
+                text: all[i].text.slice(0, 500),
+                id: `${h.id}:${all[i].id}`,
+              }));
+            })
+            .slice(0, 8);
+          const generated = await this.documents.generate(rows, {
+            task: "answer",
+            question: text(p.question, 1000),
+            signal: cancellation.signal,
+          });
+          return {
+            answer:
+              generated.answer ||
+              "Here are matching transcript excerpts. Local AI could not produce a grounded answer.",
+            refs: generated.answerRefs,
+            meetings: selected,
+            engine: generated.engine,
+          };
+        } finally {
+          clearTimeout(timer);
+          if (this.askJob === cancellation) this.askJob = null;
+        }
       }
+      case "meeting.ask.cancel":
+        this.askJob?.abort();
+        return { cancelled: true };
       case "meeting.export":
         return this.export(id, p.format);
       case "meeting.notice.preview":
@@ -968,6 +1101,7 @@ export class MeetingService extends EventEmitter {
   }
   close() {
     if (this.closed) return;
+    this.askJob?.abort();
     clearInterval(this.retryTimer);
     this.retryWrites();
     for (const [key] of this.jobs) {

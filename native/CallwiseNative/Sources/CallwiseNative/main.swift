@@ -68,7 +68,7 @@ actor Channel {
         let range = "\(r.range.start.value):\(r.range.start.timescale):\(r.range.duration.value)"
         if r.isFinal && finalRanges.contains(range) { return }
         let text = String(r.text.characters).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { if r.isFinal { utterance += 1 }; return }
+        guard !text.isEmpty else { if r.isFinal { emit(["type": "discard", "channel": name, "ids": ["\(name):e\(epoch):\(utterance)"]]); utterance += 1 }; return }
         emit(["type": "segment", "row": ["id": "\(name):e\(epoch):\(utterance)", "channel": name, "speaker": name == "mic" ? "You" : "Them", "text": text, "startMs": max(0, r.range.start.seconds * 1000), "endMs": max(0, CMTimeRangeGetEnd(r.range).seconds * 1000), "final": r.isFinal, "epoch": epoch]])
         if r.isFinal { finalRanges.insert(range); utterance += 1 }
     }
@@ -165,11 +165,20 @@ func calendarOperation() async throws -> Any {
                         guard channels.isEmpty else { throw NativeFailure.invalid }
                         let names = r["channels"] as? [String] ?? ["mic", "system"]
                         guard !names.isEmpty && Set(names).isSubset(of: ["mic", "system"]) else { throw NativeFailure.invalid }
-                        for name in names { let c = try await Channel(name: name, epoch: r["epoch"] as? Int ?? 0, language: r["language"] as? String ?? "en-US", hints: r["hints"] as? [String] ?? []); channels[name] = c; await c.beginResults() }
-                        answer(id, ["ready": true, "channels": names])
+                        for name in names {
+                            do {
+                                let c = try await Channel(name: name, epoch: r["epoch"] as? Int ?? 0, language: r["language"] as? String ?? "en-US", hints: r["hints"] as? [String] ?? [])
+                                channels[name] = c; await c.beginResults()
+                            } catch { emit(["type": "error", "channel": name, "code": failureCode(error)]) }
+                        }
+                        guard !channels.isEmpty else { throw NativeFailure.unavailable }
+                        answer(id, ["ready": true, "channels": Array(channels.keys)])
                     case "push":
-                        guard let name = r["channel"] as? String, let bytes = Data(base64Encoded: r["audio"] as? String ?? ""), let c = channels[name] else { throw NativeFailure.invalid }
-                        try await c.push(bytes, at: r["startMs"] as? Double ?? 0)
+                        guard let name = r["channel"] as? String, let bytes = Data(base64Encoded: r["audio"] as? String ?? "") else { throw NativeFailure.invalid }
+                        if let c = channels[name] {
+                            do { try await c.push(bytes, at: r["startMs"] as? Double ?? 0) }
+                            catch { emit(["type": "error", "channel": name, "code": failureCode(error)]); await c.cancel(); channels.removeValue(forKey: name) }
+                        }
                     case "hints": for c in channels.values { try await c.hints(r["hints"] as? [String] ?? []) }; answer(id, ["updated": true])
                     case "finish": await withTaskGroup(of: Void.self) { group in for c in channels.values { group.addTask { await c.finish() } } }; answer(id, ["finished": true])
                     case "ping": answer(id, ["alive": true])

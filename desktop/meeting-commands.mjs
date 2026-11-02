@@ -90,7 +90,7 @@ export function createMeetingCommands({
           ],
         });
         if (result.canceled || !result.filePath) return { cancelled: true };
-        const bytes = await new Promise((resolve, reject) => {
+        await new Promise((resolve, reject) => {
           const worker = new Worker(
             new URL("./workers/archive-worker.mjs", import.meta.url),
             {
@@ -99,26 +99,22 @@ export function createMeetingCommands({
                 key: meetings.store.key,
                 keyId: meetings.store.keyId,
                 passphrase: p.passphrase,
+                file: result.filePath,
               },
             },
           );
           const timer = setTimeout(() => {
             void worker.terminate();
             reject(new Error("The backup took too long."));
-          }, 120000);
+          }, 30 * 60000);
           worker.once("message", (value) => {
             clearTimeout(timer);
-            value.error
-              ? reject(new Error(value.error))
-              : resolve(Buffer.from(value.data));
+            value.error ? reject(new Error(value.error)) : resolve(value.saved);
           });
           worker.once("error", () => {
             clearTimeout(timer);
             reject(new Error("The backup could not be created."));
           });
-        });
-        writeFileSync(result.filePath, bytes, {
-          mode: 0o600,
         });
         return { saved: true };
       }
@@ -139,7 +135,7 @@ export function createMeetingCommands({
           ],
         });
         if (result.canceled) return { cancelled: true };
-        meetings.store.restore(readFileSync(result.filePaths[0]), p.passphrase);
+        meetings.store.restoreFile(result.filePaths[0], p.passphrase);
         meetings.clearCache();
         meetings.emit("state");
         return { restored: true };

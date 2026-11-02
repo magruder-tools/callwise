@@ -70,7 +70,25 @@ export function validateDocument(value = {}, rows) {
         {
           id: randomUUID(),
           text: a.text.trim().slice(0, 2000),
-          owner: { name: quote("ownerQuote"), confirmed: false },
+          owner: {
+            name:
+              quote("ownerQuote") &&
+              /\bI(?:'ll| will| am going to)\b/i.test(quote("ownerQuote"))
+                ? evidence.get(
+                    ids.find((id) =>
+                      evidence.get(id).text.includes(quote("ownerQuote")),
+                    ),
+                  )?.speaker || null
+                : quote("ownerQuote") &&
+                    /^[\p{Lu}][\p{L}'-]+(?: [\p{Lu}][\p{L}'-]+){0,3}$/u.test(
+                      quote("ownerQuote"),
+                    ) &&
+                    !/^(I|We|You|Them)$/i.test(quote("ownerQuote"))
+                  ? quote("ownerQuote")
+                  : null,
+            evidence: quote("ownerQuote"),
+            confirmed: false,
+          },
           due: {
             text: quote("dueQuote"),
             date: null,

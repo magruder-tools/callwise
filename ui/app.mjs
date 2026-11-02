@@ -254,7 +254,12 @@ function render() {
       : `<div data-region="notices">${notices}</div><div data-region="${view}">${content}</div>`,
   );
   clock();
-  for (const id of ["meeting-notice", "apple-export", "delete-meeting"]) {
+  for (const id of [
+    "meeting-notice",
+    "apple-export",
+    "delete-meeting",
+    "meeting-objection",
+  ]) {
     const dialog = document.getElementById(id);
     if (dialog && !dialog.open) dialog.showModal();
   }

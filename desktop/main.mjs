@@ -34,6 +34,7 @@ import { sendToWindows, closeOnce } from "./lifecycle.mjs";
 import { safeUrl } from "../core/context.mjs";
 import { SnapshotStream } from "../core/snapshot-stream.mjs";
 import { CallController } from "../core/controller.mjs";
+import { startMeeting } from "./meeting-start.mjs";
 import { CodexLogin } from "./codex-login.mjs";
 import {
   installDisplayCapture,
@@ -626,6 +627,7 @@ async function boot() {
         "noticeWording",
         "preferredSource",
         "language",
+        "meetingMcpEnabled",
       ].some(
         (key) =>
           payload[key] !== undefined &&
@@ -654,25 +656,10 @@ async function boot() {
       return controller.snapshot();
     }
     if (meetings && name === "start" && payload.source !== "demo") {
-      const resuming =
-        controller.engine.status === "paused" && meetings.activeId;
-      if (!resuming && controller.engine.status !== "running") {
-        if (payload.withoutSaving && payload.retainAudio)
-          throw new Error(
-            "Audio cannot be retained when starting without saving.",
-          );
-        meetings.begin({ preferences: controller.preferences, ...payload });
-        for (const id of payload.prior || []) {
-          const old = meetings.current(id);
-          if (old?.recap)
-            controller.engine.context.add({
-              id: `meeting:${id}`,
-              title: old.title,
-              kind: "recap",
-              text: meetings.export(id).slice(0, 16000),
-            });
-        }
-      }
+      if (codexLogin.busy)
+        throw new Error("Finish or cancel Codex sign-in first.");
+      endSound(false);
+      return startMeeting({ meetings, controller, payload });
     }
     if (name === "desktop.codex.signin") {
       if (
@@ -911,7 +898,10 @@ async function boot() {
       return controller.desktopState;
     }
     if (name === "desktop.delete") {
-      if (controller.engine.status === "running" || controller.connecting)
+      if (
+        ["running", "paused", "finishing"].includes(controller.engine.status) ||
+        controller.connecting
+      )
         throw new Error("End the call before deleting data.");
       endSound(false);
       controller.cancelDocuments();
@@ -926,9 +916,11 @@ async function boot() {
         if (existsSync(file)) unlinkSync(file);
       rmSync(path.join(dataDir, "logs"), { recursive: true, force: true });
       rmSync(workDir, { recursive: true, force: true });
-      if (meetingStore)
-        for (const m of meetingStore.all("meetings"))
-          meetingStore.deleteMeeting(m.id);
+      await meetings?.deleteAll();
+      for (const suffix of ["", ".previous"])
+        rmSync(path.join(dataDir, "meeting-access.jsonl" + suffix), {
+          force: true,
+        });
       baseConfig.openaiKey = baseConfig.firefliesKey = baseConfig.mcpToken = "";
       saved = {};
       preferences = {};
@@ -1051,30 +1043,7 @@ async function boot() {
       return { saved: true };
     }
     if (["start", "pause", "end", "new"].includes(name)) endSound(false);
-    try {
-      return await controller.command(name, payload);
-    } catch (error) {
-      if (
-        meetings &&
-        name === "start" &&
-        meetings.activeId &&
-        controller.engine.status !== "running"
-      ) {
-        const m = meetings.get("meetings", meetings.activeId);
-        if (m) {
-          meetings.put("meetings", m.id, m.id, {
-            ...m,
-            status: "ended",
-            interrupted: true,
-            endedAt: Date.now(),
-          });
-          meetings.event(m.id, "capture.start-failed");
-          meetings.invalidate();
-          controller.engine.emitState();
-        }
-      }
-      throw error;
-    }
+    return controller.command(name, payload);
   });
   ipcMain.on("callwise:audio", (event, channel, buffer) => {
     if (
@@ -1420,6 +1389,7 @@ if (headlessMcp) {
   void app
     .whenReady()
     .then(async () => {
+      app.dock?.hide();
       const { runMeetingMcp } = await import("./meeting-mcp.mjs");
       await runMeetingMcp({ app, storage: safeStorage, directory });
     })

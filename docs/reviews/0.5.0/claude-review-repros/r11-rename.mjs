@@ -1,0 +1,20 @@
+// Renaming one speaker rewrites every row through editSegment(), which also bumps the header and emits a full state each time.
+import { mkdtempSync, rmSync } from "node:fs"; import { randomBytes } from "node:crypto"; import os from "node:os"; import path from "node:path";
+const R = process.env.CALLWISE_ROOT || process.cwd();
+const { MeetingStore } = await import(`${R}/core/meetings/store.mjs`);
+const { MeetingService } = await import(`${R}/core/meetings/service.mjs`);
+const dir = mkdtempSync(path.join(os.tmpdir(), "cw-ren-")), store = new MeetingStore(dir, { key: randomBytes(32), keyId: "k" });
+let states = 0;
+const svc = new MeetingService({ store });
+svc.attach({ on() {}, engine: { emitState() { states++; svc.snapshot(); } } });
+const id = "77777777-7777-4777-8777-777777777777";
+svc.put("meetings", id, id, { title: "Group call", people: [], status: "ended", createdAt: Date.now(), durationMs: 3600000, contentRevision: 0 });
+svc.put("speakers", id, "s2", { label: "Speaker 2", confirmed: false });
+for (let i = 0; i < 1500; i++) svc.put("segments", id, `system:e1:${i}`, { text: `line ${i}`, speaker: "Speaker 2", speakerKey: "s2", channel: "system", final: true, startMs: i * 2400 });
+svc.selectedId = id; states = 0;
+const t = Date.now();
+svc.renameSpeaker(id, { speakerKey: "s2", name: "Dana" });
+const rows = store.all("segments", id);
+console.log(`rename of 1 speaker with 1500 lines: ${Date.now() - t} ms, ${states} full state emissions, header revision now ${store.get("meetings", id).revision}`);
+console.log("rows now marked as manual speaker overrides:", rows.filter((r) => r.speakerOverride).length);
+svc.close(); rmSync(dir, { recursive: true, force: true });

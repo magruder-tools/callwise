@@ -1,5 +1,7 @@
 # Callwise 0.5.0 — code, plan, build and review
 
+Claude’s review is now archived in [CLAUDE_REVIEW.md](CLAUDE_REVIEW.md). Continue with the [0.5.1 fix response and validation](../0.5.1/REVIEW_RESPONSE.md).
+
 GitHub is the canonical project handoff for Callwise. Use the `local-meetings` pull request for source review and findings. The older `main` branch does not contain this implementation yet. Personal Apple Notes and the local `personal_mac` workspace are not prerequisites for reviewing this project.
 
 - [Complete implementation plan](IMPLEMENTATION_PLAN.txt): archived Claude plan, with private Notes locators omitted. Its old handoff instructions are superseded by this page.

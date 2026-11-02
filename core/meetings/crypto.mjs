@@ -6,7 +6,13 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 const VERSION = 1;
-export function seal(key, value, aad = "", keyId = "archive") {
+export function seal(
+  key,
+  value,
+  aad = "",
+  keyId = "archive",
+  { version = VERSION } = {},
+) {
   const nonce = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, nonce);
   cipher.setAAD(Buffer.from(aad));
@@ -17,7 +23,7 @@ export function seal(key, value, aad = "", keyId = "archive") {
   const id = Buffer.from(keyId);
   if (id.length > 255) throw new Error("Invalid archive key identifier.");
   return Buffer.concat([
-    Buffer.from([VERSION, id.length]),
+    Buffer.from([version, id.length]),
     id,
     nonce,
     cipher.getAuthTag(),
@@ -31,7 +37,7 @@ export function unseal(
   { binary = false, keyId = "archive" } = {},
 ) {
   data = Buffer.from(data);
-  if (data[0] !== VERSION || data.length < 30 + data[1])
+  if (![VERSION, 2].includes(data[0]) || data.length < 30 + data[1])
     throw new Error("Invalid encrypted meeting record.");
   const id = data.subarray(2, 2 + data[1]);
   if (

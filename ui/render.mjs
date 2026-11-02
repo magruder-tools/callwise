@@ -4,7 +4,10 @@ const rendered = new WeakMap();
 const regions = new WeakMap();
 const key = (node) =>
   node.nodeType === 1
-    ? node.getAttribute("data-card-id") ||
+    ? (node.hasAttribute("data-editor-version")
+        ? `${node.id}:${node.getAttribute("data-editor-version")}`
+        : "") ||
+      node.getAttribute("data-card-id") ||
       node.id ||
       node.getAttribute("data-region") ||
       node.getAttribute("data-row-id") ||
@@ -45,7 +48,13 @@ function patch(node, next) {
       node.value = next.getAttribute("value");
   }
   // Text areas retain their live value. Models do not overwrite a draft.
-  if (node.nodeName === "TEXTAREA") return;
+  if (node.nodeName === "TEXTAREA") {
+    const previous = rendered.get(node) ?? node.textContent;
+    if (node.ownerDocument.activeElement !== node && node.value === previous)
+      node.value = next.textContent;
+    rendered.set(node, next.textContent);
+    return;
+  }
   children(node, next);
 }
 function children(parent, next) {

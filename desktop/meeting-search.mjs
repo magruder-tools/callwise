@@ -10,6 +10,13 @@ export class MeetingSearch {
     this.revision++;
   }
   async search(query, filters = {}) {
+    const token = this.store.db
+      ?.prepare("PRAGMA data_version")
+      .get().data_version;
+    if (token !== this.dataVersion) {
+      this.dataVersion = token;
+      this.invalidate();
+    }
     if (!this.worker) {
       this.worker = new Worker(
         new URL("./workers/search-worker.mjs", import.meta.url),

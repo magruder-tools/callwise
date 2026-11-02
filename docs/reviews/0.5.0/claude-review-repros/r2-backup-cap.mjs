@@ -1,0 +1,20 @@
+// Repro: MeetingStore.all() caps every read at 100,000 rows, and backup() uses all(t) per table.
+import { mkdtempSync, rmSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import os from "node:os"; import path from "node:path";
+const R = process.env.CALLWISE_ROOT || process.cwd();
+const { MeetingStore } = await import(`${R}/core/meetings/store.mjs`);
+const base = mkdtempSync(path.join(os.tmpdir(), "cw-backup-"));
+const a = new MeetingStore(path.join(base, "a"), { key: randomBytes(32), keyId: "key-a" });
+const mid = "11111111-1111-4111-8111-111111111111", N = 100050;
+a.put("meetings", mid, mid, { title: "Long-running library", people: [], status: "ended", createdAt: 1 });
+let t = Date.now();
+a.transaction(() => { for (let i = 0; i < N; i++) a.put("segments", mid, `mic:e1:${i}`, { text: `row ${i}`, channel: "mic", final: true, startMs: i }); });
+console.log(`wrote ${N} segment rows in ${Date.now() - t} ms; SQL count = ${a.db.prepare("SELECT count(*) c FROM segments").get().c}`);
+t = Date.now();
+const bytes = a.backup("correct horse battery staple");
+console.log(`backup: ${bytes.length} bytes in ${Date.now() - t} ms (no error reported)`);
+const b = new MeetingStore(path.join(base, "b"), { key: randomBytes(32), keyId: "key-b" });
+b.restore(bytes, "correct horse battery staple");
+console.log(`restored SQL count = ${b.db.prepare("SELECT count(*) c FROM segments").get().c} (expected ${N})`);
+a.close(); b.close(); rmSync(base, { recursive: true, force: true });

@@ -64,6 +64,7 @@ export class AppleSpeechSession {
     return this.connection;
   }
   async startHost() {
+    const runId = randomUUID();
     this.host = this.hostFactory({
       binary: this.binary,
       resources: this.resources,
@@ -78,9 +79,38 @@ export class AppleSpeechSession {
         this.channels.includes(value.row.channel)
       ) {
         const client = this.clients.get(value.row.channel);
-        client?.onSegment(value.row);
+        if (value.row.final && Number.isFinite(value.row.endMs)) {
+          this.finalEnds ||= new Map();
+          this.finalEnds.set(
+            value.row.channel,
+            Math.max(
+              this.finalEnds.get(value.row.channel) || 0,
+              value.row.endMs,
+            ),
+          );
+        }
+        client?.onSegment({
+          ...value.row,
+          id: `${value.row.id}:run:${runId}`,
+          runId,
+        });
       }
-      if (value.type === "error") void this.recover();
+      if (value.type === "discard" && value.channel)
+        this.clients
+          .get(value.channel)
+          ?.onDiscard((value.ids || []).map((id) => `${id}:run:${runId}`));
+      if (value.type === "error" && value.channel) {
+        this.failedChannels ||= new Set();
+        this.failedChannels.add(value.channel);
+        this.clients
+          .get(value.channel)
+          ?.onStatus(
+            "failed",
+            new Error(
+              "Local speech stopped on this audio channel. Pause and resume to retry.",
+            ),
+          );
+      } else if (value.type === "error" && !value.id) void this.recover();
     });
     host.on("exit", () => {
       if (!this.stopped && host === this.host && !this.finishing)
@@ -96,7 +126,8 @@ export class AppleSpeechSession {
       host.close();
       return;
     }
-    for (const c of this.clients.values()) c.onStatus("connected");
+    for (const c of this.clients.values())
+      if (!this.failedChannels?.has(c.channel)) c.onStatus("connected");
     clearInterval(this.heartbeat);
     this.heartbeat = setInterval(() => {
       if (!this.finishing)
@@ -107,7 +138,12 @@ export class AppleSpeechSession {
     this.heartbeat.unref?.();
   }
   push(channel, buffer, at) {
-    if (this.stopped || this.finishing || !this.channels.includes(channel))
+    if (
+      this.stopped ||
+      this.finishing ||
+      this.failedChannels?.has(channel) ||
+      !this.channels.includes(channel)
+    )
       return;
     buffer = Buffer.from(buffer);
     if (!buffer.length || buffer.length % 2 || buffer.length > 480000) return;
@@ -146,7 +182,6 @@ export class AppleSpeechSession {
     this.recovering = true;
     this.host?.close();
     clearInterval(this.heartbeat);
-    this.restarts = this.restarts.filter((t) => Date.now() - t < 60000);
     if (this.restarts.length >= 3) {
       this.recovering = false;
       for (const c of this.clients.values())
@@ -160,7 +195,7 @@ export class AppleSpeechSession {
       return;
     }
     this.restarts.push(Date.now());
-    this.epoch++;
+    this.failedChannels = new Set();
     for (const c of this.clients.values()) {
       c.onStatus("reconnecting");
       c.onSegment({
@@ -176,13 +211,17 @@ export class AppleSpeechSession {
     try {
       await this.startHost();
       for (const [channel, rows] of this.buffers)
-        for (const row of rows)
+        for (const row of rows) {
+          const end = this.finalEnds?.get(channel) || 0;
+          if (row.startMs + row.durationMs <= end) continue;
+          const skip = Math.max(0, Math.floor((end - row.startMs) * 24)) * 2;
           this.host.send({
             op: "push",
             channel,
-            audio: row.buffer.toString("base64"),
-            startMs: row.startMs,
+            audio: row.buffer.subarray(skip).toString("base64"),
+            startMs: row.startMs + skip / 48,
           });
+        }
     } catch {
       this.recovering = false;
       if (!this.stopped) {
@@ -214,8 +253,16 @@ export class AppleSpeechSession {
   }
 }
 export class AppleTranscriber {
-  constructor(session, { channel, onSegment = () => {}, onStatus = () => {} }) {
-    Object.assign(this, { session, channel, onSegment, onStatus });
+  constructor(
+    session,
+    {
+      channel,
+      onSegment = () => {},
+      onStatus = () => {},
+      onDiscard = () => {},
+    },
+  ) {
+    Object.assign(this, { session, channel, onSegment, onStatus, onDiscard });
     this.stopped = false;
   }
   connect() {

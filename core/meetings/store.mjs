@@ -11,9 +11,15 @@ import {
   rmSync,
   chmodSync,
   copyFileSync,
+  openSync,
+  fsyncSync,
+  closeSync,
+  writeSync,
+  readSync,
 } from "node:fs";
 import path from "node:path";
-import { seal, unseal, sealBackup, openBackup } from "./crypto.mjs";
+import { seal, unseal, openBackup } from "./crypto.mjs";
+import { sealFrames, openFrames } from "./backup.mjs";
 export const SCHEMA_VERSION = 1;
 const TABLES = [
   "meetings",
@@ -29,6 +35,18 @@ const TABLES = [
 ];
 const safeId = (v) =>
   typeof v === "string" && /^[a-zA-Z0-9:_-]{1,200}$/.test(v);
+const recordAAD = (table, meetingId, id, data) =>
+  data?.[0] === 1
+    ? `${table}:${meetingId}:${id}`
+    : JSON.stringify(["callwise:v2", table, meetingId, id]);
+function decodeRecord(store, table, meetingId, id, data) {
+  const r = unseal(store.key, data, recordAAD(table, meetingId, id, data), {
+    keyId: store.keyId,
+  });
+  if (r.meetingId !== meetingId || r.id !== id)
+    throw new Error("Meeting record identity mismatch.");
+  return r;
+}
 function checked(v) {
   if (!safeId(v)) throw new Error("Invalid meeting identifier.");
   return v;
@@ -38,7 +56,19 @@ export function atomicWrite(file, data) {
   mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   try {
     writeFileSync(temp, data, { mode: 0o600, flag: "wx" });
+    const fd = openSync(temp, "r");
+    try {
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
     renameSync(temp, file);
+    const directory = openSync(path.dirname(file), "r");
+    try {
+      fsyncSync(directory);
+    } finally {
+      closeSync(directory);
+    }
   } finally {
     rmSync(temp, { force: true });
   }
@@ -67,6 +97,7 @@ export class MeetingStore {
     this.directory = directory;
     this.readOnly = readOnly;
     this.clock = clock;
+    this.storage = storage;
     this.closed = false;
     if (!readOnly) mkdirSync(directory, { recursive: true, mode: 0o700 });
     const keyFile = path.join(directory, "archive-key.bin");
@@ -185,14 +216,12 @@ export class MeetingStore {
       .get(meetingId, id);
     return row
       ? {
-          ...unseal(this.key, row.data, `${table}:${meetingId}:${id}`, {
-            keyId: this.keyId,
-          }),
+          ...decodeRecord(this, table, meetingId, id, row.data),
           revision: row.revision,
         }
       : null;
   }
-  all(table, meetingId, { limit = 100000, offset = 0, newest = false } = {}) {
+  all(table, meetingId, { limit = -1, offset = 0, newest = false } = {}) {
     this.table(table);
     if (meetingId) checked(meetingId);
     const rows = this.db
@@ -201,13 +230,11 @@ export class MeetingStore {
       )
       .all(
         ...(meetingId ? [meetingId] : []),
-        Math.min(100000, Math.max(1, limit)),
+        limit === -1 ? -1 : Math.max(1, limit),
         Math.max(0, offset),
       );
     return rows.map((r) => ({
-      ...unseal(this.key, r.data, `${table}:${r.meeting_id}:${r.id}`, {
-        keyId: this.keyId,
-      }),
+      ...decodeRecord(this, table, r.meeting_id, r.id, r.data),
       revision: r.revision,
     }));
   }
@@ -229,8 +256,9 @@ export class MeetingStore {
     const data = seal(
       this.key,
       record,
-      `${table}:${meetingId}:${id}`,
+      recordAAD(table, meetingId, id),
       this.keyId,
+      { version: 2 },
     );
     this.db
       .prepare(
@@ -287,6 +315,15 @@ export class MeetingStore {
           text: "Callwise closed before this meeting ended. No audio was captured while it was closed.",
           at: this.clock(),
         });
+        this.put("segments", m.id, `gap:${randomUUID()}`, {
+          channel: "system",
+          speaker: "Transcription gap",
+          gap: true,
+          final: true,
+          startMs: m.durationMs || 0,
+          text: "Callwise closed before this meeting ended. No audio was captured while it was closed.",
+        });
+        this.put("jobs", m.id, "recap", { status: "queued", recovered: true });
       }
     for (const j of this.all("jobs"))
       if (j.status === "running")
@@ -295,12 +332,32 @@ export class MeetingStore {
           status: "queued",
           recovered: true,
         });
-    for (const a of this.all("audio_chunks"))
-      if (!existsSync(path.join(this.directory, a.path)))
-        this.put("audio_chunks", a.meetingId, a.id, { ...a, missing: true });
+    this.db.exec(
+      "DELETE FROM audio_chunks WHERE meeting_id NOT IN (SELECT meeting_id FROM meetings)",
+    );
     const audio = path.join(this.directory, "audio");
     const valid = new Set(
-      this.all("audio_chunks").map((a) => path.join(this.directory, a.path)),
+      this.db
+        .prepare("SELECT meeting_id,id FROM audio_chunks")
+        .all()
+        .map((a) => {
+          const [channel, sequence] = a.id.split(":");
+          if (
+            !safeId(a.meeting_id) ||
+            !["mic", "system"].includes(channel) ||
+            !/^\d+$/.test(sequence)
+          )
+            throw new Error(
+              "Invalid audio index; retained files have not been pruned.",
+            );
+          return path.join(
+            this.directory,
+            "audio",
+            a.meeting_id,
+            channel,
+            `${sequence}.cwa`,
+          );
+        }),
     );
     const walk = (d) => {
       if (!existsSync(d)) return;
@@ -316,6 +373,7 @@ export class MeetingStore {
   }
   writeAudio(meetingId, channel, sequence, bytes, timing) {
     checked(meetingId);
+    if (!this.get("meetings", meetingId)) throw new Error("Meeting not found.");
     if (
       !["mic", "system"].includes(channel) ||
       !Number.isSafeInteger(sequence) ||
@@ -369,17 +427,132 @@ export class MeetingStore {
       }
   }
   backup(passphrase) {
-    const records = Object.fromEntries(TABLES.map((t) => [t, this.all(t)]));
-    const audio = records.audio_chunks
-      .filter((r) => !r.missing)
-      .map((r) => ({
-        meetingId: r.meetingId,
-        id: r.id,
-        data: this.readAudio(r.meetingId, r.id).toString("base64"),
-      }));
-    return sealBackup({ schema: SCHEMA_VERSION, records, audio }, passphrase);
+    return Buffer.concat([...sealFrames(this.backupRecords(), passphrase)]);
+  }
+  *backupRecords() {
+    this.db.exec("BEGIN");
+    try {
+      const counts = Object.fromEntries(
+        TABLES.map((t) => [
+          t,
+          this.db.prepare(`SELECT count(*) AS n FROM ${t}`).get().n,
+        ]),
+      );
+      yield { type: "header", schema: SCHEMA_VERSION, counts };
+      const copied = Object.fromEntries(TABLES.map((t) => [t, 0]));
+      for (const table of TABLES)
+        for (const r of this.db
+          .prepare(`SELECT * FROM ${table} ORDER BY meeting_id,id`)
+          .iterate()) {
+          const record = {
+            ...decodeRecord(this, table, r.meeting_id, r.id, r.data),
+            revision: r.revision,
+          };
+          yield { type: "record", table, record };
+          copied[table]++;
+          if (table === "audio_chunks" && !record.missing)
+            yield {
+              type: "audio",
+              record,
+              data: this.readAudio(record.meetingId, record.id).toString(
+                "base64",
+              ),
+            };
+        }
+      if (TABLES.some((t) => counts[t] !== copied[t]))
+        throw new Error("Backup row counts changed.");
+      yield { type: "end", counts: copied };
+    } finally {
+      this.db.exec("ROLLBACK");
+    }
+  }
+  backupToFile(file, passphrase) {
+    const temp = `${file}.${randomUUID()}.tmp`;
+    let fd;
+    try {
+      fd = openSync(temp, "wx", 0o600);
+      for (const part of sealFrames(this.backupRecords(), passphrase)) {
+        let at = 0;
+        while (at < part.length)
+          at += writeSync(fd, part, at, part.length - at);
+      }
+      fsyncSync(fd);
+      closeSync(fd);
+      fd = undefined;
+      renameSync(temp, file);
+    } finally {
+      if (fd !== undefined) closeSync(fd);
+      rmSync(temp, { force: true });
+    }
+  }
+  restoreFile(file, passphrase) {
+    const fd = openSync(file, "r"),
+      magic = Buffer.alloc(9);
+    try {
+      readSync(fd, magic);
+    } finally {
+      closeSync(fd);
+    }
+    if (magic.toString() === "CWBACKUP1")
+      return this.restore(readFileSync(file), passphrase);
+    return this.restoreFrames(openFrames(file, passphrase));
+  }
+  restoreFrames(frames) {
+    if (this.all("meetings", null, { limit: 1 }).length)
+      throw new Error("Restore requires an empty library.");
+    try {
+      this.transaction(() => {
+        let header,
+          ended = false;
+        const counts = Object.fromEntries(TABLES.map((t) => [t, 0]));
+        for (const frame of frames) {
+          if (ended) throw new Error("Unexpected trailing backup data.");
+          if (!header) {
+            if (frame.type !== "header" || frame.schema !== SCHEMA_VERSION)
+              throw new Error("Unsupported backup.");
+            header = frame;
+            continue;
+          }
+          if (frame.type === "record") {
+            this.table(frame.table);
+            const r = frame.record;
+            this.put(frame.table, r.meetingId, r.id, r, 0);
+            counts[frame.table]++;
+          } else if (frame.type === "audio") {
+            const r = frame.record;
+            this.writeAudio(
+              r.meetingId,
+              r.channel,
+              r.sequence,
+              Buffer.from(frame.data, "base64"),
+              r,
+            );
+          } else if (frame.type === "end") {
+            if (
+              TABLES.some(
+                (t) =>
+                  counts[t] !== header.counts[t] ||
+                  counts[t] !== frame.counts[t],
+              )
+            )
+              throw new Error("Backup row count mismatch.");
+            ended = true;
+          } else throw new Error("Unsupported backup frame.");
+        }
+        if (!ended) throw new Error("The backup is incomplete.");
+      });
+    } catch (e) {
+      rmSync(path.join(this.directory, "audio"), {
+        recursive: true,
+        force: true,
+      });
+      throw e;
+    }
+    this.recover();
   }
   restore(bytes, passphrase) {
+    if (Buffer.from(bytes).subarray(0, 9).toString() === "CWBACKUP2")
+      return this.restoreFrames(openFrames(Buffer.from(bytes), passphrase));
     if (this.all("meetings", null, { limit: 1 }).length)
       throw new Error(
         "Restore requires an empty library. Export or back up your existing meetings first.",
@@ -418,5 +591,15 @@ export class MeetingStore {
     if (!this.readOnly) this.db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
     this.db.close();
     this.key.fill(0);
+  }
+  reset() {
+    const { directory, storage, clock } = this;
+    this.close();
+    rmSync(directory, { recursive: true, force: true });
+    const empty = new MeetingStore(
+      directory,
+      storage ? { storage, clock } : { key: randomBytes(32), clock },
+    );
+    Object.assign(this, empty);
   }
 }

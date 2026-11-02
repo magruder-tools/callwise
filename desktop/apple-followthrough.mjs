@@ -7,14 +7,14 @@ export class AppleFollowThrough {
     this.previews = new Map();
   }
   notes(request) {
-    return new Promise((resolve, reject) =>
-      this.run(
+    return new Promise((resolve, reject) => {
+      const child = this.run(
         "/usr/bin/osascript",
         [
           "-l",
           "JavaScript",
           path.join(this.resources, "apple-notes.js"),
-          JSON.stringify(request),
+          "--stdin",
         ],
         { timeout: 30000, maxBuffer: 2 * 1048576, encoding: "utf8" },
         (error, stdout) => {
@@ -30,8 +30,10 @@ export class AppleFollowThrough {
             reject(new Error("Apple Notes returned an invalid response."));
           }
         },
-      ),
-    );
+      );
+      child?.stdin?.on("error", () => {});
+      child?.stdin?.end(JSON.stringify(request));
+    });
   }
   async preview({ meetingId, destination, actionIds = [], newCopy = false }) {
     const m = this.meetings.current(meetingId);
@@ -122,6 +124,8 @@ export class AppleFollowThrough {
       )
       .digest("hex");
     const old = this.meetings.get("exports", p.meetingId, exportKey);
+    if (old?.status === "pending")
+      throw new Error("This export is already being saved.");
     if (
       old?.status === "done" &&
       p.destination === "reminders" &&
@@ -154,7 +158,16 @@ export class AppleFollowThrough {
             key: `${p.meetingId}:${a.id}`,
             text: a.text,
             ...(a.due?.confirmed && a.due.date ? { dueDate: a.due.date } : {}),
-            notes: `From ${m.title}\n${(a.refs || []).join(", ")}${a.owner?.confirmed && a.owner.name ? `\nOwner: ${a.owner.name}` : ""}`,
+            notes: `From ${m.title}\n${(a.refs || [])
+              .map((id) => {
+                const r = m.segments.find((r) => r.id === id);
+                return r
+                  ? `${Math.floor((r.startMs || 0) / 60000)}:${String(Math.floor((r.startMs || 0) / 1000) % 60).padStart(2, "0")} ${r.speaker}: ${r.text.slice(0, 250)}`
+                  : "Meeting evidence";
+              })
+              .join(
+                "\n",
+              )}${a.owner?.confirmed && a.owner.name ? `\nOwner: ${a.owner.name}` : ""}`,
           })),
         });
       this.meetings.put("exports", p.meetingId, exportKey, {
@@ -169,7 +182,11 @@ export class AppleFollowThrough {
         destination: p.destination,
       });
       this.previews.delete(token);
-      return { saved: true, results };
+      return {
+        saved: true,
+        results,
+        existing: results?.existing === true && results?.updated !== true,
+      };
     } catch (error) {
       this.meetings.put("exports", p.meetingId, exportKey, {
         destination: p.destination,

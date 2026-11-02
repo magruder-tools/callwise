@@ -92,14 +92,14 @@ const version = JSON.parse(
   readFileSync(path.join(root, "package.json")),
 ).version;
 const output = path.join(root, "release", `local-${version}`),
-  built = path.join(stage, "release/mac-arm64/Callwise.app"),
-  destination = path.join(output, "Callwise.app");
+  built = path.join(stage, "release/mac-arm64/Callwise.app");
 mkdirSync(output, { recursive: true });
-if (existsSync(destination))
-  rmSync(destination, { recursive: true, force: true });
-// ditto preserves the relative framework symlinks and signed bundle metadata.
-run("/usr/bin/ditto", [built, destination]);
-run("/usr/bin/codesign", ["--verify", "--deep", "--strict", destination]);
+// Cloud-managed Documents folders can immediately add FinderInfo to app bundles,
+// invalidating strict signature checks. Keep the signed bundle in the build stage
+// and copy only its archive into the source workspace.
+const oldCopy = path.join(output, "Callwise.app");
+if (existsSync(oldCopy)) rmSync(oldCopy, { recursive: true, force: true });
+run("/usr/bin/codesign", ["--verify", "--deep", "--strict", built]);
 const zip = path.join(output, `Callwise-${version}-Apple-Silicon.zip`);
 if (existsSync(zip)) rmSync(zip);
 run("/usr/bin/ditto", [
@@ -107,7 +107,7 @@ run("/usr/bin/ditto", [
   "-k",
   "--sequesterRsrc",
   "--keepParent",
-  destination,
+  built,
   zip,
 ]);
 writeFileSync(
@@ -117,5 +117,5 @@ writeFileSync(
     path.basename(zip) +
     "\n",
 );
-console.log(`Local app: ${destination}\nArchive: ${zip}`);
-if (process.argv.includes("--launch")) run("/usr/bin/open", [destination]);
+console.log(`Local app: ${built}\nArchive: ${zip}`);
+if (process.argv.includes("--launch")) run("/usr/bin/open", [built]);

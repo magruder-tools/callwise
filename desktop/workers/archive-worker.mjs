@@ -6,11 +6,11 @@ const store = new MeetingStore(workerData.directory, {
   readOnly: true,
 });
 try {
-  parentPort.postMessage({ data: store.backup(workerData.passphrase) });
-} catch {
+  store.backupToFile(workerData.file, workerData.passphrase);
+  parentPort.postMessage({ saved: true });
+} catch (error) {
   parentPort.postMessage({
-    error:
-      "The encrypted backup could not be created. Check the passphrase and available disk space.",
+    error: error.message || "The encrypted backup could not be created.",
   });
 } finally {
   store.close();

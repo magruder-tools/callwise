@@ -10,6 +10,7 @@ import { MeetingStore } from "../core/meetings/store.mjs";
 import { MeetingService } from "../core/meetings/service.mjs";
 import { MeetingSearch } from "../desktop/meeting-search.mjs";
 import { CallController } from "../core/controller.mjs";
+import { startMeeting } from "../desktop/meeting-start.mjs";
 const dir = mkdtempSync(path.join(os.tmpdir(), "callwise-meeting-ui-"));
 const store = new MeetingStore(dir, { key: randomBytes(32) });
 const controller = new CallController({
@@ -78,7 +79,11 @@ try {
       throw new Error("Test server stopped.");
     }),
   ]);
-  browser = await chromium.launch();
+  browser = await chromium.launch(
+    process.env.CALLWISE_BROWSER_BIN
+      ? { executablePath: process.env.CALLWISE_BROWSER_BIN }
+      : {},
+  );
   page = await browser.newPage({ viewport: { width: 980, height: 740 } });
   page.on("pageerror", (e) => failures.push(e.message));
   const snapshot = () => ({
@@ -87,8 +92,8 @@ try {
   });
   await page.exposeBinding("meetingCommand", async (_source, name, p = {}) => {
     if (name.startsWith("meeting.")) return meetings.command(name, p);
-    if (name === "start" && controller.engine.status !== "paused")
-      meetings.begin({ preferences: controller.preferences, ...p });
+    if (name === "start")
+      return startMeeting({ meetings, controller, payload: p });
     return controller.command(name, p);
   });
   await page.addInitScript((s) => {

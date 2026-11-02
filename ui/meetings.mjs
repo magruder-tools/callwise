@@ -170,6 +170,10 @@ export function createMeetingUi({
   });
   root.addEventListener("change", (event) => {
     const node = event.target;
+    if (node.id.startsWith("action-confirm-")) {
+      ui.actionConfirmations ||= {};
+      ui.actionConfirmations[node.id] = node.checked;
+    }
     if (node.id === "group-call") ui.groupCall = node.checked;
     if (node.dataset.prior) {
       const selected = new Set(ui.prior || []);
@@ -204,11 +208,21 @@ export function createMeetingUi({
     if (event.target.id === "meeting-question-form") {
       event.preventDefault();
       const question = read("meeting-question");
-      if (question.trim())
-        void command("meeting.ask", { question }).then((answer) => {
-          ui.historyAnswer = answer;
-          render();
-        });
+      if (question.trim() && !ui.askingHistory) {
+        ui.askingHistory = true;
+        render();
+        void command("meeting.ask", { question })
+          .then((answer) => {
+            ui.historyAnswer = answer;
+          })
+          .catch((error) => {
+            ui.notice = error.message;
+          })
+          .finally(() => {
+            ui.askingHistory = false;
+            render();
+          });
+      }
     }
   });
   const meetingCommand = (name, payload = {}) =>
@@ -242,19 +256,25 @@ export function createMeetingUi({
         render();
         break;
       case "m-confirm-start":
-        if (!ui.noticeConfirmed) return;
-        await command("start", {
-          ...ui.startPayload,
-          notice: {
-            confirmed: true,
-            method: read("notice-method"),
-            configHash: ui.noticeSheet.configHash,
-            presentedAt: ui.noticeSheet.presentedAt,
-          },
-        });
-        ui.noticeSheet = null;
-        ui.screen = "live";
+        if (!ui.noticeConfirmed || ui.startingMeeting) return;
+        ui.startingMeeting = true;
         render();
+        try {
+          await command("start", {
+            ...ui.startPayload,
+            notice: {
+              confirmed: true,
+              method: read("notice-method"),
+              configHash: ui.noticeSheet.configHash,
+              presentedAt: ui.noticeSheet.presentedAt,
+            },
+          });
+          ui.noticeSheet = null;
+          ui.screen = "live";
+        } finally {
+          ui.startingMeeting = false;
+          render();
+        }
         break;
       case "m-notes-only":
         await flushEdits();
@@ -407,14 +427,30 @@ export function createMeetingUi({
           state: "proposed",
         });
         break;
+      case "m-cancel-history":
+        await command("meeting.ask.cancel");
+        break;
       case "m-save-action":
         await meetingCommand("meeting.action", {
           id: node.dataset.id,
           text: read(`action-text-${node.dataset.id}`),
           owner: read(`action-owner-${node.dataset.id}`),
           due: read(`action-due-${node.dataset.id}`),
-          confirmOwner: true,
-          confirmDue: true,
+          confirmOwner:
+            checked(`action-confirm-owner-${node.dataset.id}`) ||
+            read(`action-owner-${node.dataset.id}`) !==
+              (m.actions.find((a) => a.id === node.dataset.id)?.owner?.name ||
+                "") ||
+            m.actions.find((a) => a.id === node.dataset.id)?.owner
+              ?.confirmed === true,
+          confirmDue:
+            checked(`action-confirm-due-${node.dataset.id}`) ||
+            read(`action-due-${node.dataset.id}`) !==
+              (m.actions.find((a) => a.id === node.dataset.id)?.due?.date ||
+                m.actions.find((a) => a.id === node.dataset.id)?.due?.text ||
+                "") ||
+            m.actions.find((a) => a.id === node.dataset.id)?.due?.confirmed ===
+              true,
           state: "confirmed",
         });
         break;
@@ -443,6 +479,19 @@ export function createMeetingUi({
         break;
       case "m-objection":
         await meetingCommand("meeting.notice", { objection: true });
+        ui.objectionSheet = true;
+        render();
+        break;
+      case "m-objection-keep":
+      case "m-objection-delete":
+        await meetingCommand("meeting.objection.resolve", {
+          choice: action === "m-objection-delete" ? "delete" : "keep",
+        });
+        ui.objectionSheet = false;
+        await command("new", { clearContext: true });
+        await command("start", { source: "manual", captureMode: "notes-only" });
+        ui.screen = "live";
+        render();
         break;
       case "m-export-notes":
       case "m-export-reminders":
@@ -458,14 +507,16 @@ export function createMeetingUi({
         render();
         break;
       case "m-save-export":
-        await command("desktop.meeting.apple.save", {
+        const exportResult = await command("desktop.meeting.apple.save", {
           token: ui.appleExport.token,
           destinationId: read("export-destination"),
           update: checked("update-export"),
           confirm: true,
         });
         ui.appleExport = null;
-        ui.notice = "Saved to your selected Apple app.";
+        ui.notice = exportResult.existing
+          ? "An existing export was found. Choose Update to replace its content."
+          : "Saved to your selected Apple app.";
         render();
         break;
       case "m-export-file":

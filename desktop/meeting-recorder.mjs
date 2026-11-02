@@ -5,6 +5,7 @@ export class MeetingRecorder extends EventEmitter {
   start({ meetingId, enabled, store }) {
     this.close();
     this.finishJob = null;
+    this.discarded = false;
     this.enabled = enabled && !!store;
     if (!this.enabled) return;
     this.store = store;
@@ -25,6 +26,7 @@ export class MeetingRecorder extends EventEmitter {
       },
     );
     this.worker.on("message", (m) => {
+      if (this.discarded) return;
       if (m.type === "ack") this.pending = Math.max(0, this.pending - 1);
       if (m.type === "chunk") {
         try {
@@ -78,10 +80,12 @@ export class MeetingRecorder extends EventEmitter {
     await this.finishJob;
   }
   close() {
+    this.discarded = true;
     this.enabled = false;
-    void this.worker?.terminate();
+    const stopped = this.worker?.terminate();
     this.worker = null;
     this.flushResolve?.();
     this.flushResolve = null;
+    return stopped;
   }
 }

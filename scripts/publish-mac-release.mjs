@@ -9,6 +9,17 @@ const tag = preview
 if (!preview && tag !== `v${version}`)
   throw new Error("Tag must match the package version.");
 const commit = process.env.GITHUB_SHA;
+if (preview) {
+  const head = execFileSync(
+    "git",
+    ["ls-remote", "origin", "refs/heads/claude/followup-fixes"],
+    { encoding: "utf8" },
+  )
+    .trim()
+    .split(/\s+/)[0];
+  if (head !== commit)
+    throw new Error("A newer preview build has superseded this commit.");
+}
 if (
   !/^[a-f0-9]{40}$/.test(commit || "") ||
   readFileSync("release/BUILD_COMMIT.txt", "utf8").trim() !== commit

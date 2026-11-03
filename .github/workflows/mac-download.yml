@@ -21,7 +21,25 @@ on:
       - "package-lock.json"
 permissions:
   contents: read
+concurrency:
+  group: callwise-mac-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
+  supersede:
+    name: Stop superseded preview builds
+    if: github.ref == 'refs/heads/claude/followup-fixes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel older runs from this preview branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh api "repos/$GH_REPO/actions/runs?event=push&branch=claude%2Ffollowup-fixes&per_page=100" --jq '.workflow_runs[] | select(.path == ".github/workflows/mac-download.yml" and .head_sha != env.GITHUB_SHA and (.status == "queued" or .status == "in_progress")) | .id' > old-runs.txt
+          while read -r run; do gh run cancel "$run" --repo "$GH_REPO" || true; done < old-runs.txt
   source:
     runs-on: ubuntu-latest
     timeout-minutes: 3

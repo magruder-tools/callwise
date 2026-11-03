@@ -4,6 +4,7 @@ import {
   renameSync,
   rmSync,
   mkdirSync,
+  readdirSync,
 } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -27,8 +28,7 @@ function readJournal(directory) {
 // A crash between the two renames is recoverable before opening or creating a library.
 export function recoverRestoreSwap(directory) {
   const entry = readJournal(directory);
-  if (!entry) return;
-  if (!existsSync(directory)) {
+  if (entry && !existsSync(directory)) {
     if (existsSync(entry.stage)) renameSync(entry.stage, directory);
     else if (existsSync(entry.previous)) renameSync(entry.previous, directory);
     else
@@ -36,9 +36,22 @@ export function recoverRestoreSwap(directory) {
         "The interrupted restore needs recovery. No library was replaced.",
       );
   }
-  rmSync(entry.stage, { recursive: true, force: true });
-  rmSync(entry.previous, { recursive: true, force: true });
-  rmSync(journalPath(directory), { force: true });
+  if (entry) {
+    rmSync(entry.stage, { recursive: true, force: true });
+    rmSync(entry.previous, { recursive: true, force: true });
+    rmSync(journalPath(directory), { force: true });
+  }
+  // A crash during worker import happens before publication has a journal. Remove that private
+  // staging data on the next main-app launch, so Delete all cannot leave a recoverable old copy.
+  const parent = path.dirname(directory),
+    prefix = `${path.basename(directory)}.restore-`;
+  if (existsSync(parent))
+    for (const name of readdirSync(parent))
+      if (
+        name.startsWith(prefix) &&
+        /^[0-9a-f-]{36}$/.test(name.slice(prefix.length))
+      )
+        rmSync(path.join(parent, name), { recursive: true, force: true });
 }
 export function stageRestore(
   store,

@@ -446,6 +446,24 @@ test("interrupted directory publication recovers before a fresh key could be cre
   assert.equal(existsSync(previous), false);
   assert.equal(existsSync(`${directory}.restore.json`), false);
 });
+test("startup removes an abandoned worker staging copy without touching unrelated files or the original library", (t) => {
+  const f = fixture(t),
+    target = f.store("library", keychain);
+  const stage = `${target.directory}.restore-${randomUUID()}`;
+  mkdirSync(stage);
+  writeFileSync(path.join(stage, "private-copy"), "synthetic old data");
+  const unrelated = `${target.directory}.restore-personal`;
+  mkdirSync(unrelated);
+  const original = readFileSync(path.join(target.directory, "archive-key.bin"));
+  recoverRestoreSwap(target.directory);
+  assert.equal(existsSync(stage), false);
+  assert.equal(existsSync(unrelated), true);
+  assert.deepEqual(
+    readFileSync(path.join(target.directory, "archive-key.bin")),
+    original,
+  );
+  assert.equal(target.isEmpty(), true);
+});
 test("a failed staged-library opening rolls publication back and leaves the original key usable", async (t) => {
   const f = fixture(t),
     source = f.store("source"),

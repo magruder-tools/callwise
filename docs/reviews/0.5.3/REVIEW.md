@@ -22,6 +22,12 @@ This addresses two prompt causes: repeated failed attempts and changed app ident
 
 The final archive verification, packaged regression and GitHub build results are recorded with this review's validation evidence. Real-call and Apple-permission acceptance checks listed in the 0.5.2 Mac review remain open. This is a personal, self-signed preview, not an Apple Developer ID or notarized distribution.
 
+## GitHub toolchain
+
+The first hosted Mac build passed its tests and model checks but failed while compiling the pinned FluidAudio dependency with the Xcode 26 toolchain. The errors are Swift isolation diagnostics in FluidAudio's unused streaming-ASR implementation; Callwise's own transcription uses Apple Speech. The workflows now use GitHub's supported `xcode-27` image, matching the toolchain family of the successful local build, while retaining the macOS 26 deployment target and strict compiler checks. See [GitHub's runner list](https://github.com/actions/runner-images) and [Xcode 27 image](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md).
+
+This is a build configuration change only; the signed archive's 82 runtime source files and bundled README are unchanged.
+
 ## Verified installer
 
 The final ZIP was extracted into a fresh temporary directory. Deep, strict signature validation passes with access to macOS's certificate verification service. All 82 runtime files and the bundled README match the source, package metadata matches after standard build pruning, and all 33 follow-up/objection/Keychain regressions pass inside the packaged Electron runtime.

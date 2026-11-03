@@ -39,7 +39,9 @@ jobs:
             BUILD_COMMIT.txt
           retention-days: 30
   mac:
-    runs-on: macos-26
+    # The native helper targets macOS 26, but builds with the macOS 27 SDK.
+    # Xcode 26's compiler rejects the pinned FluidAudio dependency.
+    runs-on: xcode-27
     timeout-minutes: 20
     env:
       CALLWISE_RELEASE: ${{ startsWith(github.ref, 'refs/tags/') && '1' || '0' }}

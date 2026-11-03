@@ -9,7 +9,8 @@ permissions:
   contents: write
 jobs:
   release:
-    runs-on: macos-26
+    # Match the Xcode 27 toolchain used for the verified local native helper.
+    runs-on: xcode-27
     timeout-minutes: 25
     env:
       CALLWISE_RELEASE: "1"

@@ -1,0 +1,4 @@
+meeting_list: [ 'Vendor sync' ]
+meeting_search 'budget': []
+meeting_search 'approved': [ 'Vendor sync' ]
+(exit 0)

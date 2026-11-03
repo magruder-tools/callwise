@@ -1,0 +1,4 @@
+wrote 7920 chunks (475 MB, ~11.0 h) in 14 s
+backup: 639 MB file in 8 s; peak RSS so far 219 MB
+restore: 7920 chunks in 15 s; chunks differing from the originals byte-for-byte: 0 of 7920; peak RSS 221 MB
+(exit 0)

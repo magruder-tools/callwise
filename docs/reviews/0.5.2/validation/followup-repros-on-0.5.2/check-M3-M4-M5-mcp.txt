@@ -1,0 +1,10 @@
+initialize 2025-06-18 -> 2025-06-18
+M5 search 'budget': [ 'Alpha budget review' ]
+M5 list: [ 'Alpha budget review' ]
+M5 get B (no consent): This meeting's participant notice did not allow assistant access.
+M5 excerpt C (running): This meeting is still in progress. Assistants can read it after it ends.
+M3 search 'delta' after a meeting is saved by the app: [ 'Delta budget' ]
+M4 legacy tools/call with _meta.progressToken: [ 'Delta budget', 'Alpha budget review' ]
+M4 initialize 2024-11-05 -> 2025-11-25
+M4 initialize 2025-12-31 -> 2025-11-25
+(exit 0)

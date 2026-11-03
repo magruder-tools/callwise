@@ -1,0 +1,6 @@
+before: library [ 'Confidential salary talk' ] | search [ 'Confidential salary talk' ]
+after deleteAll: library [] | current null | activeId null
+  search 'salary': []
+  rows in SQLite: 0 | key replaced: true | files: [ 'archive-key.bin', 'library.db', 'library.db-shm', 'library.db-wal' ] | internal backups: false
+  editing the deleted meeting: Meeting not found. | header back in SQLite: false
+(exit 0)

@@ -1,0 +1,13 @@
+before Delete all:
+  notice mentions live suggestions: false | Ready shows live coaching on: false
+  OpenAI requests carrying the conversation: 0 | Codex binary executed: no
+  errors shown: []
+B. after Delete all, no OpenAI key (Codex fallback):
+  notice mentions live suggestions: false | Ready shows live coaching on: false
+  OpenAI requests carrying the conversation: 0 | Codex binary executed: no
+  errors shown: ["This Codex version could not provide a supported App Server schema. Update Codex"]
+A. after Delete all, OpenAI key pasted again in setup:
+  notice mentions live suggestions: false | Ready shows live coaching on: false
+  OpenAI requests carrying the conversation: 2 | Codex binary executed: no
+  errors shown: ["OpenAI is temporarily unavailable. Try again in a moment."]
+(exit 0)

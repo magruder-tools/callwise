@@ -1,0 +1,8 @@
+[
+  {
+    text: 'We can offer forty thousand for the renewal.',
+    final: true,
+    unfinalized: false
+  }
+]
+(exit 0)

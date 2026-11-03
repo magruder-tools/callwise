@@ -24,6 +24,11 @@ function build(next) {
   records.clear();
   const docs = [];
   for (const m of store.all("meetings")) {
+    if (
+      workerData.assistantOnly &&
+      !(m.status === "ended" && m.assistantAccess === true)
+    )
+      continue;
     const actions = store.all("actions", m.id),
       d = store.all("docs", m.id),
       recap = d.find((d) => d.id === "recap");
@@ -34,6 +39,7 @@ function build(next) {
       createdAt: m.createdAt,
       durationMs: m.durationMs,
       status: m.status,
+      assistantAccess: m.assistantAccess === true,
       openActions: actions.filter(
         (a) => a.state !== "dismissed" && !a.completed,
       ).length,
@@ -75,6 +81,7 @@ parentPort.on("message", (message) => {
     if (!index || message.revision !== revision) build(message.revision);
     const { query = "", filters = {} } = message;
     const allowed = (m) =>
+      (!filters.assistantOnly || (m.status === "ended" && m.assistantAccess)) &&
       (!filters.from || m.createdAt >= filters.from) &&
       (!filters.to || m.createdAt <= filters.to) &&
       (!filters.openActions || m.openActions > 0) &&

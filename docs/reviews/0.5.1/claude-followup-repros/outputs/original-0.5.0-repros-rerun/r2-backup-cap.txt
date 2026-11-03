@@ -1,0 +1,3 @@
+wrote 100050 segment rows in 5644 ms; SQL count = 100050
+backup: 23479282 bytes in 8241 ms (no error reported)
+restored SQL count = 100050 (expected 100050)

@@ -1,8 +1,8 @@
 # Callwise
 
-## Callwise 0.5.1 review fixes
+## Callwise 0.5.2 review fixes
 
-Claude's 0.5.0 review and reproductions are archived with the project. The [0.5.1 response](docs/reviews/0.5.1/REVIEW_RESPONSE.md) maps each finding to its fix, regression checks and remaining device validation. This is a development build; a consented real call is still required before relying on it.
+Claude's 0.5.0 review and reproductions are archived with the project. The [0.5.1 response](docs/reviews/0.5.1/REVIEW_RESPONSE.md) maps each finding to its fix, regression checks and remaining device validation. Claude's [follow-up review of 0.5.1](docs/reviews/0.5.1/CLAUDE_FOLLOWUP_REVIEW.md) and the [0.5.2 fixes](docs/reviews/0.5.2/FIXES.md) cover the issues found after that. This is a development build; a consented real call is still required before relying on it.
 
 The local meeting implementation, Claude plan, build report, validation evidence and review instructions are together in [docs/reviews/0.5.0/START_HERE.md](docs/reviews/0.5.0/START_HERE.md). Review the `local-meetings` pull request; `main` stays unchanged until review is complete.
 

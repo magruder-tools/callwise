@@ -1,0 +1,4 @@
+in-window Resume after the objection: Capture stopped after an objection. Keep notes or start a new meeting with a fresh notice.
+menu-bar Resume / Control+Alt+P: refused: Capture stopped after an objection. Keep notes or start a new meeting with a fresh notice. { engine: 'paused', header: 'paused', objection: true }
+transcript rows saved to the objected meeting after resuming: []
+(exit 0)

@@ -1,4 +1,5 @@
-import { writeFileSync, readFileSync, existsSync } from "node:fs";
+import { writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { Worker } from "node:worker_threads";
 import { AppleFollowThrough } from "./apple-followthrough.mjs";
 import {
@@ -90,33 +91,48 @@ export function createMeetingCommands({
           ],
         });
         if (result.canceled || !result.filePath) return { cancelled: true };
-        await new Promise((resolve, reject) => {
-          const worker = new Worker(
-            new URL("./workers/archive-worker.mjs", import.meta.url),
-            {
-              workerData: {
-                directory: meetings.store.directory,
-                key: meetings.store.key,
-                keyId: meetings.store.keyId,
-                passphrase: p.passphrase,
-                file: result.filePath,
+        // The worker holds a read snapshot for the whole backup; meeting deletes defer their WAL truncation
+        // until it ends instead of blocking this thread. On a timeout, the partial file is removed here.
+        const store = meetings.store,
+          temp = `${result.filePath}.${randomUUID()}.tmp`;
+        store.backupStarted();
+        let saved;
+        try {
+          saved = await new Promise((resolve, reject) => {
+            const worker = new Worker(
+              new URL("./workers/archive-worker.mjs", import.meta.url),
+              {
+                workerData: {
+                  directory: store.directory,
+                  key: store.key,
+                  keyId: store.keyId,
+                  passphrase: p.passphrase,
+                  file: result.filePath,
+                  temp,
+                },
               },
-            },
-          );
-          const timer = setTimeout(() => {
-            void worker.terminate();
-            reject(new Error("The backup took too long."));
-          }, 30 * 60000);
-          worker.once("message", (value) => {
-            clearTimeout(timer);
-            value.error ? reject(new Error(value.error)) : resolve(value.saved);
+            );
+            // Reject only once the worker is gone, so its read snapshot is released before backupFinished().
+            const timer = setTimeout(() => {
+              void worker.terminate().finally(() => {
+                rmSync(temp, { force: true });
+                reject(new Error("The backup took too long."));
+              });
+            }, 30 * 60000);
+            worker.once("message", (value) => {
+              clearTimeout(timer);
+              value.error ? reject(new Error(value.error)) : resolve(value);
+            });
+            worker.once("error", () => {
+              clearTimeout(timer);
+              rmSync(temp, { force: true });
+              reject(new Error("The backup could not be created."));
+            });
           });
-          worker.once("error", () => {
-            clearTimeout(timer);
-            reject(new Error("The backup could not be created."));
-          });
-        });
-        return { saved: true };
+        } finally {
+          store.backupFinished();
+        }
+        return { saved: true, missingAudio: saved.missingAudio || 0 };
       }
       case "desktop.meeting.restore": {
         if (

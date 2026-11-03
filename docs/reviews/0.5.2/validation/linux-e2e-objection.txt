@@ -1,0 +1,4 @@
+objection dialog: Capture has stopped. Choose what to keep, then continue taking notes without transcription or recording. Your own notes and actions are kept either way. Keep captured content; continue with notes only Delete transcript and audio; continue with notes only
+after delete, notebook title: Vendor negotiation | notes: Walk-away price 35k | status: Taking notes 00:02
+meeting rows in SQLite: 1 | transcript rows: 0
+History after ending the continuation: [{"title":"Vendor negotiation","captureMode":"notes-only","status":"ended"}]

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.2 — 2026-11-02
+
+Fixes from Claude's follow-up review of 0.5.1 ([review](docs/reviews/0.5.1/CLAUDE_FOLLOWUP_REVIEW.md), [fixes](docs/reviews/0.5.2/FIXES.md)).
+
+- After an objection, capture can't resume from the menu bar or the global shortcuts either, even while the pause is still saving final words; "Delete transcript and audio" keeps the user's notes and actions and continues them in a notes-only meeting with the same title and people (unsaved if the meeting was started without saving).
+- One "speech fell behind" signal no longer stops a channel; Retry audio restarts Apple speech; occasional helper restarts in a long call keep transcribing; a restart no longer leaves a duplicate partial line.
+- Delete all resets to the launch defaults (live help off), removes a library that couldn't be opened, is refused while a backup is running, and keeps Codex working; the assistant (MCP) server reopens a replaced library instead of serving deleted meetings, and indexes only meetings whose notice allowed assistant access.
+- Backups skip audio files that are already gone instead of failing (and say how many), and meeting deletes no longer stall during a backup; 0.5.0 backups with an orphan audio chunk restore fully; a library with an unexpected audio index row still opens.
+- The on-device model sees short evidence IDs; generic speaker labels aren't suggested as action owners.
+
+The app version is 0.5.2. The 0.5.1 archive verified in docs/reviews/0.5.1 is not this build; package and verify 0.5.2 on the Mac before real-call checks.
+
 ## 0.5.1 — 2026-11-02
 
 - Restore saved History and queued local documents after restart; prevent duplicate starts and transcript ID collisions after speech-helper recovery.

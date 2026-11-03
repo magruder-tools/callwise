@@ -1,7 +1,9 @@
 import { Worker } from "node:worker_threads";
 export class MeetingSearch {
-  constructor(store) {
+  constructor(store, { assistantOnly = false } = {}) {
     this.store = store;
+    // The MCP server indexes only ended meetings whose notice allowed assistant access.
+    this.assistantOnly = assistantOnly;
     this.revision = 0;
     this.sequence = 0;
     this.pending = new Map();
@@ -25,6 +27,7 @@ export class MeetingSearch {
             directory: this.store.directory,
             key: this.store.key,
             keyId: this.store.keyId,
+            assistantOnly: this.assistantOnly,
           },
         },
       );

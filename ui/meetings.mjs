@@ -483,16 +483,23 @@ export function createMeetingUi({
         render();
         break;
       case "m-objection-keep":
-      case "m-objection-delete":
+      case "m-objection-delete": {
+        const objected = m?.id;
         await meetingCommand("meeting.objection.resolve", {
+          meetingId: objected,
           choice: action === "m-objection-delete" ? "delete" : "keep",
         });
         ui.objectionSheet = false;
         await command("new", { clearContext: true });
-        await command("start", { source: "manual", captureMode: "notes-only" });
+        await command("start", {
+          source: "manual",
+          captureMode: "notes-only",
+          continueFrom: objected,
+        });
         ui.screen = "live";
         render();
         break;
+      }
       case "m-export-notes":
       case "m-export-reminders":
         await flushNotes();
@@ -578,10 +585,16 @@ export function createMeetingUi({
         render();
         break;
       case "m-backup":
-        await command("desktop.meeting.backup", {
-          passphrase: read("backup-passphrase"),
-        });
-        document.getElementById("backup-passphrase").value = "";
+        {
+          const backup = await command("desktop.meeting.backup", {
+            passphrase: read("backup-passphrase"),
+          });
+          document.getElementById("backup-passphrase").value = "";
+          if (backup?.missingAudio) {
+            ui.notice = `Backup saved. ${backup.missingAudio} audio ${backup.missingAudio === 1 ? "piece was" : "pieces were"} already missing from this Mac and couldn't be included.`;
+            render();
+          }
+        }
         break;
       case "m-restore":
         if (!checked("confirm-restore"))

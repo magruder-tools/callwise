@@ -1,0 +1,2 @@
+700 rows: 13 evidence chunks, 25 local-model calls, 85081 prompt bytes; first evidence ID the model sees: s1
+(exit 0)

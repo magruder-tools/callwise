@@ -34,7 +34,11 @@ import { sendToWindows, closeOnce } from "./lifecycle.mjs";
 import { safeUrl } from "../core/context.mjs";
 import { SnapshotStream } from "../core/snapshot-stream.mjs";
 import { CallController } from "../core/controller.mjs";
-import { startMeeting } from "./meeting-start.mjs";
+import {
+  startMeeting,
+  speechNeedsRestart,
+  removeUnopenedLibrary,
+} from "./meeting-start.mjs";
 import { CodexLogin } from "./codex-login.mjs";
 import {
   installDisplayCapture,
@@ -71,6 +75,16 @@ const headlessMcp = process.argv.includes("--mcp-server");
 if (!headlessMcp) configureAudioBackend(app.commandLine);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const smoke = process.argv.includes("--smoke");
+// Used at launch and after "Delete all": cloud help and assistant access stay off until the user turns them on.
+const DEFAULT_PREFERENCES = Object.freeze({
+  speechEngine: "apple",
+  language: "en-US",
+  liveHelp: false,
+  retainAudio: false,
+  meetingMcpEnabled: false,
+  meetingRetentionDays: 0,
+  audioRetentionDays: 30,
+});
 function reportFailure(message) {
   console.error(message);
   if (smoke && process.env.GITHUB_ACTIONS === "true")
@@ -146,16 +160,7 @@ async function boot() {
     } catch (error) {
       preferencesWarning = error.message;
     }
-  preferences = {
-    speechEngine: "apple",
-    language: "en-US",
-    liveHelp: false,
-    retainAudio: false,
-    meetingMcpEnabled: false,
-    meetingRetentionDays: 0,
-    audioRetentionDays: 30,
-    ...preferences,
-  };
+  preferences = { ...DEFAULT_PREFERENCES, ...preferences };
   if (meetingStore)
     meetingStore.prune({
       meetingDays: preferences.meetingRetentionDays,
@@ -559,7 +564,10 @@ async function boot() {
           { label: "Open meeting", click: () => win?.show() },
           {
             label: state.status === "paused" ? "Resume" : "Pause",
-            enabled: state.status !== "finishing",
+            // After an objection, capture can't resume from the menu bar either.
+            enabled:
+              state.status !== "finishing" &&
+              !(state.status === "paused" && meetings?.resumeBlocked()),
             click: () =>
               void controller
                 .command(state.status === "paused" ? "start" : "pause", {
@@ -744,7 +752,7 @@ async function boot() {
       }
       if (controller.engine.status !== "running" || controller.mode !== "audio")
         throw new Error("Start listening first.");
-      if ([...controller.transcribers.values()].some((t) => t.stopped)) {
+      if (speechNeedsRestart(controller)) {
         await controller.command("pause");
         await controller.command("start", {
           source: "audio",
@@ -903,6 +911,11 @@ async function boot() {
         controller.connecting
       )
         throw new Error("End the call before deleting data.");
+      // A running backup holds a snapshot of the library and would finish writing it after the delete.
+      if (meetings?.store?.backupReaders > 0)
+        throw new Error(
+          "Wait for the encrypted backup to finish before deleting data.",
+        );
       endSound(false);
       controller.cancelDocuments();
       controller.close();
@@ -916,17 +929,34 @@ async function boot() {
         if (existsSync(file)) unlinkSync(file);
       rmSync(path.join(dataDir, "logs"), { recursive: true, force: true });
       rmSync(workDir, { recursive: true, force: true });
+      // Codex runs in this folder; without it, Codex sign-in and coaching fail until a restart.
+      mkdirSync(workDir, { recursive: true });
       await meetings?.deleteAll();
+      // A library that couldn't be opened at launch (locked keychain, denied access) has no store to
+      // reset, so remove its folder here; otherwise its key and database survive and reappear later.
+      const fresh = removeUnopenedLibrary({
+        meetings,
+        directory: path.join(dataDir, "meetings"),
+        open: () =>
+          new MeetingStore(path.join(dataDir, "meetings"), {
+            storage: safeStorage,
+          }),
+      });
+      if (fresh) {
+        meetingStore = fresh;
+        meetings.search = new MeetingSearch(fresh);
+      }
       for (const suffix of ["", ".previous"])
         rmSync(path.join(dataDir, "meeting-access.jsonl" + suffix), {
           force: true,
         });
       baseConfig.openaiKey = baseConfig.firefliesKey = baseConfig.mcpToken = "";
       saved = {};
-      preferences = {};
+      // Start again from the launch defaults (live help off), never from an empty object.
+      preferences = { ...DEFAULT_PREFERENCES };
       sheets = [];
       readiness = {};
-      controller.preferences = {};
+      controller.preferences = { ...DEFAULT_PREFERENCES };
       controller.sheets = [];
       controller.config = {
         ...baseConfig,

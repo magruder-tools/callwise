@@ -1,0 +1,2 @@
+rename of 1 speaker with 1500 lines: 192 ms, 1 full state emissions, header revision now 2
+rows now marked as manual speaker overrides: 0

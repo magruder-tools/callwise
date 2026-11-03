@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NativeHost } from "../desktop/native-host.mjs";
+const RESTART_WINDOW_MS = 10 * 60000,
+  MAX_DROPS_PER_MINUTE = 100;
 export class SampleClock {
   constructor({ rate = 24000 } = {}) {
     this.rate = rate;
@@ -52,6 +54,8 @@ export class AppleSpeechSession {
     this.stopped = false;
     this.restarts = [];
     this.recovering = false;
+    // Non-final rows of the current helper run, so a restart can drop the partials it will re-transcribe.
+    this.volatile = new Map();
   }
   adapter(options) {
     const a = new AppleTranscriber(this, options);
@@ -79,6 +83,13 @@ export class AppleSpeechSession {
         this.channels.includes(value.row.channel)
       ) {
         const client = this.clients.get(value.row.channel);
+        const id = `${value.row.id}:run:${runId}`;
+        if (value.row.final) this.volatile.delete(id);
+        else
+          this.volatile.set(id, {
+            channel: value.row.channel,
+            startMs: value.row.startMs,
+          });
         if (value.row.final && Number.isFinite(value.row.endMs)) {
           this.finalEnds ||= new Map();
           this.finalEnds.set(
@@ -89,17 +100,21 @@ export class AppleSpeechSession {
             ),
           );
         }
-        client?.onSegment({
-          ...value.row,
-          id: `${value.row.id}:run:${runId}`,
-          runId,
-        });
+        client?.onSegment({ ...value.row, id, runId });
       }
-      if (value.type === "discard" && value.channel)
-        this.clients
-          .get(value.channel)
-          ?.onDiscard((value.ids || []).map((id) => `${id}:run:${runId}`));
-      if (value.type === "error" && value.channel) {
+      if (value.type === "discard" && value.channel) {
+        const ids = (value.ids || []).map((id) => `${id}:run:${runId}`);
+        for (const id of ids) this.volatile.delete(id);
+        this.clients.get(value.channel)?.onDiscard(ids);
+      }
+      // Swift reports a dropped input buffer as a channel error, but the analyzer keeps running.
+      if (
+        value.type === "error" &&
+        value.channel &&
+        value.code === "speech_input_overloaded"
+      )
+        this.overloaded(value.channel);
+      else if (value.type === "error" && value.channel) {
         this.failedChannels ||= new Set();
         this.failedChannels.add(value.channel);
         this.clients
@@ -177,11 +192,69 @@ export class AppleSpeechSession {
       void this.recover();
     }
   }
+  // The analyzer fell more than ~16 s behind and Swift dropped its oldest buffer. Note the gap and keep
+  // feeding the channel; stop it only if more than 10 s of its audio is dropped within a minute.
+  overloaded(channel) {
+    if (this.failedChannels?.has(channel)) return;
+    const now = Date.now(),
+      client = this.clients.get(channel);
+    this.drops ||= new Map();
+    const recent = (this.drops.get(channel) || []).filter(
+      (t) => now - t < 60000,
+    );
+    recent.push(now);
+    this.drops.set(channel, recent);
+    if (recent.length > MAX_DROPS_PER_MINUTE) {
+      this.failedChannels ||= new Set();
+      this.failedChannels.add(channel);
+      client?.onStatus(
+        "failed",
+        new Error(
+          "Local speech can't keep up on this audio channel. Pause and resume to retry.",
+        ),
+      );
+      return;
+    }
+    this.gapNotes ||= new Map();
+    if (now - (this.gapNotes.get(channel) || 0) < 10000) return;
+    this.gapNotes.set(channel, now);
+    client?.onSegment({
+      id: `${channel}:gap:${randomUUID()}`,
+      channel,
+      speaker: "Transcription gap",
+      text: "Local speech fell behind. Some words may be missing.",
+      // Swift drops its oldest queued buffer, about 16 s back; the oldest buffered packet is closest.
+      startMs: this.buffers.get(channel)?.[0]?.startMs || 0,
+      final: true,
+      gap: true,
+    });
+  }
+  discardReplayedPartials() {
+    const byChannel = new Map();
+    for (const [id, row] of this.oldPartials || []) {
+      const bufferedFrom = this.buffers.get(row.channel)?.[0]?.startMs;
+      // Only partials whose audio was replayed, on a channel the new helper started.
+      if (
+        !this.failedChannels?.has(row.channel) &&
+        Number.isFinite(bufferedFrom) &&
+        Number.isFinite(row.startMs) &&
+        row.startMs >= bufferedFrom
+      )
+        byChannel.set(row.channel, [...(byChannel.get(row.channel) || []), id]);
+    }
+    for (const [channel, ids] of byChannel)
+      this.clients.get(channel)?.onDiscard(ids);
+    this.oldPartials?.clear();
+  }
   async recover() {
     if (this.stopped || this.finishing || this.recovering) return;
     this.recovering = true;
     this.host?.close();
     clearInterval(this.heartbeat);
+    // Give up after 3 restarts within 10 minutes; occasional restarts in a long call keep transcribing.
+    this.restarts = this.restarts.filter(
+      (t) => Date.now() - t < RESTART_WINDOW_MS,
+    );
     if (this.restarts.length >= 3) {
       this.recovering = false;
       for (const c of this.clients.values())
@@ -196,6 +269,11 @@ export class AppleSpeechSession {
     }
     this.restarts.push(Date.now());
     this.failedChannels = new Set();
+    // Partial lines of the old run are re-transcribed from the replayed audio. They are discarded only
+    // after the new helper has that audio, so a restart that fails keeps them.
+    this.oldPartials ||= new Map();
+    for (const [id, row] of this.volatile) this.oldPartials.set(id, row);
+    this.volatile.clear();
     for (const c of this.clients.values()) {
       c.onStatus("reconnecting");
       c.onSegment({
@@ -222,6 +300,7 @@ export class AppleSpeechSession {
             startMs: row.startMs + skip / 48,
           });
         }
+      this.discardReplayedPartials();
     } catch {
       this.recovering = false;
       if (!this.stopped) {

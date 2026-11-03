@@ -1,4 +1,5 @@
-import {
+import electron from "electron";
+const {
   app,
   BrowserWindow,
   ipcMain,
@@ -8,14 +9,17 @@ import {
   shell,
   globalShortcut,
   systemPreferences,
-  safeStorage,
   powerMonitor,
   Menu,
   clipboard,
   screen,
   Tray,
   nativeImage,
-} from "electron";
+} = electron;
+import { createSecureStorage } from "./secure-storage.mjs";
+// Do not construct Electron's Keychain-backed store for smoke tests or MCP
+// discovery. The first real storage operation unlocks it, once per process.
+const safeStorage = createSecureStorage(() => electron.safeStorage);
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 import {

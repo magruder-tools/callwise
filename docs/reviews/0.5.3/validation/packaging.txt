@@ -1,0 +1,16 @@
+  • electron-builder  version=26.15.3 os=27.2.0
+  • loaded configuration  file=package.json ("build" field)
+  • executing @electron/rebuild  electronVersion=44.2.0 arch=arm64 buildFromSource=false workspaceRoot=<temporary-build> projectDir=./ appDir=./
+  • installing native dependencies  arch=arm64
+  • completed installing native dependencies
+  • packaging       platform=darwin arch=arm64 electron=44.2.0 appOutDir=release/mac-arm64
+  • downloaded      label=electron progress=100%
+  • downloaded electron zip extracted successfully  output=<temporary-build>/release/mac-arm64
+  • searching for node modules  pm=npm searchDir=<temporary-build>
+  • duplicate dependency references  dependencies=["debug@4.4.3","debug@4.4.3"]
+  • ad-hoc signing with hardenedRuntime enabled requires the com.apple.security.cs.disable-library-validation entitlement to prevent app launch failures due to library validation. See https://electron.build/code-signing for details.
+  • executing custom sign  file=release/mac-arm64/Callwise.app platform=darwin type=distribution identityName=- identityHash=none provisioningProfile=none
+Signed with the persistent Callwise identity.
+  • skipped macOS notarization  reason=`notarize` options were unable to be generated
+Local app: <temporary-build>/release/mac-arm64/Callwise.app
+Archive: <repository>/release/local-0.5.3/Callwise-0.5.3-Apple-Silicon.zip

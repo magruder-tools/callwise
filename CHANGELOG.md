@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.3 — 2026-11-03
+
+- Open Keychain storage only when an actual storage operation needs it; sample runs and assistant discovery do not initialize it.
+- Stop retrying denied or unavailable Keychain access for the rest of the app process. Settings files, autosaves and assistant requests share the same gate; unlock Keychain and reopen Callwise to retry. Existing encrypted files are preserved.
+- Require a reusable signing certificate for version-tagged installer publishing, instead of silently publishing another ad-hoc signed update. First approval and locked-Keychain prompts can still be required by macOS.
+
 ## 0.5.2 — 2026-11-02
 
 Fixes from Claude's follow-up review of 0.5.1 ([review](docs/reviews/0.5.1/CLAUDE_FOLLOWUP_REVIEW.md), [fixes](docs/reviews/0.5.2/FIXES.md)).

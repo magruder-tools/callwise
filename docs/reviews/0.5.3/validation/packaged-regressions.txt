@@ -1,0 +1,41 @@
+✔ N1: after an objection, the menu-bar Resume and global shortcuts can't resume capture (22.147375ms)
+✔ N1: nothing resumes capture while an objection's pause, or an earlier pause, is still draining (420.023166ms)
+✔ N4: deleting captured content keeps the user's notes and actions, then moves them into the continuation (39.283084ms)
+✔ N4: keeping captured content continues in a titled notes-only meeting; the objection notice clears (11.245208ms)
+✔ N4: a meeting started without saving keeps its continuation unsaved (4.337333ms)
+✔ N2: with the notebook attached, an unset live-help preference means no cloud coaching (0.285125ms)
+✔ N3: the headless MCP server reopens the library after Delete all instead of serving deleted meetings (56.909958ms)
+✔ N5: one overload line keeps the channel transcribing; a sustained overload stops it (0.721042ms)
+✔ Retry audio restarts Apple speech when a speech channel failed, not when a capture device failed (0.066792ms)
+✔ N8: helper restarts far apart keep transcribing; three within ten minutes stop (46.234458ms)
+✔ N11: a helper restart drops the old run's partial line that the replay transcribes again (22.084916ms)
+✔ N11: a restart that fails keeps the old run's partial line (1802.209917ms)
+✔ N6: a missing audio file doesn't fail backups; playback explains it and the backup records it as missing (617.509709ms)
+✔ N6: launch doesn't decrypt audio rows whose files are gone, so an unreadable one can't lock the library (2.27775ms)
+✔ N6: deleting a meeting during a backup neither fails the backup nor blocks for the busy timeout (16.902708ms)
+✔ N7: a 0.5.0 backup with an orphan audio chunk restores fully; a failed legacy restore leaves the library empty (1072.561ms)
+✔ N9: assistant search returns consented meetings behind many older ones and indexes only those (19.692375ms)
+✔ N10: the local model sees short evidence aliases, and its references map back to segment IDs (0.333375ms)
+✔ N10: aliases survive section merges, and the model never sees run-scoped IDs (0.580458ms)
+✔ N12: Delete all removes a library that couldn't be opened at launch (19.54575ms)
+✔ Improvements: a malformed audio index row no longer locks the library; generic labels aren't owners; MCP explains in-progress meetings (11.486625ms)
+✔ objection keep preserves queued note edits (saved) (25.861459ms)
+✔ objection keep preserves queued note edits (without saving) (2.77025ms)
+✔ objection delete preserves queued note edits (saved) (9.695584ms)
+✔ objection delete preserves queued note edits (without saving) (2.514791ms)
+✔ objection deletion waits for an in-flight note save before copying the notes (668.30475ms)
+✔ a failed note save blocks objection deletion and keeps the original meeting recoverable (7.470125ms)
+✔ assistant discovery never asks to unlock storage (0.422667ms)
+✔ one denied unlock covers startup files, saving and repeated assistant calls without replacing files (2.869208ms)
+✔ a thrown Keychain initialization is not retried until a new process gate is created (0.125375ms)
+✔ successful storage is reused and a corrupt file does not lock other readable files (0.099625ms)
+✔ encryption failure stops later save attempts without switching to plaintext (0.07775ms)
+✔ a plaintext storage backend is refused before storing anything (0.070083ms)
+ℹ tests 33
+ℹ suites 0
+ℹ pass 33
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4261.272667

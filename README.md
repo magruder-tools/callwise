@@ -1,5 +1,9 @@
 # Callwise
 
+## Callwise 0.5.3 Keychain update
+
+This update prevents repeated Keychain attempts after access is denied or unavailable, and initializes secure storage only when it is needed. Version-tagged publishing now requires a reusable signing identity. The [user guide](docs/USER_GUIDE.md) explains installation, Keychain approval, audio capture, local versus cloud processing, and the app's features. The [0.5.3 review](docs/reviews/0.5.3/REVIEW.md) records validation and remaining checks.
+
 ## Callwise 0.5.2 review fixes
 
 Claude's 0.5.0 review and reproductions are archived with the project. The [0.5.1 response](docs/reviews/0.5.1/REVIEW_RESPONSE.md) maps each finding to its fix, regression checks and remaining device validation. Claude's [follow-up review of 0.5.1](docs/reviews/0.5.1/CLAUDE_FOLLOWUP_REVIEW.md) and the [0.5.2 fixes](docs/reviews/0.5.2/FIXES.md) cover the issues found after that. This is a development build; a consented real call is still required before relying on it.

@@ -1,6 +1,7 @@
 import { rmSync } from "node:fs";
 // Keep the notice and storage lifecycle tied to the single start that owns it.
 export async function startMeeting({ meetings, controller, payload = {} }) {
+  if (meetings.archiveOperation) throw new Error("Wait for the restore to finish before starting a meeting.");
   if (controller.connecting || controller.drainJob)
     throw new Error("The connection is still starting or saving final words.");
   if (["running", "finishing"].includes(controller.engine.status))

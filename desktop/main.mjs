@@ -32,7 +32,7 @@ import {
 } from "node:fs";
 import { release as osRelease } from "node:os";
 import { readConfig } from "../core/config.mjs";
-import { saveConnections } from "../core/connections.mjs";
+import { saveConnections, readConnections } from "../core/connections.mjs";
 import { readConnectionsWithMigration } from "../core/connection-migration.mjs";
 import { sendToWindows, closeOnce } from "./lifecycle.mjs";
 import { safeUrl } from "../core/context.mjs";
@@ -74,10 +74,15 @@ import { MeetingDiarizer } from "./meeting-diarizer.mjs";
 import { NativeServices, nativePaths } from "./native-host.mjs";
 import { AppleSpeechSession } from "../providers/apple-speech.mjs";
 import { createMeetingCommands } from "./meeting-commands.mjs";
+import { recoverRestoreSwap } from "./library-restore.mjs";
+import { retrySavedData } from "./storage-recovery.mjs";
 
 const headlessMcp = process.argv.includes("--mcp-server");
 if (!headlessMcp) configureAudioBackend(app.commandLine);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const buildMetadata = JSON.parse(
+  readFileSync(path.join(root, "package.json"), "utf8"),
+);
 const smoke = process.argv.includes("--smoke");
 // Used at launch and after "Delete all": cloud help and assistant access stay off until the user turns them on.
 const DEFAULT_PREFERENCES = Object.freeze({
@@ -88,6 +93,7 @@ const DEFAULT_PREFERENCES = Object.freeze({
   meetingMcpEnabled: false,
   meetingRetentionDays: 0,
   audioRetentionDays: 30,
+  includePreviewUpdates: buildMetadata.releaseChannel === "preview",
 });
 function reportFailure(message) {
   console.error(message);
@@ -129,6 +135,7 @@ async function boot() {
     libraryWarning = "";
   if (!smoke)
     try {
+      recoverRestoreSwap(path.join(dataDir, "meetings"));
       meetingStore = new MeetingStore(path.join(dataDir, "meetings"), {
         storage: safeStorage,
       });
@@ -185,6 +192,23 @@ async function boot() {
         ]);
   let saved = {};
   let vaultWarning = "";
+  let updateSequence = 0;
+  async function refreshUpdates(
+    includePreview = controller.preferences.includePreviewUpdates,
+  ) {
+    const sequence = ++updateSequence;
+    controller.desktopState.updateChecking = true;
+    controller.engine.emitState();
+    const update = await checkForUpdate(app.getVersion(), {
+      includePreview: includePreview === true,
+    });
+    if (sequence === updateSequence) {
+      controller.desktopState.update = update;
+      controller.desktopState.updateChecking = false;
+      controller.engine.emitState();
+    }
+    return update;
+  }
   if (!smoke)
     try {
       saved = readConnectionsWithMigration(dataDir, safeStorage);
@@ -229,6 +253,12 @@ async function boot() {
         : (next) => {
             savePreferences(preferencesFile, safeStorage, next);
             preferences = next;
+            if (
+              controller &&
+              next.includePreviewUpdates !==
+                controller.preferences.includePreviewUpdates
+            )
+              void refreshUpdates(next.includePreviewUpdates);
           },
       contextProvider: smoke
         ? null
@@ -248,6 +278,30 @@ async function boot() {
           }),
     });
   controller = makeController(controllerConfig(baseConfig, saved));
+  function applyConnections(value) {
+    const next = controllerConfig(baseConfig, value);
+    controller.stopInputs();
+    controller.config = next;
+    controller.fireflies.apiKey = next.firefliesKey;
+    controller.codex?.close();
+    controller.codex = new CodexProvider({
+      bin: next.codexBin,
+      model: next.strategyModel,
+      effort: next.codexEffort,
+      cwd: workDir,
+    });
+    controller.contextProvider?.close();
+    controller.contextProvider = new CodexContextProvider({
+      bin: next.codexBin,
+      model: next.strategyModel,
+      cwd: workDir,
+    });
+    controller.retrieval.provider = controller.contextProvider;
+    controller.contextApps = [];
+    controller.retrieval.invalidate();
+    controller.setProviders();
+    return next;
+  }
   const meetings = smoke
     ? null
     : new MeetingService({
@@ -273,6 +327,11 @@ async function boot() {
     getWindow: () => win,
     dataDir,
     storage: safeStorage,
+    refreshStore: () => {
+      meetings.search?.close();
+      meetings.search = new MeetingSearch(meetings.store);
+      meetings.clearCache();
+    },
   });
   const codexLogin = new CodexLogin({
     bin: controller.config.codexBin,
@@ -398,6 +457,7 @@ async function boot() {
         : "unknown";
     controller.desktopState = {
       ...controller.desktopState,
+      storageBlocked: safeStorage.blocked,
       packaged: app.isPackaged,
       platform: process.platform,
       version: app.getVersion(),
@@ -561,10 +621,18 @@ async function boot() {
         tray.on("click", () => win?.show());
       }
       tray.setToolTip(
-        `Callwise — ${state.status === "running" ? "Transcribing" : state.status}`,
+        [
+          `Callwise — ${state.status}`,
+          ...(state.meetings?.processing || []),
+        ].join(" · "),
       );
       tray.setContextMenu(
         Menu.buildFromTemplate([
+          ...(state.meetings?.processing || []).map((label) => ({
+            label,
+            enabled: false,
+          })),
+          { type: "separator" },
           { label: "Open meeting", click: () => win?.show() },
           {
             label: state.status === "paused" ? "Resume" : "Pause",
@@ -617,6 +685,88 @@ async function boot() {
       throw new Error("Untrusted app frame.");
     if (typeof name !== "string" || JSON.stringify(payload).length > 2200000)
       throw new Error("Invalid request.");
+    if (name === "desktop.updates.check") return refreshUpdates();
+    if (name === "desktop.storage.unlock" && meetings) {
+      if (codexLogin.busy) throw new Error("Finish or cancel sign-in first.");
+      return retrySavedData({
+        storage: safeStorage,
+        meetings,
+        controller,
+        openStore: () => {
+          recoverRestoreSwap(path.join(dataDir, "meetings"));
+          return new MeetingStore(path.join(dataDir, "meetings"), {
+            storage: safeStorage,
+          });
+        },
+        installStore: (store) => {
+          meetingStore = meetings.store = store;
+          meetings.search?.close();
+          meetings.search = new MeetingSearch(store);
+          meetings.warning = "";
+        },
+        load: () => {
+          const loaded = { warnings: [] };
+          for (const [key, read] of Object.entries({
+            preferences: () => readPreferences(preferencesFile, safeStorage),
+            sheets: () => readSheets(sheetsFile, safeStorage),
+            connections: () => readConnections(vault, safeStorage),
+            readiness: () => readReadiness(readinessFile, safeStorage),
+          }))
+            try {
+              loaded[key] = read();
+            } catch {
+              loaded.warnings.push(
+                `Saved ${key} could not be loaded; their files have not been replaced.`,
+              );
+            }
+          return loaded;
+        },
+        apply: (loaded) => {
+          if (loaded.preferences) {
+            const session = { ...controller.engine.settings };
+            preferences = controller.preferences = {
+              ...DEFAULT_PREFERENCES,
+              ...loaded.preferences,
+            };
+            controller.engine.configure({
+              ...preferences,
+              mode: session.mode,
+              goal: session.goal,
+              project: session.project,
+            });
+            void refreshUpdates();
+          }
+          if (loaded.sheets) controller.sheets = sheets = loaded.sheets;
+          if (loaded.readiness) readiness = loaded.readiness;
+          if (loaded.connections) {
+            saved = loaded.connections;
+            applyConnections(saved);
+          }
+          controller.engine.errors = controller.engine.errors.filter(
+            (e) => ![vaultWarning, preferencesWarning].includes(e.message),
+          );
+          vaultWarning = preferencesWarning = "";
+          for (const warning of loaded.warnings)
+            controller.engine.error(warning);
+          refreshDesktop();
+        },
+      });
+    }
+    if (
+      meetings?.archiveOperation &&
+      (name.startsWith("meeting.") ||
+        [
+          "configure",
+          "start",
+          "practice",
+          "new",
+          "desktop.data.delete",
+          "desktop.delete-all",
+        ].includes(name))
+    )
+      throw new Error(
+        "Wait for the restore to finish before changing the library or starting a meeting.",
+      );
     if (meetings && name.startsWith("desktop.meeting.")) {
       if (name === "desktop.meeting.coach") {
         if (!controller.preferences.liveHelp)
@@ -697,27 +847,7 @@ async function boot() {
       if (controller.engine.status === "running" || controller.connecting)
         throw new Error("Pause the session before changing connections.");
       saved = saveConnections(vault, safeStorage, payload);
-      const next = controllerConfig(baseConfig, saved);
-      controller.stopInputs();
-      controller.config = next;
-      controller.fireflies.apiKey = next.firefliesKey;
-      controller.codex?.close();
-      controller.codex = new CodexProvider({
-        bin: next.codexBin,
-        model: next.strategyModel,
-        effort: next.codexEffort,
-        cwd: workDir,
-      });
-      controller.contextProvider?.close();
-      controller.contextProvider = new CodexContextProvider({
-        bin: next.codexBin,
-        model: next.strategyModel,
-        cwd: workDir,
-      });
-      controller.retrieval.provider = controller.contextProvider;
-      controller.contextApps = [];
-      controller.retrieval.invalidate();
-      controller.setProviders();
+      const next = applyConnections(saved);
       controller.engine.emitState();
       return {
         saved: true,
@@ -910,6 +1040,8 @@ async function boot() {
       return controller.desktopState;
     }
     if (name === "desktop.delete") {
+      if (meetings?.archiveOperation)
+        throw new Error("Wait for the restore to finish before deleting data.");
       if (
         ["running", "paused", "finishing"].includes(controller.engine.status) ||
         controller.connecting
@@ -1183,6 +1315,18 @@ async function boot() {
       win.webContents.send("callwise:flush-notes", token);
     });
   app.on("before-quit", (event) => {
+    if (meetings?.archiveOperation) {
+      event.preventDefault();
+      win?.show();
+      void dialog.showMessageBox(win, {
+        type: "info",
+        message: "A backup is being restored.",
+        detail:
+          "Keep Callwise open until the restore finishes. Your existing library stays in place until the backup has been checked.",
+        buttons: ["Keep open"],
+      });
+      return;
+    }
     if (smoke || app.isQuitting) {
       shutdown();
       return;
@@ -1262,11 +1406,7 @@ async function boot() {
         controller.engine.emitState();
       });
   if (smoke) console.log("Smoke: main and live pages loaded.");
-  if (!smoke)
-    void checkForUpdate(app.getVersion()).then((update) => {
-      controller.desktopState.update = update;
-      controller.engine.emitState();
-    });
+  if (!smoke) void refreshUpdates();
   if (smoke) {
     // Native panels need a visible compositor surface for reliable capturePage.
     // These synthetic tests never initialize audio, permissions or credentials.

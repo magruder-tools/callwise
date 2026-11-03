@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.4 — 2026-11-03
+
+- Add an explicit **Unlock saved data** action after a denied Keychain unlock, without automatic retries or restarting the main app. Recover saved settings and meetings while preserving unsaved notes; a meeting started without saving remains unsaved.
+- Show the current meeting's confirmed local/cloud transcription, audio recording and cloud coaching choices in the notebook and live panel, with status in the menu bar too.
+- Offer preview update notifications in General settings. Preview downloads enable them by default; stable builds retain stable-only notifications. Downloads remain an explicit action.
+- Restore encrypted backups in a worker with visible progress. Validate the backup in a separate staging library, preserve the existing key and auxiliary files, and recover an interrupted directory swap. Capture, deletion and quitting wait for the restore to finish.
+- Build and publish signed previews from the review branch on GitHub after automated Mac and renderer checks pass, using the existing reusable signing identity.
+
+The library and backup formats remain compatible with 0.5.1–0.5.3, including import of legacy 0.5.0 backups. This personal preview is not Apple-notarized. Synthetic automated checks do not replace real-call and existing Keychain acceptance checks.
+
 ## 0.5.3 — 2026-11-03
 
 - Open Keychain storage only when an actual storage operation needs it; sample runs and assistant discovery do not initialize it.

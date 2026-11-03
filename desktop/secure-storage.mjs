@@ -17,12 +17,22 @@ export function createSecureStorage(loadStorage) {
   function requireStorage() {
     if (!isEncryptionAvailable())
       throw new Error(
-        "Secure storage is unavailable. Unlock your keychain, then quit and reopen Callwise to try again. Your saved files have not been replaced.",
+        "Secure storage is unavailable. Choose Unlock saved data to try again, or quit and reopen Callwise. Your saved files have not been replaced.",
       );
     return storage;
   }
   return Object.freeze({
     isEncryptionAvailable,
+    // Only an explicit recovery action calls this; ordinary reads stay latched.
+    retryAccess() {
+      storage = undefined;
+      available = undefined;
+      backend = undefined;
+      return isEncryptionAvailable();
+    },
+    get blocked() {
+      return available === false;
+    },
     getSelectedStorageBackend: () => backend,
     encryptString(value) {
       const ready = requireStorage();

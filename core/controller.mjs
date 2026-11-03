@@ -338,6 +338,10 @@ export class CallController extends EventEmitter {
     };
   }
   async command(name, payload = {}) {
+    if (this.meetingService?.archiveOperation && name !== "state")
+      throw new Error(
+        "Wait for the restore to finish before starting or changing a meeting.",
+      );
     if (!payload || typeof payload !== "object" || Array.isArray(payload))
       throw new Error("Invalid command payload.");
     if (this.connecting && !["pause", "end", "new", "state"].includes(name))
@@ -560,6 +564,10 @@ export class CallController extends EventEmitter {
     consent = false,
     transcriptId = "",
   } = {}) {
+    if (this.meetingService?.archiveOperation)
+      throw new Error(
+        "Wait for the restore to finish before starting a meeting.",
+      );
     // Every resume path (window, menu bar, global shortcuts, Retry audio) reaches this point.
     const blocked = () =>
       source !== "demo" && this.meetingService?.resumeBlocked?.();

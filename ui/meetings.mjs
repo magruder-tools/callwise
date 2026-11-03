@@ -602,11 +602,17 @@ export function createMeetingUi({
       case "m-restore":
         if (!checked("confirm-restore"))
           throw new Error("Confirm restoring into an empty library first.");
-        await command("desktop.meeting.restore", {
-          passphrase: read("backup-passphrase"),
+        await flushNotes();
+        const passphrase = read("backup-passphrase");
+        document.getElementById("backup-passphrase").value = "";
+        const restored = await command("desktop.meeting.restore", {
+          passphrase,
           confirm: true,
         });
-        document.getElementById("backup-passphrase").value = "";
+        if (restored.restored) {
+          ui.notice = "Backup restored. Your meeting library is ready.";
+          render();
+        }
         break;
       case "m-assistant-claude":
       case "m-assistant-codex":

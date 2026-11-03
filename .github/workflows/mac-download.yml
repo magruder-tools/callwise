@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - claude/followup-fixes
     tags:
       - "v[0-9]*"
     paths:
@@ -44,7 +45,8 @@ jobs:
     runs-on: xcode-27
     timeout-minutes: 20
     env:
-      CALLWISE_RELEASE: ${{ startsWith(github.ref, 'refs/tags/') && '1' || '0' }}
+      CALLWISE_RELEASE: ${{ (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/claude/followup-fixes') && '1' || '0' }}
+      CALLWISE_BUILD_CHANNEL: ${{ startsWith(github.ref, 'refs/tags/') && 'stable' || 'preview' }}
     defaults:
       run:
         shell: bash
@@ -81,7 +83,7 @@ jobs:
         run: node scripts/import-signing-identity.mjs
       - name: Build Apple Silicon DMG and ZIP
         run: |
-          npm run dist:mac 2>&1 | tee package.log
+          npm run dist:mac -- --config.extraMetadata.releaseChannel="$CALLWISE_BUILD_CHANNEL" 2>&1 | tee package.log
           git rev-parse HEAD > release/BUILD_COMMIT.txt
           shasum -a 256 release/*.zip release/*.dmg > release/SHA256SUMS.txt
           /usr/libexec/PlistBuddy -c 'Print :NSAudioCaptureUsageDescription' release/mac-arm64/Callwise.app/Contents/Info.plist
@@ -101,6 +103,9 @@ jobs:
         run: |
           export CALLWISE_SMOKE_DIR="$PWD/artifacts/packaged"
           release/mac-arm64/Callwise.app/Contents/MacOS/Callwise --smoke 2>&1 | tee packaged-smoke.log
+      - name: Verify the actual bundled library and background restore
+        run: |
+          ELECTRON_RUN_AS_NODE=1 release/mac-arm64/Callwise.app/Contents/MacOS/Callwise scripts/verify-packaged-library.mjs "$PWD/release/mac-arm64/Callwise.app/Contents/Resources/app.asar" 2>&1 | tee packaged-library.log
       - uses: actions/upload-artifact@v4
         with:
           name: Callwise-Apple-Silicon
@@ -127,13 +132,29 @@ jobs:
             signature.log
             bundled-codex.log
             packaged-smoke.log
+            packaged-library.log
             artifacts/**/*.png
           retention-days: 30
           if-no-files-found: ignore
+  renderer:
+    name: Verify meeting screens
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.1"
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:ui && npm run test:meetings
   publish:
     name: Publish the verified personal Mac build
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [source, mac]
+    if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/claude/followup-fixes'
+    needs: [source, mac, renderer]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -146,36 +167,7 @@ jobs:
         with:
           name: Callwise-Apple-Silicon
           path: release
-      - name: Verify the build commit and installer checksums
-        env:
-          EXPECTED_COMMIT: ${{ github.sha }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          test "$(cat release/BUILD_COMMIT.txt)" = "$EXPECTED_COMMIT"
-          node --input-type=module -e 'import fs from "node:fs"; const v=JSON.parse(fs.readFileSync("package.json")).version; if(process.env.RELEASE_TAG!==`v${v}`) throw new Error("Tag must match package version");'
-          test -s release/SIGNATURE.txt
-          test -s release/SIGNING.txt
-          sha256sum --check release/SHA256SUMS.txt
-      - name: Prepare release notes
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-          BUILD_COMMIT: ${{ github.sha }}
-          BUILD_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          node --input-type=module <<'JS'
-          import fs from 'node:fs';
-          const version = JSON.parse(fs.readFileSync('package.json')).version;
-          const change = fs.readFileSync('CHANGELOG.md', 'utf8').split(`## ${version} — `)[1]?.split('\n## ')[0];
-          if (!change) throw new Error('Missing release notes for the tagged version');
-          const changes = change.slice(change.indexOf('\n')).trim();
-          const signing = fs.readFileSync('release/SIGNING.txt', 'utf8').trim();
-          fs.writeFileSync('release/RELEASE_NOTES.md', `${changes}\n\nDownload the Apple Silicon DMG below, open it and drag Callwise into Applications. Requires macOS 26.0 or later.\n\n${signing}\n\nNative and packaged-app checks passed: ${process.env.BUILD_URL}\n\nBuild commit: ${process.env.BUILD_COMMIT}\n\nSHA256SUMS.txt contains the installer checksums.\n`);
-          JS
-      - name: Publish installer downloads as the latest release
+      - name: Publish checked installers and immutable release notes
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          gh release create "$RELEASE_TAG" --verify-tag --draft --title "Callwise $RELEASE_TAG" --notes-file release/RELEASE_NOTES.md
-          gh release upload "$RELEASE_TAG" release/*.dmg release/*.zip release/SHA256SUMS.txt release/SIGNATURE.txt release/SIGNING.txt release/BUILD_COMMIT.txt
-          gh release edit "$RELEASE_TAG" --draft=false --latest
+        run: node scripts/publish-mac-release.mjs

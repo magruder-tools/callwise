@@ -228,6 +228,12 @@ function render() {
             : localWelcome(s, ui);
   } else content = { ready, live, recap, settings, welcome }[view](s, ui);
   const notices =
+    (s.meetings && (s.meetings.locked || s.desktop?.storageBlocked)
+      ? `<div class="banner warning" role="status"><span>Saved data is locked. End any open meeting, then unlock to try again. Unsaved notes stay open.</span>${button("storage-unlock", ui.storageUnlocking ? "Unlocking…" : "Unlock saved data", { disabled: !!ui.storageUnlocking || !!s.meetings.archiveOperation || ["running", "paused", "finishing"].includes(s.status) })}</div>`
+      : "") +
+    (s.meetings?.archiveOperation
+      ? `<div class="banner" role="status" aria-live="polite"><span>${escape(s.meetings.archiveOperation.phase)}${s.meetings.archiveOperation.total ? ` · ${s.meetings.archiveOperation.completed || 0} / ${s.meetings.archiveOperation.total} records` : ""}. Keep Callwise open.</span><progress aria-label="Backup restore" ${s.meetings.archiveOperation.total ? `max="${s.meetings.archiveOperation.total}" value="${s.meetings.archiveOperation.completed || 0}"` : ""}></progress></div>`
+      : "") +
     (s.desktop && !s.desktop.packaged && !s.demoOnly
       ? banner(
           "Development run. Call audio may be silent. Install the app for real calls.",
@@ -238,7 +244,7 @@ function render() {
       : "") +
     (s.desktop?.update
       ? banner(
-          `Callwise ${s.desktop.update.version} is available.`,
+          `Callwise ${s.desktop.update.displayVersion || s.desktop.update.version} is available.`,
           "update",
           "Get update",
         )
@@ -401,6 +407,29 @@ async function act(action, node) {
   if (s.meetings && ["pause", "end", "new", "export"].includes(action))
     await meetingUi.flushNotes();
   switch (action) {
+    case "storage-unlock":
+      if (ui.storageUnlocking) break;
+      await meetingUi.flushNotes();
+      ui.storageUnlocking = true;
+      render();
+      try {
+        const recovered = await command("desktop.storage.unlock");
+        ui.notice =
+          recovered.warnings?.join(" ") ||
+          "Saved data unlocked. Any meeting started without saving remains unsaved; export it to keep a copy. Reload your assistant’s Callwise connection if it was locked too.";
+      } finally {
+        ui.storageUnlocking = false;
+        render();
+      }
+      break;
+    case "updates-check": {
+      const update = await command("desktop.updates.check");
+      ui.notice = update
+        ? "A new version is available above."
+        : "No newer release was found on your selected update channel.";
+      render();
+      break;
+    }
     case "call-type":
       await patch("mode", node.dataset.value);
       break;

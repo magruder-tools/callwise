@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { confirmNotice, noticeHash, noticeText } from "./notice.mjs";
 import { LocalDocuments, mergeActions } from "./recaps.mjs";
 import { stableSpeakerTurns, assignSpeakers } from "./speakers.mjs";
+import { meetingProcessingStatus } from "./processing-status.mjs";
 const signature = (v) =>
   createHash("sha256").update(JSON.stringify(v)).digest("hex");
 const text = (v, max) => (typeof v === "string" ? v.slice(0, max) : "");
@@ -255,6 +256,10 @@ export class MeetingService extends EventEmitter {
     source = preferences.preferredSource || "audio",
     withoutSaving = false,
   } = {}) {
+    if (this.archiveOperation)
+      throw new Error(
+        "Wait for the restore to finish before starting a meeting.",
+      );
     if (
       this.activeId &&
       this.get("meetings", this.activeId)?.status !== "ended"
@@ -524,11 +529,26 @@ export class MeetingService extends EventEmitter {
       delete current.segments;
     }
     return {
-      current,
+      current: current
+        ? {
+            ...current,
+            processing: meetingProcessingStatus(
+              current,
+              current.id === this.activeId
+                ? this.controller?.engine.status
+                : current.status,
+            ),
+          }
+        : current,
       activeId: this.activeId,
       library: this.library(),
       warning: this.warning,
       locked: !this.store,
+      processing: meetingProcessingStatus(
+        this.activeId ? this.get("meetings", this.activeId) : null,
+        this.controller?.engine.status,
+      ),
+      archiveOperation: this.archiveOperation || null,
       libraryRevision: this.libraryRevision,
       unsaved: !!current && current.saving === false,
     };
@@ -687,7 +707,7 @@ export class MeetingService extends EventEmitter {
     this.emit("state");
   }
   async generate(id, task = "recap") {
-    if (this.closed) return;
+    if (this.closed || this.archiveOperation) return;
     const key = `${id}:${task}`;
     if (this.jobs.has(key)) return;
     const meeting = this.current(id);
@@ -981,6 +1001,8 @@ export class MeetingService extends EventEmitter {
     this.emit("state");
   }
   async deleteAll() {
+    if (this.archiveOperation)
+      throw new Error("Wait for the restore to finish before deleting data.");
     const active = this.activeId && this.get("meetings", this.activeId);
     if (active && active.status !== "ended")
       throw new Error("End the meeting before deleting data.");
@@ -1009,6 +1031,10 @@ export class MeetingService extends EventEmitter {
     this.emit("state");
   }
   async command(name, p = {}) {
+    if (this.archiveOperation)
+      throw new Error(
+        "Wait for the restore to finish before changing the library.",
+      );
     const id = p.meetingId || this.selectedId;
     switch (name) {
       case "meeting.open":

@@ -79,7 +79,7 @@ function storageReady(storage) {
     storage.getSelectedStorageBackend?.() === "basic_text"
   )
     throw new Error(
-      "Meeting library is locked. Unlock your keychain and reopen Callwise, or explicitly start without saving.",
+      "Meeting library is locked. Choose Unlock saved data to try again, or explicitly start without saving.",
     );
 }
 export class MeetingStore {
@@ -552,7 +552,12 @@ export class MeetingStore {
       rmSync(temp, { force: true });
     }
   }
-  restoreFile(file, passphrase) {
+  isEmpty() {
+    return TABLES.every(
+      (table) => !this.db.prepare(`SELECT 1 FROM ${table} LIMIT 1`).get(),
+    );
+  }
+  restoreFile(file, passphrase, options = {}) {
     const fd = openSync(file, "r"),
       magic = Buffer.alloc(9);
     try {
@@ -561,12 +566,11 @@ export class MeetingStore {
       closeSync(fd);
     }
     if (magic.toString() === "CWBACKUP1")
-      return this.restore(readFileSync(file), passphrase);
-    return this.restoreFrames(openFrames(file, passphrase));
+      return this.restore(readFileSync(file), passphrase, options);
+    return this.restoreFrames(openFrames(file, passphrase), options);
   }
-  restoreFrames(frames) {
-    if (this.all("meetings", null, { limit: 1 }).length)
-      throw new Error("Restore requires an empty library.");
+  restoreFrames(frames, { onProgress = () => {} } = {}) {
+    if (!this.isEmpty()) throw new Error("Restore requires an empty library.");
     try {
       this.transaction(() => {
         let header,
@@ -578,6 +582,11 @@ export class MeetingStore {
             if (frame.type !== "header" || frame.schema !== SCHEMA_VERSION)
               throw new Error("Unsupported backup.");
             header = frame;
+            onProgress({
+              phase: "Restoring records",
+              completed: 0,
+              total: Object.values(header.counts).reduce((a, b) => a + b, 0),
+            });
             continue;
           }
           if (frame.type === "record") {
@@ -585,6 +594,13 @@ export class MeetingStore {
             const r = frame.record;
             this.put(frame.table, r.meetingId, r.id, r, 0);
             counts[frame.table]++;
+            const completed = Object.values(counts).reduce((a, b) => a + b, 0);
+            if (completed % 128 === 0)
+              onProgress({
+                phase: "Restoring records and audio",
+                completed,
+                total: Object.values(header.counts).reduce((a, b) => a + b, 0),
+              });
           } else if (frame.type === "audio") {
             const r = frame.record;
             this.writeAudio(
@@ -616,14 +632,18 @@ export class MeetingStore {
       throw e;
     }
     this.recover();
+    onProgress({ phase: "Checking restored library" });
   }
-  restore(bytes, passphrase) {
+  restore(bytes, passphrase, { onProgress = () => {} } = {}) {
     if (Buffer.from(bytes).subarray(0, 9).toString() === "CWBACKUP2")
-      return this.restoreFrames(openFrames(Buffer.from(bytes), passphrase));
-    if (this.all("meetings", null, { limit: 1 }).length)
+      return this.restoreFrames(openFrames(Buffer.from(bytes), passphrase), {
+        onProgress,
+      });
+    if (!this.isEmpty())
       throw new Error(
         "Restore requires an empty library. Export or back up your existing meetings first.",
       );
+    onProgress({ phase: "Unlocking legacy backup" });
     const v = openBackup(bytes, passphrase);
     if (v.schema !== SCHEMA_VERSION || !v.records || !Array.isArray(v.audio))
       throw new Error("Unsupported backup.");
@@ -663,6 +683,7 @@ export class MeetingStore {
       throw e;
     }
     this.recover();
+    onProgress({ phase: "Checking restored library" });
   }
   close() {
     if (this.closed) return;

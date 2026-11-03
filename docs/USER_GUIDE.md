@@ -1,10 +1,10 @@
-# Callwise 0.5.3 user guide
+# Callwise 0.5.4 user guide
 
 Callwise is a meeting notebook for an Apple Silicon Mac running macOS 26 or later. It combines your own notes, local transcription, searchable meeting history, and follow-ups. Live cloud coaching and assistant access are optional.
 
 ## Download and install
 
-The current preview is [Callwise 0.5.3](https://github.com/magruder-tools/callwise/releases/tag/callwise-0.5.3-preview). Use the **Callwise-0.5.3-Apple-Silicon.zip** attachment under Assets. GitHub's automatically generated Source code ZIP is for developers and does not contain an installable app.
+The current preview is [Callwise 0.5.4](https://github.com/magruder-tools/callwise/releases/tag/callwise-0.5.4-preview). Download the Apple Silicon ZIP or DMG under Assets. GitHub's automatically generated Source code ZIP is for developers and does not contain an installable app.
 
 1. Quit the previous Callwise app if it is running.
 2. Download the app ZIP and double-click it to extract **Callwise.app**.
@@ -20,7 +20,7 @@ Callwise uses macOS Keychain to protect the encryption key for saved meetings an
 
 Earlier downloads had ad-hoc development signatures tied to the contents of each particular build. The 0.5.3 personal preview uses a reusable signing certificate so future builds signed with the same certificate retain the same app identity. Moving from the old app can still require one approval for **Callwise Safe Storage**. If the genuine macOS dialog offers Always Allow for this installed Callwise app, that saves the approval for that identity. A locked login Keychain may still require unlocking it.
 
-The app also shares one secure-storage gate across its settings, archive, autosaves and assistant requests. A denied or unavailable unlock is not retried in that process. Existing encrypted files are preserved. Unlock Keychain, quit Callwise and reopen it when you want to retry. A corrupt saved file does not prevent other readable files from opening.
+The app also shares one secure-storage gate across its settings, archive, autosaves and assistant requests. A denied or unavailable unlock is not retried in that process. Existing encrypted files are preserved. In 0.5.4, end any open meeting and choose **Unlock saved data** in the locked-data banner to retry deliberately. Saved settings and meetings are reloaded; open unsaved notes remain open and remain unsaved. Export those notes to keep a copy. If an assistant connection also latched a denied unlock, reload that connection in the assistant. Quitting and reopening Callwise is still an alternative. A corrupt saved file does not prevent other readable files from opening.
 
 This prevents retry loops and addresses app identity changes; it does not promise that macOS will never request approval or a password. Real approval/relaunch behavior on the user's existing Keychain remains an acceptance check.
 
@@ -104,3 +104,12 @@ There is no automatic fallback from local speech to cloud transcription. The cor
 Automated and synthetic checks do not measure real-call transcription quality, simultaneous-channel stability, speaker accuracy, long-call battery use, Apple app permission/export behavior or existing-Keychain approval persistence. Try a short consented call and review both sides of its transcript, notes, playback and recap before relying on Callwise for important calls.
 
 Large backup restores still run in the main process and can temporarily block the interface. Group speaker processing is bounded to the first two active hours and may switch to end-of-meeting processing if it falls behind. Local AI features depend on Apple Intelligence readiness and language support.
+
+
+## Processing status, updates and restores
+
+The notebook and live panel show the choices confirmed for the current meeting: local or cloud transcription, audio recording on/off/paused, and cloud coaching enabled/off. Retained audio being enabled does not guarantee every audio chunk exists. Cloud coaching and assistant access remain separate from transcription.
+
+In Settings → General, **Include preview updates** enables notifications about newer published previews as well as stable releases. It defaults on in preview builds and off in stable builds. **Check for updates** checks the selected channel. Callwise only links to a release; downloading and installing remain your choice.
+
+In Settings → Privacy, enter your backup passphrase, confirm restoring into an empty library, and choose **Restore backup**. Decryption and imports run in a worker while a progress banner stays visible. The existing empty library is replaced only after the entire backup validates. Wrong passphrases and incomplete files leave it intact. Existing saved meetings are never merged or overwritten. Keep Callwise open until it finishes; starting meetings, changing the library, deleting data and quitting are held during restoration.

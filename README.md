@@ -1,8 +1,8 @@
 # Callwise
 
-## Callwise 0.5.3 Keychain update
+## Callwise 0.5.4 usability update
 
-This update prevents repeated Keychain attempts after access is denied or unavailable, and initializes secure storage only when it is needed. Version-tagged publishing now requires a reusable signing identity. The [user guide](docs/USER_GUIDE.md) explains installation, Keychain approval, audio capture, local versus cloud processing, and the app's features. The [0.5.3 review](docs/reviews/0.5.3/REVIEW.md) records validation and remaining checks.
+This update adds an explicit Keychain retry, visible meeting processing labels, preview update notifications and background backup restores with progress. The [user guide](docs/USER_GUIDE.md) explains installation, audio capture, local versus cloud processing, and the app's features. The [0.5.4 validation record](docs/reviews/0.5.4/REVIEW.md) records automated checks and remaining acceptance work.
 
 ## Callwise 0.5.2 review fixes
 

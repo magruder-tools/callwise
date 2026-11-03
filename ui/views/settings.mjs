@@ -34,7 +34,7 @@ function field(
 function content(s, ui) {
   const p = s.preferences;
   if (ui.tab === "General")
-    return `${section("About you", `<label class="field" for="profile"><span>The experience and voice you want it to remember</span><textarea id="profile" data-pref="profile" maxlength="6000" rows="5">${escape(s.settings.profile)}</textarea></label>${field("userName", "Your name in meeting transcripts", s.settings.userName || "", { help: "Needed for pasted text or Fireflies. Your microphone is already labelled You." })}`)}${section("Panel", check("floatPanel", "Float above other apps", p.floatPanel !== false, "pref-switch"))}${section(
+    return `${section("About you", `<label class="field" for="profile"><span>The experience and voice you want it to remember</span><textarea id="profile" data-pref="profile" maxlength="6000" rows="5">${escape(s.settings.profile)}</textarea></label>${field("userName", "Your name in meeting transcripts", s.settings.userName || "", { help: "Needed for pasted text or Fireflies. Your microphone is already labelled You." })}`)}${section("Updates", `${check("includePreviewUpdates", "Include preview updates", p.includePreviewUpdates === true, "pref-switch")}<p class="help">Preview versions include new fixes before a stable release. You choose when to download and install.</p>${button("updates-check", s.desktop?.updateChecking ? "Checking…" : "Check for updates", { disabled: !!s.desktop?.updateChecking })}`)}${section("Panel", check("floatPanel", "Float above other apps", p.floatPanel !== false, "pref-switch"))}${section(
       "Shortcuts",
       `<p class="help">Click a shortcut and press Control + Option with a key.</p><div class="shortcut-list">${Object.entries(
         { ...DEFAULT_KEYS, ...p.hotkeys },

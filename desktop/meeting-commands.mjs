@@ -2,6 +2,7 @@ import { writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { Worker } from "node:worker_threads";
 import { AppleFollowThrough } from "./apple-followthrough.mjs";
+import { stageRestore, publishRestore } from "./library-restore.mjs";
 import {
   previewAssistantInstall,
   installAssistant,
@@ -15,6 +16,7 @@ export function createMeetingCommands({
   dialog,
   getWindow,
   dataDir,
+  refreshStore = () => {},
 }) {
   const apple = new AppleFollowThrough({
     meetings,
@@ -23,6 +25,10 @@ export function createMeetingCommands({
   });
   let assistantPreview;
   return async (name, p = {}) => {
+    if (meetings?.archiveOperation)
+      throw new Error(
+        "Wait for the restore to finish before changing the library.",
+      );
     const window = getWindow(),
       id = p.meetingId || meetings?.selectedId;
     switch (name) {
@@ -93,6 +99,10 @@ export function createMeetingCommands({
         if (result.canceled || !result.filePath) return { cancelled: true };
         // The worker holds a read snapshot for the whole backup; meeting deletes defer their WAL truncation
         // until it ends instead of blocking this thread. On a timeout, the partial file is removed here.
+        if (meetings.archiveOperation)
+          throw new Error(
+            "Wait for the restore to finish before making a backup.",
+          );
         const store = meetings.store,
           temp = `${result.filePath}.${randomUUID()}.tmp`;
         store.backupStarted();
@@ -138,23 +148,69 @@ export function createMeetingCommands({
         if (
           p.confirm !== true ||
           !meetings.store ||
-          ["running", "paused", "finishing"].includes(controller.engine.status)
+          ["running", "paused", "finishing"].includes(
+            controller.engine.status,
+          ) ||
+          controller.connecting ||
+          controller.drainJob ||
+          meetings.store.backupReaders > 0 ||
+          meetings.pendingWrites.size ||
+          meetings.jobs.size ||
+          meetings.finishingConsumers.size
         )
           throw new Error(
             "End the meeting and confirm restoring into an empty library first.",
           );
-        const result = await dialog.showOpenDialog(window, {
-          title: "Restore encrypted meeting backup",
-          properties: ["openFile"],
-          filters: [
-            { name: "Callwise encrypted backup", extensions: ["cwbackup"] },
-          ],
-        });
-        if (result.canceled) return { cancelled: true };
-        meetings.store.restoreFile(result.filePaths[0], p.passphrase);
-        meetings.clearCache();
+        if (!meetings.store.isEmpty())
+          throw new Error(
+            "Restore requires an empty library. Your meetings have not been changed.",
+          );
+        meetings.archiveOperation = {
+          kind: "restore",
+          phase: "Choose a backup",
+        };
         meetings.emit("state");
-        return { restored: true };
+        let staged;
+        try {
+          const result = await dialog.showOpenDialog(window, {
+            title: "Restore encrypted meeting backup",
+            properties: ["openFile"],
+            filters: [
+              { name: "Callwise encrypted backup", extensions: ["cwbackup"] },
+            ],
+          });
+          if (result.canceled || !result.filePaths?.[0])
+            return { cancelled: true };
+          staged = await stageRestore(
+            meetings.store,
+            result.filePaths[0],
+            p.passphrase,
+            (progress) => {
+              meetings.archiveOperation = { kind: "restore", ...progress };
+              meetings.emit("state");
+            },
+            {
+              reservedIds: [...meetings.memory.values()]
+                .filter((v) => v.id === v.meetingId)
+                .map((v) => v.id),
+            },
+          );
+          meetings.archiveOperation = {
+            kind: "restore",
+            phase: "Opening restored library",
+          };
+          meetings.emit("state");
+          meetings.search?.close();
+          publishRestore(meetings.store, staged.stage);
+          staged = null;
+          refreshStore();
+          return { restored: true };
+        } finally {
+          if (staged) rmSync(staged.stage, { recursive: true, force: true });
+          meetings.archiveOperation = null;
+          meetings.clearCache();
+          meetings.emit("state");
+        }
       }
       case "desktop.meeting.audio": {
         if (!meetings.store || !meetings.get("meetings", id))

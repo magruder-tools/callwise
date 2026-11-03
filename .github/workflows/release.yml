@@ -34,7 +34,7 @@ jobs:
           CALLWISE_SIGNING_P12: ${{ secrets.CALLWISE_SIGNING_P12 }}
           CALLWISE_SIGNING_PASSWORD: ${{ secrets.CALLWISE_SIGNING_PASSWORD }}
         run: node scripts/import-signing-identity.mjs
-      - run: npm run dist:mac
+      - run: npm run dist:mac -- --config.extraMetadata.releaseChannel=stable
       - name: Verify the actual installed bundle
         run: |
           codesign --verify --deep --strict release/mac-arm64/Callwise.app

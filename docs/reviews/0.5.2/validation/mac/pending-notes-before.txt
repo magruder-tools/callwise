@@ -1,0 +1,7 @@
+{
+  "oldMeetingRemoved": true,
+  "mode": "notes-only",
+  "expected": "Previously saved note. Latest typed addition MUST survive.",
+  "actual": "Previously saved note",
+  "notesStillSaving": true
+}

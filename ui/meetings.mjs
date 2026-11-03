@@ -485,6 +485,9 @@ export function createMeetingUi({
       case "m-objection-keep":
       case "m-objection-delete": {
         const objected = m?.id;
+        // Capture is already paused. Save queued or in-flight notes before the
+        // continuation copies them and, for Delete, removes the original meeting.
+        await flushNotes();
         await meetingCommand("meeting.objection.resolve", {
           meetingId: objected,
           choice: action === "m-objection-delete" ? "delete" : "keep",

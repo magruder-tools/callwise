@@ -1,0 +1,3 @@
+History in the session that created the meeting: [ 'E2E planning call' ]
+History after quitting and relaunching: [ 'E2E planning call' ] | empty state shown: false
+Search 'planning' after relaunch: [ 'E2E planning call' ]

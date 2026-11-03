@@ -1,0 +1,7 @@
+helper processes started: 1
+packets delivered after the single overload line: { mic: 20, system: 0 } (20 pushed per channel)
+capture status: { mic: 'receiving', system: 'failed' } | error: [
+  'Local speech stopped on this audio channel. Pause and resume to retry.'
+]
+Retry audio would do nothing
+(exit 0)

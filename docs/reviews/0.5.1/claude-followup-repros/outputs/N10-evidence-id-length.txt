@@ -1,0 +1,2 @@
+700 rows: 18 evidence chunks, 35 local-model calls, 121954 prompt bytes; first evidence ID the model sees: system:e1:0:run:e82e8652-1b71-4082-be78-c35bf4fe0ae5
+(exit 0)

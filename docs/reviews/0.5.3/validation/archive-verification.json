@@ -1,0 +1,19 @@
+{
+  "version": "0.5.3",
+  "minimum_macos": "26.0",
+  "runtime_files_compared": 82,
+  "runtime_mismatches": [],
+  "package_metadata": "matches after standard removal of scripts, build and devDependencies",
+  "bundled_readme_matches": true,
+  "extracted_archive_strict_deep_signature": "passed",
+  "designated_requirement": "designated => identifier \"local.callwise.desktop\" and certificate leaf = H\"90c6d640f5f3a1b9ccba5c979132199be1d8fbaf\"",
+  "certificate_sha1": "90C6D640F5F3A1B9CCBA5C979132199BE1D8FBAF",
+  "signature_type": "persistent personal certificate; self-signed; not Apple-notarized",
+  "packaged_regression_tests": "33/33 passed",
+  "full_source_tests": "329/329 passed",
+  "archive_bytes": 281784004,
+  "archive_sha256": "9918729234aa67a01d628ecfa657f95c9aae9c86ac5153f902e6055112c14d43",
+  "tests_data": "synthetic only",
+  "existing_user_keychain_approval_verified": false,
+  "real_call_verified": false
+}

@@ -6,8 +6,12 @@ const store = new MeetingStore(workerData.directory, {
   readOnly: true,
 });
 try {
-  store.backupToFile(workerData.file, workerData.passphrase);
-  parentPort.postMessage({ saved: true });
+  const { missingAudio } = store.backupToFile(
+    workerData.file,
+    workerData.passphrase,
+    { temp: workerData.temp },
+  );
+  parentPort.postMessage({ saved: true, missingAudio });
 } catch (error) {
   parentPort.postMessage({
     error: error.message || "The encrypted backup could not be created.",

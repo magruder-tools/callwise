@@ -1,0 +1,5 @@
+
+> callwise@0.5.2 check
+> node scripts/check.mjs
+
+Syntax checked 130 JavaScript modules; desktop metadata and secret exclusions present.

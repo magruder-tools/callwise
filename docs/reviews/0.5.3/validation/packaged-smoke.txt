@@ -1,0 +1,34 @@
+Smoke: main and live pages loaded.
+Smoke: panel focused for native input acceptance.
+Error occurred in handler for 'callwise:command': Error: The browser demo does not connect to accounts or record audio. Open the desktop app for live mode.
+    at CallController.start (file://<temporary-build>/release/mac-arm64/Callwise.app/Contents/Resources/app.asar/core/controller.mjs:579:13)
+    at CallController.command (file://<temporary-build>/release/mac-arm64/Callwise.app/Contents/Resources/app.asar/core/controller.mjs:408:21)
+    at file://<temporary-build>/release/mac-arm64/Callwise.app/Contents/Resources/app.asar/desktop/main.mjs:1080:23
+    at Session.<anonymous> (node:electron/js2c/browser_init:2:123650)
+    at Session.emit (node:events:514:28)
+Panel acceptance passed: quiet sizing, full cards at three widths, shrink after notices/transcript, 40/40 native presses, stable selection/card/opacity, quiet checks, streaming and timed expiry.
+sandbox_extension_issue_file failed for <temporary-build>/release/mac-arm64/Callwise.app/Contents/Frameworks/Callwise Helper.app/Contents/Resources: 1 (Operation not permitted)
+Error occurred in handler for 'callwise:command': Error: OpenAI didn't accept this key.
+    at Object.connect (file://<temporary-build>/release/mac-arm64/Callwise.app/Contents/Resources/app.asar/desktop/panel-smoke.mjs:375:11)
+    at file://<temporary-build>/release/mac-arm64/Callwise.app/Contents/Resources/app.asar/core/controller.mjs:737:31
+    at Array.map (<anonymous>)
+    at CallController.start (file://<temporary-build>/release/mac-arm64/Callwise.app/Contents/Resources/app.asar/core/controller.mjs:671:29)
+    at async Session.<anonymous> (node:electron/js2c/browser_init:2:123634) {
+  action: 'start'
+}
+Error occurred in handler for 'callwise:command': Error: Couldn't reach OpenAI. Check your internet connection.
+    at Object.connect (file://<temporary-build>/release/mac-arm64/Callwise.app/Contents/Resources/app.asar/desktop/panel-smoke.mjs:400:23)
+    at file://<temporary-build>/release/mac-arm64/Callwise.app/Contents/Resources/app.asar/core/controller.mjs:737:31
+    at Array.map (<anonymous>)
+    at CallController.start (file://<temporary-build>/release/mac-arm64/Callwise.app/Contents/Resources/app.asar/core/controller.mjs:671:29)
+    at async Session.<anonymous> (node:electron/js2c/browser_init:2:123634) {
+  action: 'start'
+}
+Ready acceptance passed: crowded controls visible at two sizes, stable goal selection, single clean wrong-key message, no-internet recovery, Cancel, and Practice restoration.
+Smoke: synthetic coaching requests completed.
+Smoke: default live screenshot captured.
+Smoke: checking live-340 layout.
+Smoke: checking live-440 layout.
+Smoke: checking live-640 layout.
+Smoke: automatic recap completed.
+Desktop smoke completed: two coaching lanes and source-linked demo cards rendered.

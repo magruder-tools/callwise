@@ -1,0 +1,13 @@
+== H3: double click on Start while the first start is connecting
+  second click: The connection is still starting or saving final words.
+  engine: running | meeting header: running | meetings created: 1
+  saved: { status: 'ended', interrupted: false, segments: 2, recapJob: true }
+== L2: injected preferences and a notes-only/audio mix are ignored
+  notes-only header: {
+  captureMode: 'notes-only',
+  engine: 'manual',
+  notice: null,
+  liveHelp: false,
+  retainAudio: false
+} | controller source: manual
+(exit 0)

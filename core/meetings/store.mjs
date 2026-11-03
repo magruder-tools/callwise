@@ -79,7 +79,7 @@ function storageReady(storage) {
     storage.getSelectedStorageBackend?.() === "basic_text"
   )
     throw new Error(
-      "Meeting library is locked. Unlock your keychain and reopen Callwise, or explicitly start without saving.",
+      "Meeting library is locked. Choose Unlock saved data to try again, or explicitly start without saving.",
     );
 }
 export class MeetingStore {
@@ -292,7 +292,51 @@ export class MeetingStore {
       recursive: true,
       force: true,
     });
+    this.checkpoint();
+  }
+  // After an objection: remove transcript, audio, speakers, jobs, AI documents and AI actions,
+  // but keep the meeting header, the user's original notes, user-created actions, exports and events.
+  deleteCapturedContent(meetingId) {
+    checked(meetingId);
+    if (this.readOnly) throw new Error("Read-only library.");
+    this.transaction(() => {
+      for (const table of ["segments", "audio_chunks", "jobs", "speakers"])
+        this.db
+          .prepare(`DELETE FROM ${table} WHERE meeting_id=?`)
+          .run(meetingId);
+      this.db
+        .prepare("DELETE FROM docs WHERE meeting_id=? AND id<>'notes:original'")
+        .run(meetingId);
+      for (const a of this.all("actions", meetingId))
+        if (a.origin !== "user")
+          this.db
+            .prepare("DELETE FROM actions WHERE meeting_id=? AND id=?")
+            .run(meetingId, a.id);
+    });
+    rmSync(path.join(this.directory, "audio", meetingId), {
+      recursive: true,
+      force: true,
+    });
+    this.checkpoint();
+  }
+  // Truncate the WAL so deleted content doesn't linger in it. While a backup holds a read snapshot, a
+  // TRUNCATE checkpoint would wait out the whole busy timeout on the main thread, so defer it.
+  checkpoint() {
+    if (this.readOnly || this.closed) return;
+    if (this.backupReaders > 0) {
+      this.checkpointPending = true;
+      this.db.exec("PRAGMA wal_checkpoint(PASSIVE)");
+      return;
+    }
+    this.checkpointPending = false;
     this.db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+  }
+  backupStarted() {
+    this.backupReaders = (this.backupReaders || 0) + 1;
+  }
+  backupFinished() {
+    this.backupReaders = Math.max(0, (this.backupReaders || 0) - 1);
+    if (!this.backupReaders && this.checkpointPending) this.checkpoint();
   }
   recover() {
     for (const m of this.all("meetings"))
@@ -336,35 +380,40 @@ export class MeetingStore {
       "DELETE FROM audio_chunks WHERE meeting_id NOT IN (SELECT meeting_id FROM meetings)",
     );
     const audio = path.join(this.directory, "audio");
-    const valid = new Set(
-      this.db
-        .prepare("SELECT meeting_id,id FROM audio_chunks")
-        .all()
-        .map((a) => {
-          const [channel, sequence] = a.id.split(":");
-          if (
-            !safeId(a.meeting_id) ||
-            !["mic", "system"].includes(channel) ||
-            !/^\d+$/.test(sequence)
-          )
-            throw new Error(
-              "Invalid audio index; retained files have not been pruned.",
-            );
-          return path.join(
-            this.directory,
-            "audio",
-            a.meeting_id,
-            channel,
-            `${sequence}.cwa`,
-          );
-        }),
-    );
+    // The complete retained-audio index comes from plaintext columns, so no decryption and no row cap.
+    // A row whose file is gone needs no repair here: playback reports it unavailable and backups save it
+    // as missing, so launch stays fast however many files are gone.
+    const valid = new Set();
+    let malformed = false;
+    for (const a of this.db
+      .prepare("SELECT meeting_id,id FROM audio_chunks")
+      .all()) {
+      const [channel, sequence] = a.id.split(":");
+      if (
+        !safeId(a.meeting_id) ||
+        !["mic", "system"].includes(channel) ||
+        !/^\d+$/.test(sequence)
+      ) {
+        malformed = true;
+        continue;
+      }
+      valid.add(
+        path.join(
+          this.directory,
+          "audio",
+          a.meeting_id,
+          channel,
+          `${sequence}.cwa`,
+        ),
+      );
+    }
+    // With an unexpected index row, keep every file (prune nothing) but still open the library.
     const walk = (d) => {
       if (!existsSync(d)) return;
       for (const e of readdirSync(d, { withFileTypes: true })) {
         const p = path.join(d, e.name);
         if (e.isDirectory()) walk(p);
-        else if (!valid.has(p)) rmSync(p, { force: true });
+        else if (!valid.has(p) && !malformed) rmSync(p, { force: true });
       }
     };
     walk(audio);
@@ -396,14 +445,22 @@ export class MeetingStore {
   }
   readAudio(meetingId, id) {
     const row = this.get("audio_chunks", meetingId, id);
-    if (!row || row.missing)
-      throw new Error("This recording is no longer available.");
-    return unseal(
-      this.key,
-      readFileSync(path.join(this.directory, row.path)),
-      `audio:${meetingId}:${id}`,
-      { keyId: this.keyId, binary: true },
-    );
+    const unavailable = () =>
+      Object.assign(new Error("This recording is no longer available."), {
+        code: "ENOENT",
+      });
+    if (!row || row.missing) throw unavailable();
+    let sealed;
+    try {
+      sealed = readFileSync(path.join(this.directory, row.path));
+    } catch (error) {
+      if (error.code === "ENOENT") throw unavailable();
+      throw error;
+    }
+    return unseal(this.key, sealed, `audio:${meetingId}:${id}`, {
+      keyId: this.keyId,
+      binary: true,
+    });
   }
   prune({ meetingDays = 0, audioDays = 30 } = {}) {
     const cutoff = this.clock();
@@ -440,34 +497,43 @@ export class MeetingStore {
       );
       yield { type: "header", schema: SCHEMA_VERSION, counts };
       const copied = Object.fromEntries(TABLES.map((t) => [t, 0]));
+      let missingAudio = 0;
       for (const table of TABLES)
         for (const r of this.db
           .prepare(`SELECT * FROM ${table} ORDER BY meeting_id,id`)
           .iterate()) {
-          const record = {
-            ...decodeRecord(this, table, r.meeting_id, r.id, r.data),
-            revision: r.revision,
-          };
+          let record = {
+              ...decodeRecord(this, table, r.meeting_id, r.id, r.data),
+              revision: r.revision,
+            },
+            audio = null;
+          // A chunk whose file is gone (deleted meanwhile, or lost before) is saved as missing, not fatal.
+          if (table === "audio_chunks" && !record.missing)
+            try {
+              audio = this.readAudio(record.meetingId, record.id);
+            } catch (error) {
+              if (error.code !== "ENOENT") throw error;
+              record = { ...record, missing: true };
+              missingAudio++;
+            }
           yield { type: "record", table, record };
           copied[table]++;
-          if (table === "audio_chunks" && !record.missing)
-            yield {
-              type: "audio",
-              record,
-              data: this.readAudio(record.meetingId, record.id).toString(
-                "base64",
-              ),
-            };
+          if (audio)
+            yield { type: "audio", record, data: audio.toString("base64") };
         }
       if (TABLES.some((t) => counts[t] !== copied[t]))
         throw new Error("Backup row counts changed.");
-      yield { type: "end", counts: copied };
+      this.lastBackupMissingAudio = missingAudio;
+      yield { type: "end", counts: copied, missingAudio };
     } finally {
       this.db.exec("ROLLBACK");
     }
   }
-  backupToFile(file, passphrase) {
-    const temp = `${file}.${randomUUID()}.tmp`;
+  backupToFile(
+    file,
+    passphrase,
+    { temp = `${file}.${randomUUID()}.tmp` } = {},
+  ) {
     let fd;
     try {
       fd = openSync(temp, "wx", 0o600);
@@ -480,12 +546,18 @@ export class MeetingStore {
       closeSync(fd);
       fd = undefined;
       renameSync(temp, file);
+      return { missingAudio: this.lastBackupMissingAudio || 0 };
     } finally {
       if (fd !== undefined) closeSync(fd);
       rmSync(temp, { force: true });
     }
   }
-  restoreFile(file, passphrase) {
+  isEmpty() {
+    return TABLES.every(
+      (table) => !this.db.prepare(`SELECT 1 FROM ${table} LIMIT 1`).get(),
+    );
+  }
+  restoreFile(file, passphrase, options = {}) {
     const fd = openSync(file, "r"),
       magic = Buffer.alloc(9);
     try {
@@ -494,12 +566,11 @@ export class MeetingStore {
       closeSync(fd);
     }
     if (magic.toString() === "CWBACKUP1")
-      return this.restore(readFileSync(file), passphrase);
-    return this.restoreFrames(openFrames(file, passphrase));
+      return this.restore(readFileSync(file), passphrase, options);
+    return this.restoreFrames(openFrames(file, passphrase), options);
   }
-  restoreFrames(frames) {
-    if (this.all("meetings", null, { limit: 1 }).length)
-      throw new Error("Restore requires an empty library.");
+  restoreFrames(frames, { onProgress = () => {} } = {}) {
+    if (!this.isEmpty()) throw new Error("Restore requires an empty library.");
     try {
       this.transaction(() => {
         let header,
@@ -511,6 +582,11 @@ export class MeetingStore {
             if (frame.type !== "header" || frame.schema !== SCHEMA_VERSION)
               throw new Error("Unsupported backup.");
             header = frame;
+            onProgress({
+              phase: "Restoring records",
+              completed: 0,
+              total: Object.values(header.counts).reduce((a, b) => a + b, 0),
+            });
             continue;
           }
           if (frame.type === "record") {
@@ -518,6 +594,13 @@ export class MeetingStore {
             const r = frame.record;
             this.put(frame.table, r.meetingId, r.id, r, 0);
             counts[frame.table]++;
+            const completed = Object.values(counts).reduce((a, b) => a + b, 0);
+            if (completed % 128 === 0)
+              onProgress({
+                phase: "Restoring records and audio",
+                completed,
+                total: Object.values(header.counts).reduce((a, b) => a + b, 0),
+              });
           } else if (frame.type === "audio") {
             const r = frame.record;
             this.writeAudio(
@@ -549,14 +632,18 @@ export class MeetingStore {
       throw e;
     }
     this.recover();
+    onProgress({ phase: "Checking restored library" });
   }
-  restore(bytes, passphrase) {
+  restore(bytes, passphrase, { onProgress = () => {} } = {}) {
     if (Buffer.from(bytes).subarray(0, 9).toString() === "CWBACKUP2")
-      return this.restoreFrames(openFrames(Buffer.from(bytes), passphrase));
-    if (this.all("meetings", null, { limit: 1 }).length)
+      return this.restoreFrames(openFrames(Buffer.from(bytes), passphrase), {
+        onProgress,
+      });
+    if (!this.isEmpty())
       throw new Error(
         "Restore requires an empty library. Export or back up your existing meetings first.",
       );
+    onProgress({ phase: "Unlocking legacy backup" });
     const v = openBackup(bytes, passphrase);
     if (v.schema !== SCHEMA_VERSION || !v.records || !Array.isArray(v.audio))
       throw new Error("Unsupported backup.");
@@ -565,30 +652,46 @@ export class MeetingStore {
         checked(r.id);
         checked(r.meetingId);
       }
-    this.transaction(() => {
-      for (const t of TABLES)
-        for (const r of v.records[t] || [])
-          if (t !== "audio_chunks") this.put(t, r.meetingId, r.id, r, 0);
-    });
-    for (const a of v.audio) {
-      const r = v.records.audio_chunks.find(
-        (r) => r.id === a.id && r.meetingId === a.meetingId,
-      );
-      if (r)
-        this.writeAudio(
-          r.meetingId,
-          r.channel,
-          r.sequence,
-          Buffer.from(a.data, "base64"),
-          r,
-        );
+    const headers = new Set((v.records.meetings || []).map((r) => r.meetingId));
+    const chunks = new Map(
+      (v.records.audio_chunks || []).map((r) => [`${r.meetingId}:${r.id}`, r]),
+    );
+    // One transaction for records and audio, like CWBACKUP2: a failure leaves the library empty, so a
+    // retry works. Audio for a meeting that isn't in the backup (left by the 0.5.0 delete race) is skipped.
+    try {
+      this.transaction(() => {
+        for (const t of TABLES)
+          for (const r of v.records[t] || [])
+            if (t !== "audio_chunks") this.put(t, r.meetingId, r.id, r, 0);
+        for (const a of v.audio) {
+          const r = chunks.get(`${a.meetingId}:${a.id}`);
+          if (r && headers.has(r.meetingId))
+            this.writeAudio(
+              r.meetingId,
+              r.channel,
+              r.sequence,
+              Buffer.from(a.data, "base64"),
+              r,
+            );
+        }
+      });
+    } catch (e) {
+      rmSync(path.join(this.directory, "audio"), {
+        recursive: true,
+        force: true,
+      });
+      throw e;
     }
     this.recover();
+    onProgress({ phase: "Checking restored library" });
   }
   close() {
     if (this.closed) return;
     this.closed = true;
-    if (!this.readOnly) this.db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    if (!this.readOnly)
+      this.db.exec(
+        `PRAGMA wal_checkpoint(${this.backupReaders > 0 ? "PASSIVE" : "TRUNCATE"})`,
+      );
     this.db.close();
     this.key.fill(0);
   }

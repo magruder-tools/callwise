@@ -663,7 +663,10 @@ test("M6: an objection prevents resume and offers deletion before notes-only con
     meetingId: id,
     choice: "delete",
   });
-  assert.equal(store.get("meetings", id), null);
+  // 0.5.2: "Delete transcript and audio" removes what was captured, not the meeting or the user's notes
+  // (see tests/claude-followup-regressions.test.mjs, N4).
+  assert.equal(store.get("meetings", id).captureDeleted, true);
+  assert.equal(store.all("segments", id).length, 0);
 });
 
 test("L3: adopted enhanced notes refresh while ordinary snapshots retain a typed draft", () => {

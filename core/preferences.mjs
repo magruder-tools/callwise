@@ -46,6 +46,7 @@ export function sanitizePreferences(patch, previous = {}) {
     "liveHelp",
     "retainAudio",
     "meetingMcpEnabled",
+    "includePreviewUpdates",
   ]) {
     if (merged[key] === undefined) continue;
     if (typeof merged[key] !== "boolean")

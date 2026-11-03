@@ -1,0 +1,3 @@
+wrote 100010 chunk rows + files in 95622 ms; files on disk = 100010
+after relaunch recovery (1491 ms): files on disk = 100010, rows = 100010
+last chunk readable

@@ -1,0 +1,2 @@
+after 4 helper exits 20 minutes apart: { stopped: true, lastStatuses: [ 'mic:failed', 'system:failed' ] }
+(exit 0)

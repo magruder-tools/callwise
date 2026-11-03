@@ -1,0 +1,10 @@
+second click result: A meeting is already active.
+engine status after first start: running
+engine transcript rows: 1
+saved meeting: {
+  status: 'ended',
+  interrupted: undefined,
+  savedSegments: 1,
+  recapJob: true
+}
+events: meeting.started, capture.finishing, capture.ended

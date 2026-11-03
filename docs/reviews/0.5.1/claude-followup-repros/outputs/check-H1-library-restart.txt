@@ -1,0 +1,7 @@
+History after relaunch: [ 'Planning 3', 'Planning 2', 'Planning 1' ]
+queued recaps resumed: {
+  localModelCalls: 3,
+  maxParallel: 1,
+  jobs: [ 'done', 'done', 'done' ]
+}
+(exit 0)

@@ -1,0 +1,7 @@
+1. before Delete all, meeting_list: [ 'Confidential salary talk' ] | meeting_search 'salary': [ 'Confidential salary talk' ]
+2. right after Delete all, meeting_list: Saved meeting access is off. Enable it in Callwise Settings → Assistants.
+   rows in the app's new library: 1
+3. same MCP session, meeting_list: [ 'Confidential salary talk' ]
+   meeting_search 'salary': [ 'Confidential salary talk' ]
+   meeting_get deleted meeting -> notes: Dana's current salary is 180k.
+(exit 0)

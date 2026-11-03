@@ -1,0 +1,1 @@
+rows=3000: 7.8 ms of main-thread work per transcript update (engine + controller + meeting service listeners)

@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { confirmNotice, noticeHash, noticeText } from "./notice.mjs";
 import { LocalDocuments, mergeActions } from "./recaps.mjs";
 import { stableSpeakerTurns, assignSpeakers } from "./speakers.mjs";
+import { meetingProcessingStatus } from "./processing-status.mjs";
 const signature = (v) =>
   createHash("sha256").update(JSON.stringify(v)).digest("hex");
 const text = (v, max) => (typeof v === "string" ? v.slice(0, max) : "");
@@ -27,6 +28,7 @@ export class MeetingService extends EventEmitter {
     this.unsavedMeeting = null;
     this.actionCounts = new Map();
     this.deletedMeetings = new Set();
+    this.capturePurged = new Set();
     this.warning = "";
     this.libraryRevision = 0;
     this.memory = new Map();
@@ -254,11 +256,18 @@ export class MeetingService extends EventEmitter {
     source = preferences.preferredSource || "audio",
     withoutSaving = false,
   } = {}) {
+    if (this.archiveOperation)
+      throw new Error(
+        "Wait for the restore to finish before starting a meeting.",
+      );
     if (
       this.activeId &&
       this.get("meetings", this.activeId)?.status !== "ended"
     )
       throw new Error("A meeting is already active.");
+    // The objection notice belongs to the meeting it was raised in.
+    if (/^Capture (stopped after an objection|has ended)/.test(this.warning))
+      this.warning = "";
     if (captureMode === "notes-only") source = "manual";
     if (!this.store && !withoutSaving)
       throw new Error(
@@ -520,11 +529,26 @@ export class MeetingService extends EventEmitter {
       delete current.segments;
     }
     return {
-      current,
+      current: current
+        ? {
+            ...current,
+            processing: meetingProcessingStatus(
+              current,
+              current.id === this.activeId
+                ? this.controller?.engine.status
+                : current.status,
+            ),
+          }
+        : current,
       activeId: this.activeId,
       library: this.library(),
       warning: this.warning,
       locked: !this.store,
+      processing: meetingProcessingStatus(
+        this.activeId ? this.get("meetings", this.activeId) : null,
+        this.controller?.engine.status,
+      ),
+      archiveOperation: this.archiveOperation || null,
       libraryRevision: this.libraryRevision,
       unsaved: !!current && current.saving === false,
     };
@@ -683,11 +707,17 @@ export class MeetingService extends EventEmitter {
     this.emit("state");
   }
   async generate(id, task = "recap") {
-    if (this.closed) return;
+    if (this.closed || this.archiveOperation) return;
     const key = `${id}:${task}`;
     if (this.jobs.has(key)) return;
     const meeting = this.current(id);
     if (!meeting) return;
+    // A recap of deleted capture would be empty at best; enhancing the user's own notes still works.
+    if (
+      task === "recap" &&
+      (meeting.captureDeleted || this.capturePurged.has(id))
+    )
+      return;
     const cancellation = new AbortController();
     this.jobs.set(key, cancellation);
     const basedOn = {
@@ -860,7 +890,119 @@ export class MeetingService extends EventEmitter {
         this.store.deleteMeeting(id);
     });
   }
+  // An objection blocks every way of resuming capture (window, menu bar, shortcuts), not only the window's button.
+  resumeBlocked() {
+    const m = this.activeId && this.get("meetings", this.activeId);
+    return !!(m && m.status !== "ended" && m.objection === true);
+  }
+  // Delete what was captured (transcript, audio, speaker names and AI output) but keep the meeting,
+  // the user's own notes and actions, and the audit events.
+  async deleteCapture(id) {
+    const m = this.get("meetings", id);
+    if (!m || m.status !== "ended")
+      throw new Error("End the meeting before deleting what was captured.");
+    this.capturePurged.add(id);
+    for (const [key, job] of this.jobs)
+      if (key.startsWith(`${id}:`)) job.abort();
+    const stopping = [];
+    for (const consumers of this.finishingConsumers)
+      if (consumers.meetingId === id)
+        stopping.push(consumers.recorder?.close(), consumers.diarizer?.close());
+    this.purgeCapture(id);
+    await Promise.allSettled(stopping);
+    // A recorder can flush one final chunk while it is being stopped.
+    if (!this.closed) this.purgeCapture(id);
+  }
+  purgeCapture(id) {
+    const keep = (table, record) =>
+      ["meetings", "events", "exports", "access_log"].includes(table) ||
+      (table === "docs" && record?.id === "notes:original") ||
+      (table === "actions" && record?.origin === "user");
+    const inMemory =
+      !this.store ||
+      this.unsavedMeeting === id ||
+      this.memory.has(`meetings:${id}:${id}`);
+    if (!inMemory) this.store.deleteCapturedContent(id);
+    for (const [key, value] of [...this.memory.entries()])
+      if (value?.meetingId === id && !keep(key.split(":")[0], value))
+        this.memory.delete(key);
+    for (const [key, entry] of this.pendingWrites)
+      if (entry.meetingId === id && !keep(entry.table, entry.value))
+        this.pendingWrites.delete(key);
+    this.recordCache.clear();
+    this.actionCounts.delete(id);
+    if (this.activeId === id) {
+      this.cachedRows.clear();
+      if (this.controller?.engine.sessionId === this.activeSessionId)
+        this.controller.engine.transcript.clear();
+    }
+    for (const [key, label] of [
+      ["you", "You"],
+      ["them", "Them"],
+    ])
+      this.put("speakers", id, key, { label, confirmed: false });
+    this.invalidate();
+    this.emit("state");
+  }
+  // The notes-only meeting that follows an objection keeps the title and people. After "delete", the user's
+  // notes and actions move into it and the emptied meeting is removed, so one meeting holds everything kept.
+  async continueAfterObjection(newId, oldId) {
+    const old = this.get("meetings", oldId),
+      next = this.get("meetings", newId);
+    if (
+      !old ||
+      !next ||
+      oldId === newId ||
+      old.status !== "ended" ||
+      !old.objectionResolution ||
+      next.captureMode !== "notes-only" ||
+      // Never copy a meeting started without saving into one that is saved.
+      (old.saving === false && next.saving !== false)
+    )
+      return;
+    const moved = old.objectionResolution === "delete";
+    this.put("meetings", newId, newId, {
+      ...next,
+      title: (moved ? old.title : `${old.title} (continued)`).slice(0, 200),
+      titleSource: "user",
+      people: Array.isArray(old.people) ? old.people : [],
+    });
+    if (moved) {
+      const notes = this.get("docs", oldId, "notes:original"),
+        current = this.get("docs", newId, "notes:original");
+      // Line times pointed into the deleted transcript, so they don't carry over.
+      if (notes?.text)
+        this.put("docs", newId, "notes:original", {
+          text: notes.text,
+          version: (current?.version || 0) + 1,
+          lineTimes: [],
+        });
+      // Keep the audit trail (notice receipt, objection) with the meeting that remains.
+      for (const e of this.all("events", oldId)) {
+        const { revision, meetingId, id: eventId, ...event } = e;
+        this.put("events", newId, randomUUID(), {
+          ...event,
+          fromMeeting: oldId,
+        });
+      }
+      for (const a of this.all("actions", oldId))
+        if (a.origin === "user") {
+          const { revision, meetingId, ...action } = a;
+          this.put("actions", newId, a.id, action);
+        }
+      this.event(newId, "capture.continued", { afterObjection: "delete" });
+      await this.delete(oldId);
+    } else
+      this.event(newId, "capture.continued", {
+        afterObjection: "keep",
+        from: oldId,
+      });
+    this.invalidate();
+    this.emit("state");
+  }
   async deleteAll() {
+    if (this.archiveOperation)
+      throw new Error("Wait for the restore to finish before deleting data.");
     const active = this.activeId && this.get("meetings", this.activeId);
     if (active && active.status !== "ended")
       throw new Error("End the meeting before deleting data.");
@@ -889,6 +1031,10 @@ export class MeetingService extends EventEmitter {
     this.emit("state");
   }
   async command(name, p = {}) {
+    if (this.archiveOperation)
+      throw new Error(
+        "Wait for the restore to finish before changing the library.",
+      );
     const id = p.meetingId || this.selectedId;
     switch (name) {
       case "meeting.open":
@@ -979,7 +1125,8 @@ export class MeetingService extends EventEmitter {
       case "meeting.notice": {
         const m = this.get("meetings", id);
         if (p.objection === true) {
-          await this.controller.command("pause");
+          // Record the objection before pausing: the pause drains final words for up to 3 s, and every
+          // resume path checks this flag, so nothing can resume capture during the drain.
           this.put("meetings", id, id, {
             ...this.get("meetings", id),
             objection: true,
@@ -987,6 +1134,9 @@ export class MeetingService extends EventEmitter {
           this.event(id, "capture.objection");
           this.warning =
             "Capture stopped after an objection. Choose whether to keep or delete the captured content.";
+          this.invalidate();
+          this.emit("state");
+          await this.controller.command("pause");
         } else {
           if (!p.confirmed)
             throw new Error("Confirm that the participant heard the notice.");
@@ -1000,8 +1150,17 @@ export class MeetingService extends EventEmitter {
         const m = this.get("meetings", id);
         if (!m?.objection || !["keep", "delete"].includes(p.choice))
           throw new Error("Choose how to handle the objection.");
-        await this.controller.command("end");
-        if (p.choice === "delete") await this.delete(id);
+        if (m.status !== "ended") await this.controller.command("end");
+        // Delete only what was captured; the user's own notes and actions stay.
+        if (p.choice === "delete") await this.deleteCapture(id);
+        const resolved = this.get("meetings", id);
+        if (resolved)
+          this.put("meetings", id, id, {
+            ...resolved,
+            objectionResolution: p.choice,
+            ...(p.choice === "delete" ? { captureDeleted: true } : {}),
+          });
+        this.event(id, `capture.objection.${p.choice}`);
         this.warning =
           "Capture has ended. You can continue with a notes-only meeting.";
         break;

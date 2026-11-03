@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.5.4 — 2026-11-03
+
+- Add an explicit **Unlock saved data** action after a denied Keychain unlock, without automatic retries or restarting the main app. Recover saved settings and meetings while preserving unsaved notes; a meeting started without saving remains unsaved.
+- Show the current meeting's confirmed local/cloud transcription, audio recording and cloud coaching choices in the notebook and live panel, with status in the menu bar too.
+- Offer preview update notifications in General settings. Preview downloads enable them by default; stable builds retain stable-only notifications. Downloads remain an explicit action.
+- Restore encrypted backups in a worker with visible progress. Validate the backup in a separate staging library, preserve the existing key and auxiliary files, and recover an interrupted directory swap. Capture, deletion and quitting wait for the restore to finish.
+- Build and publish signed previews from the review branch on GitHub after automated Mac and renderer checks pass, using the existing reusable signing identity.
+
+The library and backup formats remain compatible with 0.5.1–0.5.3, including import of legacy 0.5.0 backups. This personal preview is not Apple-notarized. Synthetic automated checks do not replace real-call and existing Keychain acceptance checks.
+
+## 0.5.3 — 2026-11-03
+
+- Open Keychain storage only when an actual storage operation needs it; sample runs and assistant discovery do not initialize it.
+- Stop retrying denied or unavailable Keychain access for the rest of the app process. Settings files, autosaves and assistant requests share the same gate; unlock Keychain and reopen Callwise to retry. Existing encrypted files are preserved.
+- Require a reusable signing certificate for version-tagged installer publishing, instead of silently publishing another ad-hoc signed update. First approval and locked-Keychain prompts can still be required by macOS.
+
+## 0.5.2 — 2026-11-02
+
+Fixes from Claude's follow-up review of 0.5.1 ([review](docs/reviews/0.5.1/CLAUDE_FOLLOWUP_REVIEW.md), [fixes](docs/reviews/0.5.2/FIXES.md)).
+
+- After an objection, capture can't resume from the menu bar or the global shortcuts either, even while the pause is still saving final words; "Delete transcript and audio" keeps the user's notes and actions and continues them in a notes-only meeting with the same title and people (unsaved if the meeting was started without saving).
+- One "speech fell behind" signal no longer stops a channel; Retry audio restarts Apple speech; occasional helper restarts in a long call keep transcribing; a restart no longer leaves a duplicate partial line.
+- Delete all resets to the launch defaults (live help off), removes a library that couldn't be opened, is refused while a backup is running, and keeps Codex working; the assistant (MCP) server reopens a replaced library instead of serving deleted meetings, and indexes only meetings whose notice allowed assistant access.
+- Backups skip audio files that are already gone instead of failing (and say how many), and meeting deletes no longer stall during a backup; 0.5.0 backups with an orphan audio chunk restore fully; a library with an unexpected audio index row still opens.
+- The on-device model sees short evidence IDs; generic speaker labels aren't suggested as action owners.
+
+The app version is 0.5.2. The 0.5.1 archive verified in docs/reviews/0.5.1 is not this build; package and verify 0.5.2 on the Mac before real-call checks.
+
 ## 0.5.1 — 2026-11-02
 
 - Restore saved History and queued local documents after restart; prevent duplicate starts and transcript ID collisions after speech-helper recovery.

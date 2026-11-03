@@ -1,0 +1,6 @@
+after relaunch, mic:1 row (0.5.0 marked it missing at launch; 0.5.2 handles it when read or backed up): { exists: true, missing: undefined }
+backup: FAILED -> ENOENT: no such file or directory, open '<tmp>/audio/33333333-3333-4333-8333-333333333333/mic/1.cwa'
+playback of mic:1 -> ENOENT: no such file or directory, open '<tmp>/audio/33333333-3333-4333-8333-333333333333/mic/1.cwa'
+backup during delete: FAILED -> ENOENT: no such file or directory, open '<library>/audio/55555555-5555-4555-8555-555555555555/mic/0.cwa'
+deleteMeeting() blocked the calling thread for 5021 ms during the backup (wal_checkpoint(TRUNCATE) waits for busy_timeout) vs 3 ms without one
+(exit 0)

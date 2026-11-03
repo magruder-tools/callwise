@@ -1,0 +1,1 @@
+textarea shows after the adopted version arrives: "Version 2 adopted with Use new version"

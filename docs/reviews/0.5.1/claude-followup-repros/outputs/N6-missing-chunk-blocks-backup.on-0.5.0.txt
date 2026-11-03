@@ -1,0 +1,3 @@
+after relaunch, mic:1 row: { exists: true, missing: true }
+backup: saved
+playback of mic:1 -> This recording is no longer available.

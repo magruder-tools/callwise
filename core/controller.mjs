@@ -129,12 +129,18 @@ export class CallController extends EventEmitter {
     this.setProviders();
     if (savedDraft && !demoOnly) this.schedulePrep();
   }
+  // With the meeting notebook attached, live help is opt-in: anything but an explicit true is off, matching
+  // the participant notice (notice.mjs). The legacy coaching flow keeps its on-unless-disabled default.
+  liveHelpOn() {
+    return this.meetingService
+      ? this.preferences.liveHelp === true
+      : this.preferences.liveHelp !== false;
+  }
   setProviders() {
     this.engine.providers =
       this.mode === "demo"
         ? { fast: this.demoProvider, strategy: this.demoProvider }
-        : this.preferences.liveHelp === false ||
-            (!this.config.openaiKey && !this.codex)
+        : !this.liveHelpOn() || (!this.config.openaiKey && !this.codex)
           ? {}
           : {
               fast: this.config.openaiKey
@@ -332,6 +338,10 @@ export class CallController extends EventEmitter {
     };
   }
   async command(name, payload = {}) {
+    if (this.meetingService?.archiveOperation && name !== "state")
+      throw new Error(
+        "Wait for the restore to finish before starting or changing a meeting.",
+      );
     if (!payload || typeof payload !== "object" || Array.isArray(payload))
       throw new Error("Invalid command payload.");
     if (this.connecting && !["pause", "end", "new", "state"].includes(name))
@@ -554,7 +564,23 @@ export class CallController extends EventEmitter {
     consent = false,
     transcriptId = "",
   } = {}) {
-    if (this.drainJob) await this.drainJob;
+    if (this.meetingService?.archiveOperation)
+      throw new Error(
+        "Wait for the restore to finish before starting a meeting.",
+      );
+    // Every resume path (window, menu bar, global shortcuts, Retry audio) reaches this point.
+    const blocked = () =>
+      source !== "demo" && this.meetingService?.resumeBlocked?.();
+    const objection = () =>
+      new Error(
+        "Capture stopped after an objection. Keep notes or start a new meeting with a fresh notice.",
+      );
+    if (blocked()) throw objection();
+    if (this.drainJob) {
+      await this.drainJob;
+      // An objection can arrive while a pause is still draining.
+      if (blocked()) throw objection();
+    }
     if (!["demo", "manual", "audio", "fireflies"].includes(source))
       throw new Error("Choose a supported audio source.");
     if (this.demoOnly && source !== "demo")
@@ -1016,7 +1042,7 @@ export class CallController extends EventEmitter {
       if (
         this.demoOnly ||
         (!this.documentProvider &&
-          (this.preferences.liveHelp === false || !this.config.openaiKey))
+          (!this.liveHelpOn() || !this.config.openaiKey))
       )
         this.engine.prep = localPrep(materials, line);
       else {
@@ -1145,7 +1171,7 @@ export class CallController extends EventEmitter {
     try {
       if (
         (this.mode === "demo" ||
-          (this.preferences.liveHelp !== false && this.config.openaiKey) ||
+          (this.liveHelpOn() && this.config.openaiKey) ||
           this.documentProvider) &&
         rows.length
       ) {
@@ -1222,7 +1248,7 @@ export class CallController extends EventEmitter {
     if (
       this.meetingService ||
       this.mode === "demo" ||
-      this.preferences.liveHelp === false ||
+      !this.liveHelpOn() ||
       (!this.config.openaiKey && !this.documentProvider) ||
       this.summaryJob ||
       this.engine.activeTimeMs() - this.lastSummaryMs < 180000

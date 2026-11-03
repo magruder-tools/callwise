@@ -1,0 +1,6 @@
+after relaunch, mic:1 row (0.5.0 marked it missing at launch; 0.5.2 handles it when read or backed up): { exists: true, missing: undefined }
+backup: saved
+playback of mic:1 -> This recording is no longer available.
+backup during delete: saved (audio pieces saved as missing: 3)
+deleteMeeting() blocked the calling thread for 3 ms during the backup (wal_checkpoint(TRUNCATE) waits for busy_timeout) vs 3 ms without one
+(exit 0)

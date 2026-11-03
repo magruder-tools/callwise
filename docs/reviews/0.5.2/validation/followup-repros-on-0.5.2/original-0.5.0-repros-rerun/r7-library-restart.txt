@@ -1,0 +1,4 @@
+meetings in SQLite: 1
+History list (snapshot().library): [ 'Quarterly planning' ]
+svc.all('jobs'): 1 | store.all('jobs'): 1 | local-model calls for the queued recap: 0
+meeting still opens by id: Quarterly planning

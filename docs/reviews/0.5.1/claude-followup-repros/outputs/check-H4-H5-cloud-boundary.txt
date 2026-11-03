@@ -1,0 +1,10 @@
+notice: "I use Callwise to transcribe this conversation and help with my notes. Transcription happens on my Mac. I will keep the transcript and notes, without an audio recording. While live suggestions are on, conversation text is sent to OpenAI through my configured service for live assistance. Is everyone comfortable with that?"
+H5 context material from the prior meeting: ["Summary: pricing review planned\nDecision: keep the current tier\nConfirmed: send the deck"]
+H4 during the call: {
+  requests: 2,
+  kinds: [ 'Prepare a short call digest for general. All suppl' ],
+  runningSummaryOrRecap: 0,
+  sentinels: []
+}
+H4 after Pause -> End: { requests: 0, kinds: [], runningSummaryOrRecap: 0, sentinels: [] }
+(exit 0)

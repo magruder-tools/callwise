@@ -1,0 +1,4 @@
+files in meetings/ after Delete all: [ 'archive-key.bin', 'library.db', 'library.db-shm', 'library.db-wal' ] | MCP audit log present: false
+meeting rows in SQLite after Delete all: 0
+History right after Delete all: []
+No meeting left to open; empty state shown: true

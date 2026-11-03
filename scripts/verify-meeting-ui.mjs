@@ -71,6 +71,7 @@ const server = spawn(process.execPath, ["scripts/demo-server.mjs"], {
 const artifacts = "artifacts/meeting-ui";
 mkdirSync(artifacts, { recursive: true });
 let browser, page;
+let unlocks = 0;
 const failures = [];
 try {
   await Promise.race([
@@ -91,6 +92,12 @@ try {
     meetings: meetings.snapshot(),
   });
   await page.exposeBinding("meetingCommand", async (_source, name, p = {}) => {
+    if (name === "desktop.storage.unlock") {
+      unlocks++;
+      controller.engine.emitState();
+      return { unlocked: true, warnings: [] };
+    }
+    if (name === "desktop.updates.check") return null;
     if (name.startsWith("meeting.")) return meetings.command(name, p);
     if (name === "start")
       return startMeeting({ meetings, controller, payload: p });
@@ -143,6 +150,10 @@ try {
   await page.locator("#notice-confirmed").check();
   await page.locator('[data-action="m-confirm-start"]').click();
   await page.locator(".meeting-notes").waitFor();
+  assert.match(
+    await page.locator(".processing-status").innerText(),
+    /Notes only.*Audio recording: off.*Cloud coaching: off/s,
+  );
   await page
     .locator(".meeting-notes")
     .fill(
@@ -188,9 +199,43 @@ try {
   await capture("settings-assistants");
   await page.locator('[data-tab="Privacy"]').click();
   await capture("settings-privacy");
+  meetings.archiveOperation = {
+    kind: "restore",
+    phase: "Restoring records and audio",
+    total: 100,
+    completed: 40,
+  };
+  controller.engine.emitState();
+  await page.getByRole("progressbar", { name: "Backup restore" }).waitFor();
+  assert.equal(
+    await page.locator('[data-action="m-restore"]').isDisabled(),
+    true,
+  );
+  assert.equal(await page.getByRole("progressbar").getAttribute("value"), "40");
+  await capture("restore-progress");
+  meetings.archiveOperation = null;
+  controller.engine.emitState();
+  await page.locator('[data-tab="General"]').click();
+  await page.locator("#includePreviewUpdates").check();
+  assert.equal(controller.preferences.includePreviewUpdates, true);
+  await page.locator('[data-action="updates-check"]').click();
+  await page
+    .getByText("No newer release was found on your selected update channel.", {
+      exact: true,
+    })
+    .waitFor();
+  await page.evaluate(
+    (s) =>
+      window.pushMeeting({ ...s, meetings: { ...s.meetings, locked: true } }),
+    snapshot(),
+  );
+  await page.locator('[data-action="storage-unlock"]').click();
+  await page.getByText(/Saved data unlocked/).waitFor();
+  assert.equal(unlocks, 1);
+  assert.equal(await page.locator('[data-action="storage-unlock"]').count(), 0);
   assert.deepEqual(failures, []);
   console.log(
-    "Meeting UI passed: participant gate, notes autosave, live transcript, local recap/actions, evidence navigation, responsive layout, encrypted history search and settings. Synthetic data only.",
+    "Meeting UI passed: participant gate, notes autosave, live transcript, local recap/actions, evidence navigation, responsive layout, encrypted history search, processing labels, restore progress, update settings and explicit storage retry. Synthetic data only.",
   );
 } finally {
   page = null;

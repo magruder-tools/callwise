@@ -1,0 +1,7 @@
+initialize 2025-06-18: 2025-06-18
+search 'alpha': []
+meeting_list after a new meeting is saved: []
+search 'bravo' in the same MCP session: []
+legacy tools/call with _meta.progressToken: {"meetings":[],"nextCursor":null}
+initialize 2024-11-05: 2025-11-25
+initialize 2025-12-31: 2025-11-25

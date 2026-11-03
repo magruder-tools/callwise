@@ -1,0 +1,15 @@
+{
+  "version": "0.5.2",
+  "minimum_macos": "26.0",
+  "runtime_files_compared": 81,
+  "runtime_mismatches": [],
+  "package_metadata": "matches source after standard removal of scripts, build, devDependencies",
+  "extracted_archive_strict_deep_signature": "passed",
+  "archive_bytes": 280531537,
+  "archive_sha256": "cf432ca33158da5b8337bd091800efd11196ca210c319523f7f186a86d9fbb74",
+  "signature_type": "ad-hoc development; not notarized",
+  "includes_additional_fix": "Flush pending or in-flight notes before resolving an objection",
+  "tests_data": "synthetic only",
+  "installed_app_replaced": false,
+  "real_user_library_opened": false
+}

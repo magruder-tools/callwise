@@ -1,0 +1,22 @@
+npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+npm warn deprecated rimraf@2.6.3: Rimraf versions prior to v4 are no longer supported
+npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+npm warn deprecated boolean@3.2.0: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+
+added 333 packages in 1s
+  • electron-builder  version=26.15.3 os=27.2.0
+  • loaded configuration  file=package.json ("build" field)
+  • executing @electron/rebuild  electronVersion=44.2.0 arch=arm64 buildFromSource=false workspaceRoot=<temporary-build> projectDir=./ appDir=./
+  • installing native dependencies  arch=arm64
+  • completed installing native dependencies
+  • packaging       platform=darwin arch=arm64 electron=44.2.0 appOutDir=release/mac-arm64
+  • downloaded      label=electron progress=100%
+  • downloaded electron zip extracted successfully  output=<temporary-build>/release/mac-arm64
+  • searching for node modules  pm=npm searchDir=<temporary-build>
+  • duplicate dependency references  dependencies=["debug@4.4.3","debug@4.4.3"]
+  • ad-hoc signing with hardenedRuntime enabled requires the com.apple.security.cs.disable-library-validation entitlement to prevent app launch failures due to library validation. See https://electron.build/code-signing for details.
+  • executing custom sign  file=release/mac-arm64/Callwise.app platform=darwin type=distribution identityName=- identityHash=none provisioningProfile=none
+Development signature only; this build is not a stable-identity release.
+  • skipped macOS notarization  reason=`notarize` options were unable to be generated
+Local app: <temporary-build>/release/mac-arm64/Callwise.app
+Archive: <repository>/release/local-0.5.2/Callwise-0.5.2-Apple-Silicon.zip

@@ -1,0 +1,7 @@
+host epochs: 1, 1, 2
+text of mic:e2:0 right after the resumed volatile result: undefined
+transcript rows:
+  mic:e1:0:run:94b22219-fbf7-4b17-accf-ee82e3721faa => Alpha: said before the helper restarted.
+  mic:e1:0:run:1ac59413-4b6e-478a-be58-1200697feca0 => Bravo: said after the restart, before pausing.
+  mic:e2:0:run:f5a34468-d174-4c01-b32b-dde930e793d3 => Charlie: said after resuming.
+Bravo still present: true

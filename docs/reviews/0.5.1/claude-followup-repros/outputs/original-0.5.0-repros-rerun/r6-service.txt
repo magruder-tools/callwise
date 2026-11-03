@@ -1,0 +1,18 @@
+== 1. Delete all Callwise data (store-level loop from desktop/main.mjs) leaves content in the running service
+  rows left in SQLite: 0 + 0 segments
+  History list still shows: [ 'Confidential salary talk' ] | open meeting transcript: [ 'My current salary is 180k.' ]
+  after editing the title, SQLite has the meeting header again: true { title: 'Renamed', people: [ 'Dana Lee' ] }
+== 2. The first recap becomes a hidden draft if notes are typed while it is generated
+  recap: present | recap:draft: missing | actions: 1 | title: Pricing decision
+== 3. A suggested owner is stored as the supporting quote, not a person
+  owner: {"name":"Dana","evidence":"I will send the proposal","confirmed":false} | due: {"text":"on Friday","date":null,"confirmed":false,"inferred":false}
+== 4. begin() accepts a notes-only meeting with audio as the source, and accepts caller-supplied preferences
+  notes-only header: { notice: null, captureMode: 'notes-only' } | engine: running audio
+  notice accepted for defaults while real preferences are {"activeSheetId":"f57c6895-2a4e-413b-b269-7f5f79746c5b","liveHelp":true,"retainAudio":true,"speechEngine":"openai"} -> "I use Callwise to transcribe this conversation and help with my notes. Transcription happens on my Mac. I will keep the transcript and notes, without an audio recording. Is everyone comfortable with that?"
+== 5. 'Ask your meeting history' runs the local model over every segment of the top 5 meetings
+  5 meetings x 700 rows -> 69 chunks, 137 sequential local-model calls for one question (each spawns callwise-native llm)
+== 6. Pause, then End while the pause is still draining: End is ignored
+  status after End: ended
+== 7. Read-only open after the app closed (no -wal/-shm files): MCP/search path
+  files after app close: library.db
+  read-only open ok, title: Closed library

@@ -1,0 +1,21 @@
+before objection: {
+  title: 'Vendor negotiation',
+  notes: 'My own notes: walk-away price 35k, ask for 3-year term',
+  actions: [ 'Email legal about the term sheet' ],
+  segments: 1
+}
+after 'Delete transcript and audio': {
+  meeting: 'Vendor negotiation',
+  captureDeleted: true,
+  notes: 'My own notes: walk-away price 35k, ask for 3-year term',
+  actions: [ 'Email legal about the term sheet' ],
+  segments: 0
+}
+continuation meeting: {
+  title: 'Vendor negotiation',
+  people: [ 'Dana' ],
+  notes: 'My own notes: walk-away price 35k, ask for 3-year term',
+  actions: [ 'Email legal about the term sheet' ]
+}
+objected meeting still listed separately: false
+(exit 0)

@@ -1,0 +1,4 @@
+this version opens the 0.5.0 library: [ 'Migrated sheet', 'Recorded in 0.5.0' ] | segment: Old transcript line. | audio: old audio
+header record version before/after an edit: 1 -> 2
+CWBACKUP2 of the upgraded library restores: [ 'Migrated sheet', 'Edited after the upgrade' ] | audio: old audio
+(exit 0)

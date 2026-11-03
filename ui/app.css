@@ -1274,3 +1274,20 @@ body.panel .card-region {
 .drop-zone .chip > span {
   min-width: 0;
 }
+
+.processing-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 10px 0;
+  color: var(--muted, #9ba6b4);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.processing-status span {
+  overflow-wrap: anywhere;
+}
+.processing-status-compact {
+  padding: 0;
+  font-size: 11px;
+}

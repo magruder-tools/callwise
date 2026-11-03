@@ -27,6 +27,55 @@ export function chunksForModel(rows, budget = 6500) {
   if (current.length) chunks.push(current);
   return chunks;
 }
+// "You" is the user; "Them", "Speaker 2" and similar labels aren't a person to assign work to.
+const namedSpeaker = (label) =>
+  typeof label === "string" &&
+  label.trim() &&
+  !/^(them|other|transcription gap|speaker\s*\d+)$/i.test(label.trim())
+    ? label.trim()
+    : null;
+// The on-device model sees short evidence aliases (s1, s2, ...) instead of long run-scoped segment IDs;
+// they cost fewer tokens and are easier to copy exactly. Results are mapped back before validation.
+export function evidenceAliases(rows) {
+  const toAlias = new Map(),
+    toId = new Map();
+  for (const r of evidenceRows(rows))
+    if (!toAlias.has(r.id)) {
+      const alias = `s${toAlias.size + 1}`;
+      toAlias.set(r.id, alias);
+      toId.set(alias, r.id);
+    }
+  const id = (v) =>
+    typeof v === "string"
+      ? toId.get(v.trim()) || (toAlias.has(v.trim()) ? v.trim() : v)
+      : v;
+  const ids = (list) => (Array.isArray(list) ? list.map(id) : list);
+  const item = (v) =>
+    v && typeof v === "object"
+      ? {
+          ...v,
+          ...(v.segmentIds ? { segmentIds: ids(v.segmentIds) } : {}),
+          ...(v.refs ? { refs: ids(v.refs) } : {}),
+        }
+      : v;
+  return {
+    alias: (realId) => toAlias.get(realId) || realId,
+    restore: (value = {}) =>
+      value && typeof value === "object"
+        ? {
+            ...value,
+            ...Object.fromEntries(
+              ["summary", "decisions", "openQuestions", "actions"]
+                .filter((k) => Array.isArray(value[k]))
+                .map((k) => [k, value[k].map(item)]),
+            ),
+            ...(value.answerSegmentIds
+              ? { answerSegmentIds: ids(value.answerSegmentIds) }
+              : {}),
+          }
+        : value,
+  };
+}
 export function validateDocument(value = {}, rows) {
   const evidence = new Map(evidenceRows(rows).map((r) => [r.id, r]));
   const refs = (v) =>
@@ -74,11 +123,13 @@ export function validateDocument(value = {}, rows) {
             name:
               quote("ownerQuote") &&
               /\bI(?:'ll| will| am going to)\b/i.test(quote("ownerQuote"))
-                ? evidence.get(
-                    ids.find((id) =>
-                      evidence.get(id).text.includes(quote("ownerQuote")),
-                    ),
-                  )?.speaker || null
+                ? namedSpeaker(
+                    evidence.get(
+                      ids.find((id) =>
+                        evidence.get(id).text.includes(quote("ownerQuote")),
+                      ),
+                    )?.speaker,
+                  )
                 : quote("ownerQuote") &&
                     /^[\p{Lu}][\p{L}'-]+(?: [\p{Lu}][\p{L}'-]+){0,3}$/u.test(
                       quote("ownerQuote"),
@@ -218,7 +269,11 @@ export class LocalDocuments {
         return extractiveDocument(rows);
       }
     }
-    const chunks = chunksForModel(rows);
+    const aliases = evidenceAliases(rows);
+    // Chunks are sized with the short aliases the model will actually see.
+    const chunks = chunksForModel(
+      rows.map((r) => ({ ...r, id: aliases.alias(r.id) })),
+    );
     if (!chunks.length) return extractiveDocument(rows);
     const partials = [];
     try {
@@ -237,7 +292,7 @@ export class LocalDocuments {
           { prompt },
           { timeout: 60000, signal },
         );
-        partials.push(validateDocument(result, rows));
+        partials.push(validateDocument(aliases.restore(result), rows));
       }
       // Bounded hierarchical merges retain references to original transcript IDs.
       let level = partials;
@@ -256,20 +311,21 @@ export class LocalDocuments {
             sections: pair.map((section) => ({
               summary: section.summary.slice(0, 8).map((b) => ({
                 text: b.text.slice(0, 240),
-                segmentIds: b.refs.slice(0, 6),
+                segmentIds: b.refs.slice(0, 6).map(aliases.alias),
               })),
               decisions: section.decisions.slice(0, 5).map((b) => ({
                 text: b.text.slice(0, 240),
-                segmentIds: b.refs.slice(0, 6),
+                segmentIds: b.refs.slice(0, 6).map(aliases.alias),
               })),
               openQuestions: section.openQuestions.slice(0, 5).map((b) => ({
                 text: b.text.slice(0, 240),
-                segmentIds: b.refs.slice(0, 6),
+                segmentIds: b.refs.slice(0, 6).map(aliases.alias),
               })),
               actions: section.actions.slice(0, 10).map((a) => ({
                 text: a.text.slice(0, 200),
-                segmentIds: a.refs.slice(0, 6),
-                ownerQuote: a.owner?.name || "",
+                segmentIds: a.refs.slice(0, 6).map(aliases.alias),
+                // Merges re-validate quotes against the transcript, so pass the quote, not the derived name.
+                ownerQuote: a.owner?.evidence || a.owner?.name || "",
                 dueQuote: a.due?.text || "",
               })),
             })),
@@ -279,7 +335,7 @@ export class LocalDocuments {
             { prompt },
             { timeout: 60000, signal },
           );
-          next.push(validateDocument(combined, rows));
+          next.push(validateDocument(aliases.restore(combined), rows));
         }
         level = next;
       }

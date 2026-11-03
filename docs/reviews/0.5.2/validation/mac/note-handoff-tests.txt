@@ -1,0 +1,14 @@
+✔ objection keep preserves queued note edits (saved) (24.760084ms)
+✔ objection keep preserves queued note edits (without saving) (2.865667ms)
+✔ objection delete preserves queued note edits (saved) (8.58375ms)
+✔ objection delete preserves queued note edits (without saving) (2.923791ms)
+✔ objection deletion waits for an in-flight note save before copying the notes (678.010208ms)
+✔ a failed note save blocks objection deletion and keeps the original meeting recoverable (11.283542ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 771.445667

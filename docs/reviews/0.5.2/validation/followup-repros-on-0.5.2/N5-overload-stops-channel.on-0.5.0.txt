@@ -1,0 +1,4 @@
+helper processes started: 2
+packets delivered after the single overload line: { mic: 30, system: 30 } (20 pushed per channel)
+capture status: { mic: 'receiving', system: 'receiving' } | error: []
+Retry audio would do nothing

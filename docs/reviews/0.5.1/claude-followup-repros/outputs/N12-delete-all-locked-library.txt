@@ -1,0 +1,4 @@
+library at launch: The meeting key cannot be unlocked; it has not been replaced.
+meetings/ after Delete all: [ 'archive-key.bin', 'library.db' ]
+meetings after a later launch: [ 'Private salary talk' ]
+(exit 0)

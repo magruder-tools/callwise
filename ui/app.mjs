@@ -103,6 +103,7 @@ function receive(s) {
     ui.transcript = false;
     ui.coverage = false;
     ui.prep = false;
+    ui.notebookTab = undefined;
   }
   if (s.status === "ended" && lastStatus !== "ended") ui.screen = "recap";
   if (s.status === "running" && lastStatus !== "running") ui.notice = "";
@@ -489,6 +490,17 @@ async function act(action, node) {
     case "help":
       await command("nudge");
       break;
+    case "deep-help":
+      await command("ask", {
+        lane: "strategy",
+        question: field("question") || "Give me deeper advice on the latest question or decision, using my actual context.",
+      });
+      break;
+    case "coach-latest": {
+      const history = root.querySelector(".coaching-history");
+      history?.scrollTo({ top: history.scrollHeight, behavior: "smooth" });
+      break;
+    }
     case "previous":
     case "next":
       navigate(action);
@@ -655,8 +667,9 @@ async function act(action, node) {
       break;
     case "reset-models":
       await command("desktop.connections.save", {
-        fastModel: "gpt-5.6-luna",
-        strategyModel: "gpt-6-astra",
+        fastModel: "gpt-6-luna",
+        strategyModel: "gpt-6.1-sol",
+        autoLatestModels: true,
         transcriptionModel: "gpt-live-transcribe",
       });
       break;
@@ -751,10 +764,11 @@ root.addEventListener("change", (e) => {
   } else if (node.dataset.model) {
     void command("desktop.connections.save", {
       [node.dataset.model]: node.value,
+      ...(node.dataset.model !== "transcriptionModel" ? { autoLatestModels: false } : {}),
     }).catch(() => {});
   } else if (node.dataset.connection) {
     void command("desktop.connections.save", {
-      [node.dataset.connection]: node.value,
+      [node.dataset.connection]: node.type === "checkbox" ? node.checked : node.value,
     })
       .then(() => {
         if (node.id === "mcpToken") node.value = "";

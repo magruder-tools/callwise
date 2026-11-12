@@ -97,7 +97,22 @@ export function renderRegions(root, html) {
     transcript.scrollHeight - transcript.clientHeight - transcript.scrollTop <
       8;
   const scroll = transcript?.scrollTop;
+  const history = root.querySelector(".coaching-history");
+  const following = !history ||
+    history.scrollHeight - history.clientHeight - history.scrollTop < 72;
+  const historyScroll = history?.scrollTop || 0;
+  const lastId = history?.querySelector("[data-card-id]:last-of-type")?.dataset.cardId;
   children(root, template.content);
   const current = root.querySelector(".transcript-inline");
   if (current) current.scrollTop = pinned ? current.scrollHeight : scroll;
+  const currentHistory = root.querySelector(".coaching-history");
+  if (currentHistory) {
+    if (following) {
+      const newId = currentHistory.querySelector("[data-card-id]:last-of-type")?.dataset.cardId;
+      const reduceMotion = root.ownerDocument.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      if (history && lastId !== newId && !reduceMotion && currentHistory.scrollTo)
+        currentHistory.scrollTo({ top: currentHistory.scrollHeight, behavior: "smooth" });
+      else currentHistory.scrollTop = currentHistory.scrollHeight;
+    } else currentHistory.scrollTop = historyScroll;
+  }
 }

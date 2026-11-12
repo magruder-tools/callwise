@@ -54,6 +54,7 @@ import { CodexProvider } from "../providers/codex.mjs";
 import { Diagnostics } from "./diagnostics.mjs";
 import { SessionShortcuts } from "./shortcuts.mjs";
 import { execFile } from "node:child_process";
+import { Worker } from "node:worker_threads";
 import { readSheets, saveSheets } from "../core/call-sheets.mjs";
 import { recapMarkdown } from "../core/preparation.mjs";
 import { runSelfTest } from "./self-test.mjs";
@@ -76,6 +77,7 @@ import { AppleSpeechSession } from "../providers/apple-speech.mjs";
 import { createMeetingCommands } from "./meeting-commands.mjs";
 import { recoverRestoreSwap } from "./library-restore.mjs";
 import { retrySavedData } from "./storage-recovery.mjs";
+import { FolderArchive } from "./folder-archive.mjs";
 
 const headlessMcp = process.argv.includes("--mcp-server");
 if (!headlessMcp) configureAudioBackend(app.commandLine);
@@ -91,6 +93,9 @@ const DEFAULT_PREFERENCES = Object.freeze({
   liveHelp: false,
   retainAudio: false,
   meetingMcpEnabled: false,
+  driveArchiveEnabled: false,
+  iCloudArchiveEnabled: false,
+  iCloudArchiveFolder: "",
   meetingRetentionDays: 0,
   audioRetentionDays: 30,
   includePreviewUpdates: buildMetadata.releaseChannel === "preview",
@@ -172,6 +177,9 @@ async function boot() {
       preferencesWarning = error.message;
     }
   preferences = { ...DEFAULT_PREFERENCES, ...preferences };
+  // The previous preview's external AI uploader is retired. New iCloud
+  // exports are opt-in and use the folder explicitly chosen in Settings.
+  preferences.driveArchiveEnabled = false;
   if (meetingStore)
     meetingStore.prune({
       meetingDays: preferences.meetingRetentionDays,
@@ -180,8 +188,8 @@ async function boot() {
   let speechSession;
   const baseConfig = smoke
     ? {
-        fastModel: "gpt-5.6-luna",
-        strategyModel: "gpt-6-astra",
+        fastModel: "gpt-6-luna",
+        strategyModel: "gpt-6.1-sol",
         transcriptionModel: "gpt-live-transcribe",
       }
     : app.isPackaged
@@ -317,6 +325,70 @@ async function boot() {
     meetings.attach(controller);
     meetings.migrateSheets(sheets);
   }
+  const folderArchive = meetings
+    ? new FolderArchive({
+        meetings,
+        native,
+        directory: path.join(dataDir, "folder-archive-jobs"),
+        prepareJob: async (meetingId, stage, signal) => {
+          const store = meetings.store;
+          if (!store || signal.aborted) throw new Error("Export cancelled.");
+          store.backupStarted();
+          try {
+            return await new Promise((resolve, reject) => {
+              const worker = new Worker(
+                new URL("./workers/folder-export-worker.mjs", import.meta.url),
+                {
+                  workerData: {
+                    directory: store.directory,
+                    key: store.key,
+                    keyId: store.keyId,
+                    meetingId,
+                    stage,
+                  },
+                },
+              );
+              let replied = false;
+              const stop = () =>
+                void worker
+                  .terminate()
+                  .finally(() => reject(new Error("Export cancelled.")));
+              signal.addEventListener("abort", stop, { once: true });
+              const timer = setTimeout(stop, 10 * 60000);
+              const clean = () => {
+                clearTimeout(timer);
+                signal.removeEventListener("abort", stop);
+              };
+              worker.once("message", (value) => {
+                replied = true;
+                clean();
+                value.error
+                  ? reject(new Error(value.error))
+                  : resolve(value.result);
+              });
+              worker.once("error", () => {
+                clean();
+                reject(new Error("Meeting export could not finish."));
+              });
+              worker.once("exit", (code) => {
+                clean();
+                if (code !== 0 || !replied)
+                  reject(new Error("Meeting export stopped."));
+              });
+            });
+          } finally {
+            store.backupFinished();
+          }
+        },
+      })
+    : null;
+  folderArchive?.on("status", (value) => {
+    controller.desktopState.folderArchive = value;
+    controller.engine.emitState();
+  });
+  setImmediate(() => folderArchive?.resume());
+  powerMonitor.on("resume", () => folderArchive?.resume());
+  app.on("will-quit", () => folderArchive?.close());
   const meetingCommands = createMeetingCommands({
     meetings,
     native,
@@ -597,7 +669,7 @@ async function boot() {
     if (state.status !== windowStatus) {
       if (state.status === "running" && !smoke) {
         win.showInactive();
-        if (state.preferences.liveHelp) panel.showInactive();
+        // Live coaching is part of the main meeting window. The floating panel is explicit.
       }
       if (state.status === "ended") {
         panel.hide();
@@ -767,6 +839,48 @@ async function boot() {
       throw new Error(
         "Wait for the restore to finish before changing the library or starting a meeting.",
       );
+    if (meetings && name === "desktop.meeting.archive.choose") {
+      if (["running", "paused", "finishing"].includes(controller.engine.status))
+        throw new Error(
+          "End the meeting before changing its archive destination.",
+        );
+      const picked = await dialog.showOpenDialog(win, {
+        title: "Choose your iCloud Drive archive folder",
+        defaultPath:
+          controller.preferences.iCloudArchiveFolder ||
+          path.join(
+            app.getPath("home"),
+            "Library/Mobile Documents/com~apple~CloudDocs",
+          ),
+        properties: ["openDirectory", "createDirectory"],
+      });
+      if (picked.canceled || !picked.filePaths?.[0]) return { cancelled: true };
+      await controller.command("configure", {
+        iCloudArchiveFolder: picked.filePaths[0],
+      });
+      return { folder: picked.filePaths[0] };
+    }
+    if (meetings && name === "desktop.meeting.archive.retry") {
+      folderArchive?.resume();
+      return { queued: true };
+    }
+    if (meetings && name === "desktop.meeting.archive.open") {
+      const archived = meetings.get(
+        "meetings",
+        payload.meetingId || meetings.selectedId,
+      )?.folderArchived;
+      if (!archived?.folder || !path.isAbsolute(archived.folder))
+        throw new Error("No completed iCloud archive is available yet.");
+      shell.showItemInFolder(path.join(archived.folder, "manifest.json"));
+      return { opened: true };
+    }
+    if (
+      name === "configure" &&
+      payload.iCloudArchiveEnabled === true &&
+      !controller.preferences.iCloudArchiveFolder &&
+      !payload.iCloudArchiveFolder
+    )
+      throw new Error("Choose the iCloud Drive archive folder first.");
     if (meetings && name.startsWith("desktop.meeting.")) {
       if (name === "desktop.meeting.coach") {
         if (!controller.preferences.liveHelp)
@@ -790,6 +904,9 @@ async function boot() {
         "preferredSource",
         "language",
         "meetingMcpEnabled",
+        "driveArchiveEnabled",
+        "iCloudArchiveEnabled",
+        "iCloudArchiveFolder",
       ].some(
         (key) =>
           payload[key] !== undefined &&
@@ -848,6 +965,7 @@ async function boot() {
         throw new Error("Pause the session before changing connections.");
       saved = saveConnections(vault, safeStorage, payload);
       const next = applyConnections(saved);
+      await controller.refreshModels();
       controller.engine.emitState();
       return {
         saved: true,
@@ -861,6 +979,7 @@ async function boot() {
     if (name === "desktop.connections.test") {
       if (smoke || controller.engine.status === "running")
         throw new Error("Pause the call before testing AI.");
+      await controller.refreshModels();
       const results = await runSelfTest(controller.config);
       readiness.aiSignature =
         results.length === 4 && results.every((r) => r.ok)
@@ -1052,6 +1171,7 @@ async function boot() {
         throw new Error(
           "Wait for the encrypted backup to finish before deleting data.",
         );
+      await folderArchive?.cancelAll();
       endSound(false);
       controller.cancelDocuments();
       controller.close();

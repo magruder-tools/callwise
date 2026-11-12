@@ -27,6 +27,7 @@ export function sanitizePreferences(patch, previous = {}) {
     language: 35,
     noticeWording: 2000,
     activeSheetId: 200,
+    iCloudArchiveFolder: 4096,
   })) {
     if (merged[key] === undefined) continue;
     if (typeof merged[key] !== "string")
@@ -46,6 +47,8 @@ export function sanitizePreferences(patch, previous = {}) {
     "liveHelp",
     "retainAudio",
     "meetingMcpEnabled",
+    "driveArchiveEnabled",
+    "iCloudArchiveEnabled",
     "includePreviewUpdates",
   ]) {
     if (merged[key] === undefined) continue;

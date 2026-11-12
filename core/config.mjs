@@ -14,8 +14,10 @@ export function readConfig(paths = [], { environment = process.env } = {}) {
   }
   return {
     openaiKey: env.OPENAI_API_KEY || "",
-    fastModel: env.CALLWISE_FAST_MODEL || "gpt-5.6-luna",
-    strategyModel: env.CALLWISE_STRATEGY_MODEL || "gpt-6-astra",
+    fastModel: env.CALLWISE_FAST_MODEL || "gpt-6-luna",
+    strategyModel: env.CALLWISE_STRATEGY_MODEL || "gpt-6.1-sol",
+    autoLatestModels: !env.CALLWISE_FAST_MODEL && !env.CALLWISE_STRATEGY_MODEL,
+    serviceTier: env.CALLWISE_SERVICE_TIER === "fast" ? "fast" : "default",
     transcriptionModel:
       env.CALLWISE_TRANSCRIPTION_MODEL || "gpt-live-transcribe",
     codexBin: resolveCodexBin(env.CALLWISE_CODEX_BIN),
@@ -36,6 +38,9 @@ export function publicConfig(config) {
     mcpReady: !!(config.mcpUrl && config.mcpSearchTool),
     fastModel: config.fastModel,
     strategyModel: config.strategyModel,
+    autoLatestModels: config.autoLatestModels === true,
+    serviceTier: config.serviceTier || "default",
+    modelUpdateWarning: config.modelUpdateWarning || "",
     transcriptionModel: config.transcriptionModel,
     codexEffort: config.codexEffort,
   };

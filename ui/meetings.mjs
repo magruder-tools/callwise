@@ -536,6 +536,17 @@ export function createMeetingUi({
           format: action === "m-export-json" ? "json" : "markdown",
         });
         break;
+      case "m-archive-open":
+        await meetingCommand("desktop.meeting.archive.open", {
+          meetingId: m.id,
+        });
+        break;
+      case "m-archive-choose":
+        await command("desktop.meeting.archive.choose");
+        break;
+      case "m-archive-retry":
+        await command("desktop.meeting.archive.retry");
+        break;
       case "m-play":
         await play(Number(node.dataset.start) || 0);
         break;
@@ -637,6 +648,10 @@ export function createMeetingUi({
         render();
         break;
       case "m-coach":
+        ui.notebookTab = "coach";
+        render();
+        break;
+      case "m-coach-floating":
         await command("desktop.meeting.coach");
         break;
     }

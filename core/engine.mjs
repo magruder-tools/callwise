@@ -34,6 +34,8 @@ export class CoachEngine extends EventEmitter {
       fastDelay: 0,
       strategyDelay: 0,
       fastCooldown: 0,
+      turnPauseMs: 0,
+      speculatePartials: true,
       strategyCooldown: 120000,
       fastTTL: 30000,
       strategyTTL: 150000,
@@ -66,6 +68,8 @@ export class CoachEngine extends EventEmitter {
     this.answered = new Map();
     this.rate = { tokens: 3, at: this.clock(), requests: [] };
     this.speculation = null;
+    this.pendingTurnRows = new Map();
+    this.pendingSpeech = new Set();
     this.autoQueue = [];
     this.lastBackground = this.clock();
     this.lastSlow = -Infinity;
@@ -226,6 +230,8 @@ export class CoachEngine extends EventEmitter {
     this.inflight = {};
     this.autoQueue = [];
     this.speculation = null;
+    this.pendingTurnRows?.clear();
+    this.pendingSpeech?.clear();
   }
   ingest(segment, { drain = false } = {}) {
     const draining =
@@ -301,6 +307,14 @@ export class CoachEngine extends EventEmitter {
       return true;
     }
     const own = isOwnTurn(row, this.settings.userName);
+    if (this.config.turnPauseMs > 0) {
+      if (!own && !row.gap) this.queueTurn(row);
+      else if (own && !isBackchannel(row.text)) {
+        clearTimeout(this.timers.turn);
+        this.pendingTurnRows.clear();
+        this.pendingSpeech.clear();
+      }
+    }
     if (own && this.userSpeechAt === null) this.userSpeechAt = this.clock();
     if (row.final) {
       this.revision++;
@@ -316,6 +330,7 @@ export class CoachEngine extends EventEmitter {
           this.slowEligibleTurns++;
         const active = this.activeTimeMs();
         if (
+          !this.config.turnPauseMs &&
           active >= 240000 &&
           active - (this.slowActiveAt || 0) >= 240000 &&
           this.slowEligibleTurns - this.slowTurns >= 6 &&
@@ -360,9 +375,10 @@ export class CoachEngine extends EventEmitter {
           this.speculation = null;
           this.consider(row, true);
         }
-      } else this.consider(row);
+      } else if (!this.config.turnPauseMs) this.consider(row);
     } else if (
       !this.settings.quiet &&
+      this.config.speculatePartials &&
       this.config.autoCoach &&
       completePartial(row, this.settings.mode, this.settings.userName)
     ) {
@@ -381,6 +397,53 @@ export class CoachEngine extends EventEmitter {
     }
     this.emitState();
     return true;
+  }
+  queueTurn(row) {
+    clearTimeout(this.timers.turn);
+    clearTimeout(this.timers.background);
+    if (!this.config.autoCoach || this.settings.quiet) return;
+    if (!row.final) {
+      this.pendingSpeech.add(row.id);
+      return;
+    }
+    this.pendingSpeech.delete(row.id);
+    for (const id of this.pendingSpeech)
+      if (!this.transcript.has(id)) this.pendingSpeech.delete(id);
+    this.pendingTurnRows.set(row.id, row);
+    if (this.pendingSpeech.size) return;
+    this.timers.turn = setTimeout(() => {
+      delete this.timers.turn;
+      if (this.status !== "running" || this.pendingSpeech.size) return;
+      const rows = [...this.pendingTurnRows.values()];
+      this.pendingTurnRows.clear();
+      if (!rows.length) return;
+      const last = rows.at(-1);
+      this.consider({
+        ...last,
+        startMs: rows[0].startMs,
+        text: rows.map((r) => r.text).join(" "),
+      });
+      const active = this.activeTimeMs();
+      if (active >= 240000 && active - this.slowActiveAt >= 240000 &&
+          this.slowEligibleTurns - this.slowTurns >= 6 &&
+          !this.inflight.strategy && !this.settings.quiet) {
+        this.slowActiveAt = active;
+        this.slowTurns = this.slowEligibleTurns;
+        void this.run("strategy", "", {
+          trigger: this.triggerFor(last), triggerKind: "cadence",
+        }).catch((error) => this.error(error));
+      }
+    }, this.config.turnPauseMs);
+    this.timers.turn.unref?.();
+  }
+  discardPartials(ids) {
+    for (const id of ids) {
+      if (this.transcript.get(id)?.final) continue;
+      this.transcript.delete(id);
+      this.pendingSpeech.delete(id);
+    }
+    if (!this.pendingSpeech.size && this.pendingTurnRows.size)
+      this.queueTurn([...this.pendingTurnRows.values()].at(-1));
   }
   triggerFor(row) {
     return row
@@ -583,6 +646,9 @@ export class CoachEngine extends EventEmitter {
       );
     }
     if (explicit) {
+      clearTimeout(this.timers.turn);
+      this.pendingTurnRows.clear();
+      this.pendingSpeech.clear();
       for (const [key, job] of Object.entries(this.inflight))
         if (job.origin === "auto" || key === lane) {
           job.controller.abort();

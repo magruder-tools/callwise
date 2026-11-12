@@ -28,12 +28,14 @@ export async function runSelfTest(
   const check = async (label, fn) => {
     const at = clock();
     try {
-      await fn();
+      const receipt = await fn();
       results.push({
         label,
         ok: true,
         elapsedMs: clock() - at,
-        detail: "Passed",
+        detail: receipt?.model
+          ? `${receipt.model} · ${["fast", "priority"].includes(receipt.serviceTier) ? "Fast processing" : "Standard processing"}`
+          : "Passed",
       });
     } catch (error) {
       results.push({
@@ -67,6 +69,7 @@ export async function runSelfTest(
         apiKey: config.openaiKey,
         model,
         effort: "none",
+        serviceTier: config.serviceTier,
         fetchImpl,
         clock,
       });
@@ -82,6 +85,7 @@ export async function runSelfTest(
       });
       if (result.ok !== true)
         throw new Error("The model returned an unexpected test result.");
+      return { model: result.model, serviceTier: result.serviceTier };
     });
   await check("Live transcription", async () => {
     const transcriber = transcriberFactory({

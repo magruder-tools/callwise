@@ -4,6 +4,13 @@
   margin: auto;
   padding: 34px 36px 28px;
 }
+/* The ready shell has a fixed height; let the meeting form scroll inside it. */
+#app[data-view="ready"] .meeting-ready {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow-y: auto;
+}
 .eyebrow {
   font-size: 12px;
   font-weight: 650;

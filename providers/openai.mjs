@@ -2,7 +2,7 @@ import { COACH_SCHEMA, SLOW_SCHEMA } from "../core/prompts.mjs";
 import { partialAdvice, sseEvents } from "./stream-json.mjs";
 import { providerError, httpProviderError } from "./errors.mjs";
 export function modelOptions(model, effort = "none") {
-  if (/^gpt-(?:6-astra|6\.1-sol)(?:-|$)/.test(model || ""))
+  if (/^gpt-(?:6-astra|6\.\d+-sol|(?:[7-9]|\d{2,})(?:\.\d+)*-sol)(?:-|$)/.test(model || ""))
     return {
       reasoning: { effort: effort === "none" ? "low" : effort },
       verbosity: "low",
@@ -24,6 +24,7 @@ export class OpenAIProvider {
     apiKey,
     model,
     effort = "none",
+    serviceTier = "default",
     fetchImpl = fetch,
     firstTokenMs = 6000,
     clock = Date.now,
@@ -32,6 +33,7 @@ export class OpenAIProvider {
       apiKey,
       model,
       effort,
+      serviceTier,
       fetch: fetchImpl,
       firstTokenMs,
       clock,
@@ -81,6 +83,7 @@ export class OpenAIProvider {
             },
             body: JSON.stringify({
               model: this.model,
+              service_tier: this.serviceTier,
               instructions: prompt.instructions,
               input: prompt.input,
               store: false,
@@ -175,7 +178,11 @@ export class OpenAIProvider {
         throw new Error("OpenAI couldn't finish the answer. Try again.");
       if (!text) throw new Error("OpenAI did not return an answer.");
       try {
-        return { ...JSON.parse(text), usage: completed?.usage };
+        return {
+          ...JSON.parse(text), usage: completed?.usage,
+          model: completed?.model || this.model,
+          serviceTier: completed?.service_tier || this.serviceTier,
+        };
       } catch {
         throw new Error("OpenAI returned an unreadable answer.");
       }

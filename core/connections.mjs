@@ -27,6 +27,16 @@ export function sanitizeConnections(patch, previous = {}) {
   if (!patch || typeof patch !== "object" || Array.isArray(patch))
     throw new Error("Invalid connection settings.");
   const next = {};
+  const automatic = patch.autoLatestModels ?? previous.autoLatestModels;
+  if (automatic !== undefined) {
+    if (typeof automatic !== "boolean") throw new Error("Choose automatic model updates on or off.");
+    next.autoLatestModels = automatic;
+  }
+  const tier = patch.serviceTier ?? previous.serviceTier;
+  if (tier !== undefined) {
+    if (!["default", "fast"].includes(tier)) throw new Error("Choose Standard or Fast processing.");
+    next.serviceTier = tier;
+  }
   for (const name of [...KEYS, ...MODELS]) {
     const candidate =
       patch[name] === undefined || patch[name] === ""

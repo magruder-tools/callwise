@@ -180,8 +180,8 @@ async function boot() {
   let speechSession;
   const baseConfig = smoke
     ? {
-        fastModel: "gpt-5.6-luna",
-        strategyModel: "gpt-6-astra",
+        fastModel: "gpt-6-luna",
+        strategyModel: "gpt-6.1-sol",
         transcriptionModel: "gpt-live-transcribe",
       }
     : app.isPackaged
@@ -597,7 +597,7 @@ async function boot() {
     if (state.status !== windowStatus) {
       if (state.status === "running" && !smoke) {
         win.showInactive();
-        if (state.preferences.liveHelp) panel.showInactive();
+        // Live coaching is part of the main meeting window. The floating panel is explicit.
       }
       if (state.status === "ended") {
         panel.hide();
@@ -848,6 +848,7 @@ async function boot() {
         throw new Error("Pause the session before changing connections.");
       saved = saveConnections(vault, safeStorage, payload);
       const next = applyConnections(saved);
+      await controller.refreshModels();
       controller.engine.emitState();
       return {
         saved: true,
@@ -861,6 +862,7 @@ async function boot() {
     if (name === "desktop.connections.test") {
       if (smoke || controller.engine.status === "running")
         throw new Error("Pause the call before testing AI.");
+      await controller.refreshModels();
       const results = await runSelfTest(controller.config);
       readiness.aiSignature =
         results.length === 4 && results.every((r) => r.ok)

@@ -637,6 +637,10 @@ export function createMeetingUi({
         render();
         break;
       case "m-coach":
+        ui.notebookTab = "coach";
+        render();
+        break;
+      case "m-coach-floating":
         await command("desktop.meeting.coach");
         break;
     }

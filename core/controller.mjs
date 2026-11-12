@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { ContextRetrieval, shouldSearch } from "./retrieval.mjs";
 import { CoachEngine } from "./engine.mjs";
 import { publicConfig } from "./config.mjs";
+import { resolveLatestModels } from "./model-routing.mjs";
 import { sanitizePreferences } from "./preferences.mjs";
 import { CALL_DEFAULTS, DEMO_SETTINGS } from "./defaults.mjs";
 import { DemoProvider, DEMO_PREP } from "../providers/demo.mjs";
@@ -82,7 +83,10 @@ export class CallController extends EventEmitter {
     this.strategyBackend = "openai";
     this.generation = 0;
     this.pendingSearch = null;
-    this.engine = new CoachEngine({ diagnostics });
+    this.engine = new CoachEngine({
+      diagnostics,
+      config: { turnPauseMs: 1400, speculatePartials: false },
+    });
     this.engine.configure(this.preferences);
     const matchesDraft = (s) =>
       s.line === this.engine.settings.goal &&
@@ -136,6 +140,17 @@ export class CallController extends EventEmitter {
       ? this.preferences.liveHelp === true
       : this.preferences.liveHelp !== false;
   }
+  async refreshModels() {
+    // A call keeps its selected models. Only idle setup / the start boundary refreshes them.
+    if (["running", "paused", "finishing"].includes(this.engine.status)) return this.config;
+    const previous = this.config;
+    const next = await resolveLatestModels(previous);
+    if (this.config !== previous || this.closing) return this.config;
+    this.config = next;
+    this.setProviders();
+    this.engine.emitState();
+    return next;
+  }
   setProviders() {
     this.engine.providers =
       this.mode === "demo"
@@ -147,6 +162,7 @@ export class CallController extends EventEmitter {
                 ? new OpenAIProvider({
                     apiKey: this.config.openaiKey,
                     model: this.config.fastModel,
+                    serviceTier: this.config.serviceTier,
                   })
                 : this.codex,
               strategy:
@@ -155,7 +171,8 @@ export class CallController extends EventEmitter {
                   : new OpenAIProvider({
                       apiKey: this.config.openaiKey,
                       model: this.config.strategyModel,
-                      effort: "low",
+                      effort: "medium",
+                      serviceTier: this.config.serviceTier,
                     }),
             };
     this.engine.config.autoCoach =
@@ -325,7 +342,7 @@ export class CallController extends EventEmitter {
       costEstimate:
         this.mode === "demo"
           ? 0
-          : estimateCost(this.usage, this.preferences.prices),
+          : estimateCost(this.usage, this.preferences.prices, this.config.serviceTier),
       demoOnly: this.demoOnly,
       backend: this.strategyBackend,
       capture: { ...this.capture },
@@ -621,6 +638,8 @@ export class CallController extends EventEmitter {
     this.connecting = true;
     this.engine.emitState();
     try {
+      if (source !== "demo" && this.liveHelpOn()) await this.refreshModels();
+      if (generation !== this.generation) return this.snapshot();
       // Start immediately. An existing preparation may land once during the first two minutes.
       clearTimeout(this.prepTimer);
       this.prepTimer = null;
@@ -707,9 +726,7 @@ export class CallController extends EventEmitter {
               },
               onDiscard: (ids) => {
                 if (generation !== this.generation) return;
-                for (const id of ids)
-                  if (!this.engine.transcript.get(id)?.final)
-                    this.engine.transcript.delete(id);
+                this.engine.discardPartials(ids);
                 this.engine.emitState();
               },
               onStatus: (status, error) => {
@@ -965,6 +982,7 @@ export class CallController extends EventEmitter {
         apiKey: this.config.openaiKey,
         model: fast ? this.config.fastModel : this.config.strategyModel,
         effort: fast ? "none" : "low",
+        serviceTier: this.config.serviceTier,
       })
     );
   }

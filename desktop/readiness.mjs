@@ -17,6 +17,7 @@ export const keySignature = (config) =>
         config.fastModel,
         config.strategyModel,
         config.transcriptionModel,
+        config.serviceTier || "default",
       ].join("\0"),
     )
     .digest("hex");

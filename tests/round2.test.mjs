@@ -172,6 +172,8 @@ test("a delayed quiet check keeps the previous card unchanged", async (t) => {
       text: "Our team is working through the reporting details this week.",
     });
     assert.equal(c.engine.metrics.fastCalls, 0);
+    t.mock.timers.tick(1400);
+    assert.equal(c.engine.metrics.fastCalls, 0);
     t.mock.timers.tick(1200);
     assert.equal(c.engine.metrics.fastCalls, 1);
     assert.equal(card(c.snapshot(), ui), before);

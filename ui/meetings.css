@@ -358,6 +358,73 @@
   color: var(--mint);
   border-color: var(--mint);
 }
+/* A single meeting window owns coaching, with a stable, independently scrolling history. */
+.with-coaching .notebook-tabs { display: flex; flex-wrap: wrap; }
+.with-coaching .notebook-grid { grid-template-columns: minmax(0, 1fr); }
+.notebook-grid > .coaching-workspace { display: none; }
+.with-coaching .tab-coach > .notes-pane,
+.with-coaching .tab-coach > .transcript-pane,
+.with-coaching .tab-transcript > .notes-pane,
+.with-coaching .tab-notes > .transcript-pane { display: none; }
+.with-coaching .tab-coach > .coaching-workspace { display: flex; }
+.coaching-workspace { flex-direction: column; min-width: 0; min-height: 0; }
+.coaching-heading { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.coaching-heading > div { flex: 1; min-width: 180px; }
+.coaching-heading h2 { margin-bottom: 4px; font-size: 18px; }
+.coaching-heading p { margin-bottom: 12px; }
+.coaching-history {
+  overflow-y: auto;
+  overflow-anchor: none;
+  overscroll-behavior: contain;
+  height: max(220px, calc(100dvh - 385px));
+  min-height: 180px;
+  padding: 4px 10px 12px 2px;
+  scrollbar-gutter: stable;
+}
+.history-card { margin: 0 0 18px; padding: 22px 24px 18px; }
+.history-card .trigger { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.45; }
+.history-card .card-heading { gap: 18px; flex-wrap: wrap; }
+.history-card .lead { font-size: 22px; line-height: 1.4; font-weight: 450; color: var(--text); margin: 14px 0 20px; }
+.history-card .points { display: flex; flex-direction: column; list-style: disc; padding-left: 26px; gap: 14px; margin-bottom: 20px; }
+.history-card .points li { display: list-item; font-size: clamp(19px, 2.2vw, 26px); line-height: 1.35; font-weight: 750; }
+.history-card .points strong { display: inline; font-size: inherit; font-weight: inherit; color: var(--mint); }
+.history-card .points strong::after { content: " — "; }
+.history-card .points span { display: inline; color: var(--text); font-weight: inherit; }
+.history-card .card-footer { flex-wrap: wrap; gap: 8px; }
+.history-card .sources { flex: 1; min-width: 0; flex-wrap: wrap; }
+.deeper-card { border-color: #7fb7dc66; }
+.coaching-detail { font-size: 18px; line-height: 1.6; white-space: pre-line; }
+.coaching-pending, .empty-coaching { color: var(--muted); padding: 20px; line-height: 1.5; }
+.coaching-workspace > .ask-row { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+.coaching-workspace .ask-row > input { flex: 1; min-width: 180px; }
+#app[data-view="live"]:has(.show-coach) {
+  height: 100dvh; display: flex; flex-direction: column; overflow: hidden;
+}
+#app[data-view="live"]:has(.show-coach) > [data-region="live"] {
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+}
+#app:has(.show-coach) .app-header { flex-shrink: 0; }
+.notebook-view.show-coach {
+  flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column;
+  padding-bottom: 18px;
+}
+.show-coach > :not(.notebook-grid) { flex-shrink: 0; }
+.show-coach .meeting-toolbar { padding: 10px 0; }
+.show-coach .meeting-title-row { padding-top: 6px; }
+.show-coach .meeting-title-row > input { font-size: 21px; }
+.show-coach .meeting-title-row > p { display: none; }
+.show-coach .notice-receipt { padding-bottom: 8px; margin-bottom: 4px; }
+.show-coach .notebook-tabs { margin: 8px 0; padding-bottom: 7px; }
+.show-coach .coaching-heading { margin-bottom: 8px; }
+.show-coach .coaching-heading h2 { font-size: 16px; margin: 0; }
+.show-coach .coaching-heading p { display: none; }
+.show-coach .notebook-grid { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr); }
+.show-coach .coaching-history { flex: 1; height: auto; min-height: 70px; }
+@media (max-width: 600px) {
+  .history-card { padding: 18px 16px; }
+  .coaching-heading { gap: 8px; }
+  .coaching-history { height: max(220px, calc(100dvh - 430px)); }
+}
 .recap-heading {
   padding-top: 24px;
   border-top: 1px solid var(--line);

@@ -307,6 +307,11 @@ export class MeetingService extends EventEmitter {
         .slice(0, 3)
         .filter((p) => this.get("meetings", p)?.status === "ended"),
       liveHelp: preferences.liveHelp === true,
+      driveArchive: preferences.driveArchiveEnabled === true,
+      ...(preferences.iCloudArchiveEnabled === true &&
+      preferences.iCloudArchiveFolder
+        ? { iCloudArchive: { folder: preferences.iCloudArchiveFolder } }
+        : {}),
       assistantAccess:
         captureMode !== "notes-only" && preferences.meetingMcpEnabled === true,
       retainAudio:
@@ -477,7 +482,10 @@ export class MeetingService extends EventEmitter {
             if (!this.closed && this.get("meetings", id)) {
               this.invalidate();
               this.emit("state");
-              void this.generate(id, "recap");
+              void this.generate(id, "recap").finally(() => {
+                if (!this.closed && this.get("meetings", id))
+                  this.emit("archive.ready", id);
+              });
             }
           },
         );
@@ -853,10 +861,15 @@ export class MeetingService extends EventEmitter {
     this.emit("state");
     return saved;
   }
-  delete(id) {
+  delete(id, archiveCleared = false) {
     const m = this.get("meetings", id);
     if (!m || m.status !== "ended")
       throw new Error("End the meeting before deleting it.");
+    if (!archiveCleared && this.beforeArchiveDelete)
+      return Promise.resolve(this.beforeArchiveDelete(id)).then(() =>
+        this.delete(id, true),
+      );
+    this.emit("archive.cancel", id);
     for (const [key, controller] of this.jobs)
       if (key.startsWith(`${id}:`)) controller.abort();
     this.deletedMeetings.add(id);
@@ -901,6 +914,8 @@ export class MeetingService extends EventEmitter {
     const m = this.get("meetings", id);
     if (!m || m.status !== "ended")
       throw new Error("End the meeting before deleting what was captured.");
+    if (this.beforeArchiveDelete) await this.beforeArchiveDelete(id);
+    this.emit("archive.cancel", id);
     this.capturePurged.add(id);
     for (const [key, job] of this.jobs)
       if (key.startsWith(`${id}:`)) job.abort();
@@ -1006,10 +1021,17 @@ export class MeetingService extends EventEmitter {
     const active = this.activeId && this.get("meetings", this.activeId);
     if (active && active.status !== "ended")
       throw new Error("End the meeting before deleting data.");
+    if (this.beforeArchiveDelete)
+      await Promise.all(
+        this.all("meetings").map((m) => this.beforeArchiveDelete(m.id)),
+      );
     this.askJob?.abort();
     for (const job of this.jobs.values()) job.abort();
     this.jobs.clear();
-    for (const m of this.all("meetings")) this.deletedMeetings.add(m.id);
+    for (const m of this.all("meetings")) {
+      this.emit("archive.cancel", m.id);
+      this.deletedMeetings.add(m.id);
+    }
     await Promise.allSettled([
       this.recorder?.close(),
       this.diarizer?.close(),

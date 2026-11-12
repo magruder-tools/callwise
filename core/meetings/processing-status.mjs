@@ -31,6 +31,16 @@ export function meetingProcessingStatus(meeting, status = meeting?.status) {
     speech,
     audio,
     coaching,
+    ...(meeting.folderArchived
+      ? ["Recording archived in iCloud Drive"]
+      : meeting.iCloudArchive
+        ? ["iCloud archive: pending after meeting"]
+        : []),
+    ...(meeting.driveArchived
+      ? ["Recording archived in Google Drive"]
+      : meeting.driveArchive
+        ? ["Google Drive archive: pending after meeting"]
+        : []),
     ...(meeting.assistantAccess
       ? ["Assistant access: allowed after meeting"]
       : []),

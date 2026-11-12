@@ -154,6 +154,7 @@ func calendarOperation() async throws -> Any {
 @main struct CallwiseNative {
     static func main() async {
         let mode = CommandLine.arguments.dropFirst().first ?? "capabilities"
+        if mode == "archive-files" { runArchiveFiles(); return }
         var channels = [String: Channel]()
         for await line in inputLines() {
             guard line.utf8.count <= 1_048_576, let data = line.data(using: .utf8), let r = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { emit(["type": "error", "code": "invalid_request"]); continue }

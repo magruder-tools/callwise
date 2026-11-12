@@ -468,6 +468,12 @@ export class MeetingStore {
       for (const m of this.all("meetings"))
         if (
           m.status === "ended" &&
+          !(m.driveArchive && !m.driveArchived) &&
+          !(
+            m.iCloudArchive &&
+            !m.iCloudArchive.cancelled &&
+            !m.folderArchived
+          ) &&
           m.createdAt < cutoff - meetingDays * 86400000
         )
           this.deleteMeeting(m.id);
@@ -476,6 +482,12 @@ export class MeetingStore {
         const m = this.get("meetings", a.meetingId);
         if (
           m?.status === "ended" &&
+          !(m.driveArchive && !m.driveArchived) &&
+          !(
+            m.iCloudArchive &&
+            !m.iCloudArchive.cancelled &&
+            !m.folderArchived
+          ) &&
           m.createdAt < cutoff - audioDays * 86400000
         ) {
           rmSync(path.join(this.directory, a.path), { force: true });

@@ -11,8 +11,11 @@ const MODES = new Set([
   "llm",
   "reminders",
   "calendar",
+  "archive-files",
 ]);
 const MESSAGES = {
+  icloud_archive_unavailable:
+    "iCloud has not confirmed a safe archive/offload yet. Original audio is kept on this Mac.",
   speech_assets_missing:
     "Download the selected speech language in Callwise Setup first.",
   language_unsupported:

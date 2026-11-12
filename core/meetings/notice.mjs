@@ -5,6 +5,8 @@ export function noticeConfiguration(p = {}) {
     source: p.preferredSource || "audio",
     liveHelp: p.liveHelp === true,
     assistantAccess: p.meetingMcpEnabled === true,
+    driveArchive: p.driveArchiveEnabled === true,
+    iCloudArchive: p.iCloudArchiveEnabled === true,
     retainAudio:
       p.retainAudio === true &&
       (!p.preferredSource || p.preferredSource === "audio"),
@@ -22,7 +24,7 @@ export function noticeText(p = {}) {
         : c.engine === "apple"
           ? "Transcription happens on my Mac."
           : "Audio is sent to OpenAI for transcription.";
-  return `${c.noticeWording || "I use Callwise to transcribe this conversation and help with my notes."} ${provider} ${c.retainAudio ? "I will also keep an audio recording." : "I will keep the transcript and notes, without an audio recording."}${c.liveHelp ? " While live suggestions are on, conversation text is sent to OpenAI through my configured service for live assistance." : ""}${c.assistantAccess ? " I may later ask an AI assistant to search these notes and transcript; its provider may process the excerpts it reads." : ""} Is everyone comfortable with that?`;
+  return `${c.noticeWording || "I use Callwise to transcribe this conversation and help with my notes."} ${provider} ${c.retainAudio ? "I will also keep an audio recording." : "I will keep the transcript and notes, without an audio recording."}${c.iCloudArchive ? " Saved audio recordings, transcript and notes will be exported to my iCloud Drive folder." : c.driveArchive ? " Saved recordings, transcript and notes will be archived in my private Google Drive." : ""}${c.liveHelp ? " While live suggestions are on, conversation text is sent to OpenAI through my configured service for live assistance." : ""}${c.assistantAccess ? " I may later ask an AI assistant to search these notes and transcript; its provider may process the excerpts it reads." : ""} Is everyone comfortable with that?`;
 }
 export const noticeHash = (p) =>
   createHash("sha256")

@@ -32,6 +32,10 @@
 | Keychain follow-up | **done** | The first real storage operation now checks app access once in memory. A refusal latches storage closed across saved files until explicit Unlock saved data; individual corrupt files still do not lock other readable files. The signing identity matches 0.5.9. |
 | Release verification | **done** | Full PR CI passes with 443 tests, including Linux smoke. The signed final 0.6.0 package passes Mac smoke with 40/40 native presses, offline-model and encrypted-library checks, and is installed. After Matt selected Always Allow for Callwise Safe Storage and generated display/code caches were backed up and rebuilt, normal startup and About 0.6.0/new icon were verified. The Dock has one fresh shortcut to the installed app; 0.5.9 is retained for rollback. |
 
+## Quiet startup follow-up — 0.6.1
+
+The installed preview is now 0.6.1. See [Quiet assistant startup](QUIET_ASSISTANT_STARTUP.md) for the Dock-bounce fix, background-helper cleanup and its validation. The 0.6.0 implementation and acceptance record below remains historical.
+
 ## Measured results
 
 - Selected model: `Xenova/bge-small-en-v1.5 int8 (bundled, offline)`. The Apple NLEmbedding experiment returned 86.7% aggregate on-bank accuracy on the expanded set, so it was not selected.

@@ -1,7 +1,7 @@
 // One storage gate per app process. A denied/locked Keychain must not be
 // retried by each settings file, autosave, or assistant request.
 export function createSecureStorage(loadStorage) {
-  let storage, available, backend;
+  let storage, available, backend, accessChecked = false;
   function isEncryptionAvailable() {
     if (available !== undefined) return available;
     try {
@@ -19,6 +19,19 @@ export function createSecureStorage(loadStorage) {
       throw new Error(
         "Secure storage is unavailable. Choose Unlock saved data to try again, or quit and reopen Callwise. Your saved files have not been replaced.",
       );
+    // Keychain availability does not prove this build has permission to use its
+    // key. Warm the process key once before reading any saved ciphertext. A
+    // refusal then latches closed, while a corrupt individual file still does
+    // not lock the other readable files. This probe is never written to disk.
+    if (!accessChecked) {
+      try {
+        storage.encryptString("Callwise storage access check");
+        accessChecked = true;
+      } catch (error) {
+        available = false;
+        throw error;
+      }
+    }
     return storage;
   }
   return Object.freeze({
@@ -28,6 +41,7 @@ export function createSecureStorage(loadStorage) {
       storage = undefined;
       available = undefined;
       backend = undefined;
+      accessChecked = false;
       return isEncryptionAvailable();
     },
     get blocked() {

@@ -29,7 +29,8 @@
 | E5 | **done** | The existing debug switch is exposed as Show speed readout and the numbers are in stage.speed. Drawing the Stage readout remains Claude's pass, as specified in the finish brief. |
 | Screens | **done** | Plain functional inbox/review, rehearsal, saved debrief and Prep settings. Nineteen contract fixtures, 76 four-width screenshots, 44 px targets and edit-preservation checks pass. |
 | Icon | **done** | The existing four-bar mark now uses the protected theme's light and indigo colors; SVG, PNG and macOS ICNS are rebuilt. |
-| Release verification | **not done** | Code/browser/model/library checks and signing pass. The signed native-window smoke, installation and on-screen About version/icon verification pass. Pull-request Linux CI is being corrected for asynchronous renderer-readiness races. |
+| Keychain follow-up | **done** | The first real storage operation now checks app access once in memory. A refusal latches storage closed across saved files until explicit Unlock saved data; individual corrupt files still do not lock other readable files. The signing identity matches 0.5.9. |
+| Release verification | **not done** | Runtime cb8ea08 passed full PR CI and signed Mac smoke with 40/40 native presses and is installed. The final Keychain follow-up is in validation. Matt reports the window opens normally but macOS repeatedly requests Keychain approval; remembered approval must be completed in the macOS dialog. |
 
 ## Measured results
 
@@ -39,11 +40,11 @@
 - Actual bundled-model inference on this Mac, 100-card index: median **1.45 ms**, p90 **1.64 ms**, maximum **5.52 ms** in the recorded run. Frozen-vector CI timing is not a native inference benchmark.
 - Confidence bands remain high **0.80**, runner-up margin **0.15**, middle **0.60**, stable **600 ms**. Lexical/sentence contributions are 25%/75%. Polite request wrappers are removed for matching, while display text retains the question.
 - Timing replay: virtual clock, deterministic matcher bands and provider stubs; this is a state-machine test, not a recording or paid provider measurement. Prepared p90 reveal **-600 ms**, median **-600 ms** relative to the final row. **1/103 (0.97%)** early story swaps across the deliberate twist and stable repetitions. At most one story swap per turn. The stub live sentence appears at **1,800 ms**; all five ladder paths, unclear speech and a stalled provider are exercised.
-- Final full test suite: **442 passing, zero failures**. Syntax checks cover **185 modules**. Both browser suites pass. The replay has eight explicit timing/behavior checks, all five ladder paths, unclear speech and a stalled provider.
+- Final full test suite: **443 passing, zero failures**. Syntax checks cover **185 modules**. Both browser suites pass. The replay has eight explicit timing/behavior checks, all five ladder paths, unclear speech and a stalled provider.
 - Renderer: **19 states × 4 widths = 76 screenshots**, at 400/640/980/1280 px, with no horizontal overflow and 44 px controls.
 - Runtime audit: **zero advisories**, including zero high or critical findings.
-- Signed app's actual offline-model worker/native library and encrypted SQLite/backup/restore checks pass with disposable data. Native-window smoke passes with all 40 native presses. The installed About window shows 0.6.0 and the new icon; 0.5.9 is retained at `/Applications/.Callwise-0.5.9-rollback-round3.app`.
-- CI: [draft PR #10](https://github.com/magruder-tools/callwise/pull/10) targets `codex/fix-meeting-setup-scrolling`. Its first [Linux run](https://github.com/magruder-tools/callwise/actions/runs/43476201458) reached the panel test and failed during an immediate renderer action. The next run passed all panel checks, including 40/40 native presses, then exposed the analogous Start-button re-enable race. The smoke now waits for the paused Resume control before clicking and for Start to re-enable after its failed command settles, with the same bounded assertions. Failed renderer expressions are included in diagnostics. The original screenshot check is retained; captures settle for two frames and retry a transient UnknownVizError exactly once.
+- Signed app's actual offline-model worker/native library and encrypted SQLite/backup/restore checks pass with disposable data. All **122** packaged runtime/UI/icon files match the reviewed source bytes; installed archive and icon are byte-identical to the final signed build. Native-window smoke passes with all 40 native presses. The installed About window shows 0.6.0 and the new icon; 0.5.9 is retained at `/Applications/.Callwise-0.5.9-rollback-round3.app`.
+- Before the Keychain follow-up, CI: [PR #10](https://github.com/magruder-tools/callwise/pull/10), [all Linux checks passed](https://github.com/magruder-tools/callwise/actions/runs/43477213735), and [Codex protocol contract passed](https://github.com/magruder-tools/callwise/actions/runs/43477213861) for runtime commit `cb8ea08`. This includes 442/442 tests, the original smoke, matcher/replay, runtime audit, browser and meeting suites. [Browser previews](https://github.com/magruder-tools/callwise/actions/runs/43477213735/artifacts/14063731617).
 
 ## Decisions
 
@@ -61,6 +62,9 @@
 - Keep UI additions functional and token-based. Add image/unclear/early/wrap-up supplements in shared integration code so the protected Stage component remains unchanged.
 - Keep the original waveform geometry and recolor native vector assets directly to the existing palette.
 - The Dock has exactly one saved Callwise entry, pointing to `/Applications/Callwise.app`, now 0.6.0; there are no Callwise entries in its recent-app or other shortcut sections.
+- Keep the original Linux check and all its assertions. Settle/retry only transient screenshot capture; wait for Resume to render and Start to re-enable after IPC settles. Those two readiness races were found in CI and corrected without touching protected UI files.
+- Upload the exact tested authored history through a scoped one-time transfer job, verify the 2a80b51 and Claude ancestors, push only the finish branch and delete the temporary branch. Later corrections use ordinary fast-forward commits with an expected-head check.
+- After Matt reported repeated Keychain dialogs, add an in-memory first-access probe that latches a permission refusal before other saved-file readers retry it. Keep corruption handling separate and preserve the signing requirement; do not change keys, saved ciphertext, Keychain ACLs or system protection settings.
 - Preserve the established root and helper signing identities and keep the previous app for rollback. No real meeting is ended without a new explicit instruction.
 
 ## Claude design handoff

@@ -1,7 +1,7 @@
 {
   "name": "callwise",
   "productName": "Callwise",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Local meeting notes, transcripts and optional live coaching",
   "private": true,
   "type": "module",
@@ -85,7 +85,8 @@
         "NSRemindersFullAccessUsageDescription": "Callwise saves only reminders you review and choose to export.",
         "NSRemindersUsageDescription": "Callwise saves only reminders you choose to export.",
         "NSCalendarsFullAccessUsageDescription": "Callwise can use a selected calendar event to fill in a meeting title and people.",
-        "NSAppleEventsUsageDescription": "Callwise creates or updates only the Apple Notes you choose to export."
+        "NSAppleEventsUsageDescription": "Callwise creates or updates only the Apple Notes you choose to export.",
+        "LSUIElement": true
       },
       "minimumSystemVersion": "26.0",
       "identity": "-",

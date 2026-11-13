@@ -24,6 +24,8 @@ for (const root of ["core", "desktop", "providers", "ui", "scripts", "tests"])
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 if (!pkg.build.mac.extendInfo.NSAudioCaptureUsageDescription)
   failures.push("Missing macOS audio permission description.");
+if (pkg.build.mac.extendInfo.LSUIElement !== true)
+  failures.push("Assistant launches must start as macOS agents before JavaScript loads.");
 if (!readFileSync(".gitignore", "utf8").includes(".env.*"))
   failures.push("Secrets must be ignored.");
 if (failures.length) {

@@ -83,14 +83,18 @@ import { retrySavedData } from "./storage-recovery.mjs";
 import { FolderArchive } from "./folder-archive.mjs";
 import { revealLibrary } from "./library-location.mjs";
 import { installRound3 } from "./round3.mjs";
+import { configureAssistantActivation, promoteMainApplication } from "./activation.mjs";
 
 const headlessMcp = process.argv.includes("--mcp-server");
+const smoke = process.argv.includes("--smoke");
 if (!headlessMcp) configureAudioBackend(app.commandLine);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const stopAssistantActivation = configureAssistantActivation({ app, headless: headlessMcp, root,
+  ...(smoke && headlessMcp ? { launch: async () => { console.error(JSON.stringify({ event: "assistant.activation" })); } } : {}),
+});
 const buildMetadata = JSON.parse(
   readFileSync(path.join(root, "package.json"), "utf8"),
 );
-const smoke = process.argv.includes("--smoke");
 // Used at launch and after "Delete all": cloud help and assistant access stay off until the user turns them on.
 const DEFAULT_PREFERENCES = Object.freeze({
   speechEngine: "apple",
@@ -137,6 +141,7 @@ const trustedFrame = (frame) =>
 const controllerConfig = (base, saved = {}) => ({ ...base, ...saved });
 async function boot() {
   await app.whenReady();
+  await promoteMainApplication(app);
   const dataDir = app.getPath("userData"),
     workDir = path.join(dataDir, "codex-work");
   mkdirSync(workDir, { recursive: true });
@@ -1729,13 +1734,14 @@ if (headlessMcp) {
   );
   mkdirSync(sessionDir, { recursive: true, mode: 0o700 });
   app.setPath("sessionData", sessionDir);
-  app.on("will-quit", () =>
-    rmSync(sessionDir, { recursive: true, force: true }),
-  );
+  app.on("will-quit", () => {
+    stopAssistantActivation();
+    rmSync(sessionDir, { recursive: true, force: true });
+  });
   void app
     .whenReady()
     .then(async () => {
-      app.dock?.hide();
+      if (smoke) console.error(JSON.stringify({ event: "assistant.ready", windows: BrowserWindow.getAllWindows().length, dockVisible: process.platform === "darwin" ? app.dock.isVisible() : null }));
       const { runMeetingMcp } = await import("./meeting-mcp.mjs");
       await runMeetingMcp({ app, storage: safeStorage, directory });
     })

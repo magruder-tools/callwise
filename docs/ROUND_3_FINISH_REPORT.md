@@ -30,11 +30,11 @@
 | Screens | **done** | Plain functional inbox/review, rehearsal, saved debrief and Prep settings. Nineteen contract fixtures, 76 four-width screenshots, 44 px targets and edit-preservation checks pass. |
 | Icon | **done** | The existing four-bar mark now uses the protected theme's light and indigo colors; SVG, PNG and macOS ICNS are rebuilt. |
 | Keychain follow-up | **done** | The first real storage operation now checks app access once in memory. A refusal latches storage closed across saved files until explicit Unlock saved data; individual corrupt files still do not lock other readable files. The signing identity matches 0.5.9. |
-| Release verification | **not done** | Runtime cb8ea08 passed full PR CI and signed Mac smoke with 40/40 native presses and is installed. The final Keychain follow-up is in validation. Matt reports the window opens normally but macOS repeatedly requests Keychain approval; remembered approval must be completed in the macOS dialog. |
+| Release verification | **done** | Full PR CI passes with 443 tests, including Linux smoke. The signed final 0.6.0 package passes Mac smoke with 40/40 native presses, offline-model and encrypted-library checks, and is installed. After Matt selected Always Allow for Callwise Safe Storage and generated display/code caches were backed up and rebuilt, normal startup and About 0.6.0/new icon were verified. The Dock has one fresh shortcut to the installed app; 0.5.9 is retained for rollback. |
 
 ## Measured results
 
-- Selected model: `Xenova/bge-small-en-v1.5 int8 (bundled, offline) (live)`. The Apple NLEmbedding experiment returned 86.7% aggregate on-bank accuracy on the expanded set, so it was not selected.
+- Selected model: `Xenova/bge-small-en-v1.5 int8 (bundled, offline)`. The Apple NLEmbedding experiment returned 86.7% aggregate on-bank accuracy on the expanded set, so it was not selected.
 - Thirty cards, six indexed phrasings each, six held-out wrapper variants each, and thirty additional hand-written paraphrases: **201/210 (95.7%)** on-bank. The additional novel paraphrases score **21/30 (70%)**; the aggregate result is not a claim of general real-world accuracy.
 - Off-bank rejection: **39/40 (97.5%)**. Near-miss rejection: **19/20 (95%)**.
 - Actual bundled-model inference on this Mac, 100-card index: median **1.45 ms**, p90 **1.64 ms**, maximum **5.52 ms** in the recorded run. Frozen-vector CI timing is not a native inference benchmark.
@@ -44,7 +44,7 @@
 - Renderer: **19 states × 4 widths = 76 screenshots**, at 400/640/980/1280 px, with no horizontal overflow and 44 px controls.
 - Runtime audit: **zero advisories**, including zero high or critical findings.
 - Signed app's actual offline-model worker/native library and encrypted SQLite/backup/restore checks pass with disposable data. All **122** packaged runtime/UI/icon files match the reviewed source bytes; installed archive and icon are byte-identical to the final signed build. Native-window smoke passes with all 40 native presses. The installed About window shows 0.6.0 and the new icon; 0.5.9 is retained at `/Applications/.Callwise-0.5.9-rollback-round3.app`.
-- Before the Keychain follow-up, CI: [PR #10](https://github.com/magruder-tools/callwise/pull/10), [all Linux checks passed](https://github.com/magruder-tools/callwise/actions/runs/43477213735), and [Codex protocol contract passed](https://github.com/magruder-tools/callwise/actions/runs/43477213861) for runtime commit `cb8ea08`. This includes 442/442 tests, the original smoke, matcher/replay, runtime audit, browser and meeting suites. [Browser previews](https://github.com/magruder-tools/callwise/actions/runs/43477213735/artifacts/14063731617).
+- CI: [PR #10](https://github.com/magruder-tools/callwise/pull/10), [all Linux checks passed](https://github.com/magruder-tools/callwise/actions/runs/43481241687), and [Codex protocol contract passed](https://github.com/magruder-tools/callwise/actions/runs/43481241701) for final runtime commit `d4257d4`. This includes 443/443 tests, the original smoke, matcher/replay, runtime audit, browser and meeting suites. [Browser previews](https://github.com/magruder-tools/callwise/actions/runs/43481241687/artifacts/14066220009).
 
 ## Decisions
 
@@ -61,10 +61,12 @@
 - Read calendar metadata on deliberate import/selection only with existing access; background reads require the separate calendar-watching preference. Persist only notification-key hashes in encrypted readiness data to prevent repeat alerts after restart.
 - Keep UI additions functional and token-based. Add image/unclear/early/wrap-up supplements in shared integration code so the protected Stage component remains unchanged.
 - Keep the original waveform geometry and recolor native vector assets directly to the existing palette.
-- The Dock has exactly one saved Callwise entry, pointing to `/Applications/Callwise.app`, now 0.6.0; there are no Callwise entries in its recent-app or other shortcut sections.
+- The Dock had one entry whose file bookmark was stale. Back up the Dock settings, refresh only the Callwise tile and bookmark at the same position, and verify one current entry with no Callwise entries in recent-apps or other sections. The bookmark resolves to `/Applications/Callwise.app`, version 0.6.0.
 - Keep the original Linux check and all its assertions. Settle/retry only transient screenshot capture; wait for Resume to render and Start to re-enable after IPC settles. Those two readiness races were found in CI and corrected without touching protected UI files.
 - Upload the exact tested authored history through a scoped one-time transfer job, verify the 2a80b51 and Claude ancestors, push only the finish branch and delete the temporary branch. Later corrections use ordinary fast-forward commits with an expected-head check.
 - After Matt reported repeated Keychain dialogs, add an in-memory first-access probe that latches a permission refusal before other saved-file readers retry it. Keep corruption handling separate and preserve the signing requirement; do not change keys, saved ciphertext, Keychain ACLs or system protection settings.
+- Matt completed Always Allow in the macOS dialog for Callwise Safe Storage. The agent did not enter his password or edit Keychain ACLs; no stored key or ciphertext was replaced. A clean normal launch then loaded the existing library.
+- A fresh post-update launch showed a blank renderer and had no new notes or meeting. Restart that idle launch and move only generated GraphiteDawnCache, GPUCache, DawnGraphiteCache and Code Cache to `/private/tmp/callwise-display-cache-backup-f438u0s5`. The normal screen then loaded; retain the caches as a reversible backup.
 - Preserve the established root and helper signing identities and keep the previous app for rollback. No real meeting is ended without a new explicit instruction.
 
 ## Claude design handoff

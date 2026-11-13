@@ -22,6 +22,7 @@ export const viewState = {
   coverage: false,
   prep: false,
   paste: false,
+  drafts: { "material-title": "Notes", "material-text": "", question: "" },
   notice: "",
   devices: [],
   testResults: [],
@@ -31,3 +32,21 @@ export const viewState = {
   firefliesLiveId: "",
   welcomeStep: 0,
 };
+// These values belong to the view, even while a different screen is mounted.
+export function captureDrafts(root, ui) {
+  for (const id of Object.keys(ui.drafts)) {
+    const node = root.querySelector(`#${id}`);
+    if (node) ui.drafts[id] = node.value;
+  }
+}
+export function restoreDrafts(root, ui) {
+  for (const [id, value] of Object.entries(ui.drafts)) {
+    const node = root.querySelector(`#${id}`);
+    if (node) node.value = value;
+  }
+}
+export function setDraft(root, ui, id, value) {
+  ui.drafts[id] = value;
+  const node = root.querySelector(`#${id}`);
+  if (node) node.value = value;
+}

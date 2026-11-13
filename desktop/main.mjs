@@ -78,6 +78,7 @@ import { createMeetingCommands } from "./meeting-commands.mjs";
 import { recoverRestoreSwap } from "./library-restore.mjs";
 import { retrySavedData } from "./storage-recovery.mjs";
 import { FolderArchive } from "./folder-archive.mjs";
+import { revealLibrary } from "./library-location.mjs";
 
 const headlessMcp = process.argv.includes("--mcp-server");
 if (!headlessMcp) configureAudioBackend(app.commandLine);
@@ -286,6 +287,7 @@ async function boot() {
           }),
     });
   controller = makeController(controllerConfig(baseConfig, saved));
+  controller.libraryPath = path.join(dataDir, "meetings");
   function applyConnections(value) {
     const next = controllerConfig(baseConfig, value);
     controller.stopInputs();
@@ -757,6 +759,8 @@ async function boot() {
       throw new Error("Untrusted app frame.");
     if (typeof name !== "string" || JSON.stringify(payload).length > 2200000)
       throw new Error("Invalid request.");
+    if (name === "library.reveal")
+      return revealLibrary(controller.libraryPath, shell);
     if (name === "desktop.updates.check") return refreshUpdates();
     if (name === "desktop.storage.unlock" && meetings) {
       if (codexLogin.busy) throw new Error("Finish or cancel sign-in first.");

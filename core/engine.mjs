@@ -5,6 +5,7 @@ import { makePrompt, validateAdvice, words, concise } from "./prompts.mjs";
 import { CALL_DEFAULTS } from "./defaults.mjs";
 import {
   classifyTurn,
+  cleanQuestion,
   commitmentCue,
   isWrapUp,
   completePartial,
@@ -83,6 +84,8 @@ export class CoachEngine extends EventEmitter {
     this.summary = "";
     this.commitments = [];
     this.covered = new Set();
+    this.coverageBySegment = new Map();
+    this.derivedCoverage = new Set();
     this.otherTurns = 0;
     this.metrics = {
       fastCalls: 0,
@@ -286,21 +289,26 @@ export class CoachEngine extends EventEmitter {
         segment.speakerKey || (segment.channel === "mic" ? "you" : "them"),
       receivedAt: this.clock(),
     };
+    if (prior?.final && row.final && prior.text !== row.text) {
+      this.clearSegmentDerived(row.id, prior);
+      // A compressed summary is no longer evidence after a source correction.
+      this.summary = "";
+    }
     // On speakers, retain the system transcript and remove the microphone echo.
     for (const other of this.transcript.values()) {
       if (echoMatch(row, other)) {
         if (row.channel === "mic") {
+          this.clearSegmentDerived(row.id, this.transcript.get(row.id));
           this.transcript.delete(row.id);
           this.emitState();
           return false;
         }
         this.transcript.delete(other.id);
-        this.commitments = this.commitments.filter(
-          (c) => c.segmentId !== other.id,
-        );
+        this.clearSegmentDerived(other.id, other);
       }
     }
     this.transcript.set(row.id, row);
+    if (row.final) this.trackStructure(row);
     if (draining) {
       if (row.final) this.revision++;
       this.emitState();
@@ -318,12 +326,11 @@ export class CoachEngine extends EventEmitter {
     if (own && this.userSpeechAt === null) this.userSpeechAt = this.clock();
     if (row.final) {
       this.revision++;
-      this.trackStructure(row);
       if (!own && !row.gap && !prior?.final) this.otherTurns++;
       if (!own) {
         this.userSpeechAt = null;
         if (
-          !row.gap &&
+          !prior?.final && !row.gap &&
           normalize(row.text).split(" ").length >= 4 &&
           !isBackchannel(row.text)
         )
@@ -420,6 +427,7 @@ export class CoachEngine extends EventEmitter {
       const last = rows.at(-1);
       this.consider({
         ...last,
+        segmentIds: rows.map((r) => r.id),
         startMs: rows[0].startMs,
         text: rows.map((r) => r.text).join(" "),
       });
@@ -450,15 +458,66 @@ export class CoachEngine extends EventEmitter {
       ? {
           speaker: row.speaker,
           text: row.text,
+          question: cleanQuestion(row.text),
           segmentId: row.id,
+          segmentIds: row.segmentIds || [row.id],
           endedAtMs: row.endMs ?? row.startMs,
           turnEndedAt: row.receivedAt,
           kind: classifyTurn(row, this.settings.mode, this.settings.userName),
         }
       : null;
   }
+  rebuildCoverage() {
+    const unattributed = [...this.covered].filter((id) =>
+      !this.derivedCoverage.has(id));
+    this.derivedCoverage = new Set([
+      ...[...this.coverageBySegment.values()].flat(),
+      ...this.cards.flatMap((card) => (card.covers || []).filter((id) =>
+        this.prep?.myPoints?.some((point) => point.id === id))),
+    ]);
+    this.covered = new Set([...unattributed, ...this.derivedCoverage]);
+  }
+  clearSegmentDerived(id, prior) {
+    const fromSegment = (trigger) =>
+      trigger?.segmentId === id || trigger?.segmentIds?.includes(id);
+    this.commitments = this.commitments.filter((c) => c.segmentId !== id);
+    this.coverageBySegment.delete(id);
+    this.handledTurns.delete(id);
+    if (prior) this.answered.delete(normalize(prior.text));
+    for (const card of this.cards)
+      if (fromSegment(card.trigger))
+        this.answered.delete(normalize(card.trigger.text));
+    this.cards = this.cards.filter((c) => !fromSegment(c.trigger));
+    for (const [lane, job] of Object.entries(this.inflight))
+      if (job.turnId === id || fromSegment(job.trigger)) {
+        job.controller.abort();
+        this.removeDraft(job);
+        delete this.inflight[lane];
+      }
+    this.autoQueue = this.autoQueue.filter((job) =>
+      job.turnId !== id && !fromSegment(job.trigger));
+    this.pendingTurnRows.delete(id);
+    this.pendingSpeech.delete(id);
+    if (this.speculation?.row.id === id) {
+      clearTimeout(this.timers.partial);
+      this.speculation = null;
+    }
+    if (this.theirTurn?.rows.some((row) =>
+      row.id === id || row.segmentIds?.includes(id))) {
+      this.theirTurn.rows = this.theirTurn.rows.filter((row) =>
+        row.id !== id && !row.segmentIds?.includes(id));
+      this.theirTurn.requested = false;
+    }
+    this.rebuildCoverage();
+  }
   trackStructure(row) {
-    if (row.gap) return;
+    this.commitments = this.commitments.filter((c) => c.segmentId !== row.id);
+    const covered = [];
+    this.coverageBySegment.set(row.id, covered);
+    if (row.gap) {
+      this.rebuildCoverage();
+      return;
+    }
     for (const point of this.prep?.myPoints || []) {
       const wanted = terms(point.text || point.label),
         actual = new Set(terms(row.text));
@@ -466,8 +525,9 @@ export class CoachEngine extends EventEmitter {
         wanted.length &&
         wanted.filter((t) => actual.has(t)).length / wanted.length >= 0.6
       )
-        this.covered.add(point.id);
+        covered.push(point.id);
     }
+    this.rebuildCoverage();
     if (commitmentCue(row.text)) {
       if (!this.commitments.some((c) => c.segmentId === row.id))
         this.commitments.push({
@@ -507,7 +567,11 @@ export class CoachEngine extends EventEmitter {
       if (index < 0) this.theirTurn.rows.push(row);
       else this.theirTurn.rows[index] = row;
       this.theirTurn.at = row.receivedAt;
-      row = { ...row, text: this.theirTurn.rows.map((r) => r.text).join(" ") };
+      row = {
+        ...row,
+        segmentIds: this.theirTurn.rows.flatMap((r) => r.segmentIds || [r.id]),
+        text: this.theirTurn.rows.map((r) => r.text).join(" "),
+      };
     }
     const normalized = normalize(row.text),
       now = this.clock();
@@ -890,9 +954,7 @@ export class CoachEngine extends EventEmitter {
           otherTurn: this.otherTurns,
           demo: this.source === "demo",
         });
-        for (const id of card.covers)
-          if (this.prep?.myPoints?.some((p) => p.id === id))
-            this.covered.add(id);
+        this.rebuildCoverage();
         shown = true;
         this.latencies.push({ ...job.latency, lane, origin });
         this.latencies = this.latencies.slice(-200);

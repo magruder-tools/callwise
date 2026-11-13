@@ -1,5 +1,8 @@
 # Callwise
 
+Current development version: **0.5.8**. Round 3 checkpoint A is described in
+[the checkpoint record](docs/ROUND_3_CHECKPOINT_A.md). No public release is implied.
+
 ## Callwise 0.5.4 usability update
 
 This update adds an explicit Keychain retry, visible meeting processing labels, preview update notifications and background backup restores with progress. The [user guide](docs/USER_GUIDE.md) explains installation, audio capture, local versus cloud processing, and the app's features. The [0.5.4 validation record](docs/reviews/0.5.4/REVIEW.md) records automated checks and remaining acceptance work.

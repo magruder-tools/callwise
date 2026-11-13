@@ -155,11 +155,14 @@ Never invent experience, numbers, names or commitments. Facts require exact sour
 }
 export function concise(text, limit = 24) {
   const full = String(text || "").trim();
-  if (full.split(/\s+/).length <= limit) return full;
+  if (full.split(/\s+/).length <= limit)
+    return full.replace(/[;,:]+\s*$/u, "");
   const prefix = words(full, limit);
-  const matches = [...prefix.matchAll(/[.!?;,:](?=\s|$)/g)];
+  const matches = [...prefix.matchAll(/[.!?](?=\s|$)/g)];
   const end = matches.at(-1)?.index;
-  return end !== undefined ? prefix.slice(0, end + 1) : prefix + "…";
+  return end !== undefined
+    ? prefix.slice(0, end + 1)
+    : prefix.replace(/[^\p{L}\p{N}]+$/u, "");
 }
 export function validateAdvice(result) {
   if (typeof result?.speak === "boolean") {

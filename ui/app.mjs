@@ -1,6 +1,8 @@
 import { shortcutKey } from "./shortcuts.mjs";
 import { renderRegions } from "./render.mjs";
-import { state, viewState as ui } from "./state.mjs";
+import {
+  state, viewState as ui, captureDrafts, restoreDrafts, setDraft,
+} from "./state.mjs";
 import { ready } from "./views/ready.mjs";
 import { live } from "./views/live.mjs";
 import { recap } from "./views/recap.mjs";
@@ -199,6 +201,7 @@ function clock() {
 function render() {
   const s = state.get();
   if (!s) return;
+  captureDrafts(root, ui);
   const view = panel ? "live" : ui.screen;
   root.dataset.view = view;
   let content;
@@ -260,6 +263,7 @@ function render() {
       ? content
       : `<div data-region="notices">${notices}</div><div data-region="${view}">${content}</div>`,
   );
+  restoreDrafts(root, ui);
   clock();
   for (const id of [
     "meeting-notice",
@@ -524,6 +528,8 @@ async function act(action, node) {
       render();
       break;
     case "cancel-paste":
+      setDraft(root, ui, "material-title", "Notes");
+      setDraft(root, ui, "material-text", "");
       ui.paste = false;
       render();
       break;
@@ -561,13 +567,16 @@ async function act(action, node) {
       await listDevices();
       break;
     case "close-settings":
-      ui.screen = ["running", "paused"].includes(s.status)
+      ui.screen = ["running", "paused", "finishing"].includes(s.status)
         ? "live"
         : s.status === "ended"
           ? "recap"
           : "ready";
       render();
       if (bridge.desktop) await command("desktop.settings.close");
+      break;
+    case "library-reveal":
+      await command("library.reveal");
       break;
     case "settings-tab":
       ui.tab = node.dataset.tab;
@@ -803,6 +812,8 @@ async function flushEdits() {
   }
 }
 root.addEventListener("input", (e) => {
+  if (Object.hasOwn(ui.drafts, e.target.id))
+    ui.drafts[e.target.id] = e.target.value;
   const key = e.target.dataset.pref;
   if (!key || e.target.tagName === "SELECT") return;
   clearTimeout(edits.get(key)?.timer);
@@ -822,18 +833,30 @@ root.addEventListener("submit", (e) => {
       case "ask-form": {
         const question = field("question");
         if (!question.trim()) return;
-        document.getElementById("question").value = "";
+        setDraft(root, ui, "question", question);
         await command("ask", { question });
+        if (ui.drafts.question === question) {
+          setDraft(root, ui, "question", "");
+          render();
+        }
         break;
       }
-      case "material-form":
-        await command("context.add", {
+      case "material-form": {
+        const draft = {
           title: field("material-title"),
           text: field("material-text"),
-        });
-        ui.paste = false;
+        };
+        captureDrafts(root, ui);
+        await command("context.add", draft);
+        if (ui.drafts["material-title"] === draft.title &&
+            ui.drafts["material-text"] === draft.text) {
+          setDraft(root, ui, "material-title", "Notes");
+          setDraft(root, ui, "material-text", "");
+          ui.paste = false;
+        }
         render();
         break;
+      }
       case "transcript-form":
         await command("transcript", {
           speaker: field("speaker"),

@@ -4,6 +4,7 @@ import AVFoundation
 import FoundationModels
 import EventKit
 import CoreMedia
+import NaturalLanguage
 
 // stdout is exclusively the bounded JSON-lines protocol, including in errors.
 let outputLock = NSLock()
@@ -145,9 +146,13 @@ func reminderOperation(_ request: [String: Any]) async throws -> Any {
     }
     return result
 }
-func calendarOperation() async throws -> Any {
-    let store = EKEventStore(); guard try await store.requestFullAccessToEvents() else { throw NativeFailure.permission }
-    let now = Date(); let predicate = store.predicateForEvents(withStart: now.addingTimeInterval(-1800), end: now.addingTimeInterval(1800), calendars: nil)
+func calendarOperation(_ request: [String: Any]) async throws -> Any {
+    let store = EKEventStore()
+    if request["onlyGranted"] as? Bool == true {
+        guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else { throw NativeFailure.permission }
+    } else { guard try await store.requestFullAccessToEvents() else { throw NativeFailure.permission } }
+    let horizon = min(12, max(0.5, request["horizonHours"] as? Double ?? 0.5))
+    let now = Date(); let predicate = store.predicateForEvents(withStart: now.addingTimeInterval(-1800), end: now.addingTimeInterval(horizon * 3600), calendars: nil)
     return store.events(matching: predicate).prefix(30).map { event -> [String: Any] in ["id": event.eventIdentifier ?? "", "title": event.title ?? "Meeting", "start": event.startDate.timeIntervalSince1970 * 1000, "people": (event.attendees ?? []).compactMap { $0.name }] }
 }
 
@@ -156,6 +161,7 @@ func calendarOperation() async throws -> Any {
         let mode = CommandLine.arguments.dropFirst().first ?? "capabilities"
         if mode == "archive-files" { runArchiveFiles(); return }
         var channels = [String: Channel]()
+        let sentenceEmbedding = mode == "embedding" ? NLEmbedding.sentenceEmbedding(for: .english) : nil
         for await line in inputLines() {
             guard line.utf8.count <= 1_048_576, let data = line.data(using: .utf8), let r = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { emit(["type": "error", "code": "invalid_request"]); continue }
             let id = r["id"] as? String ?? "", op = r["op"] as? String ?? mode
@@ -193,6 +199,13 @@ func calendarOperation() async throws -> Any {
                     continue
                 }
                 switch mode {
+                case "embedding":
+                    guard op == "vectors", let model = sentenceEmbedding,
+                          let texts = r["texts"] as? [String], texts.count <= 48,
+                          texts.allSatisfy({ $0.utf16.count <= 4000 }) else { throw NativeFailure.unavailable }
+                    let vectors = texts.map { model.vector(for: $0) ?? [] }
+                    guard vectors.allSatisfy({ !$0.isEmpty }) else { throw NativeFailure.unavailable }
+                    answer(id, ["vectors": vectors, "model": "Apple NLEmbedding English sentence"])
                 case "capabilities":
                     let installed = await SpeechTranscriber.installedLocales.map { $0.identifier }
                     let supported = await SpeechTranscriber.supportedLocales.map { $0.identifier }
@@ -203,7 +216,7 @@ func calendarOperation() async throws -> Any {
                     answer(id, ["installed": await AssetInventory.status(forModules: [m]) == .installed])
                 case "llm": answer(id, try await generateDocument(r))
                 case "reminders": answer(id, try await reminderOperation(r))
-                case "calendar": answer(id, try await calendarOperation())
+                case "calendar": answer(id, try await calendarOperation(r))
                 case "diarize": answer(id, try await diarize(r))
                 default: throw NativeFailure.invalid
                 }

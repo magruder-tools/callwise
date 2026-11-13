@@ -1,3 +1,4 @@
+import { captureSmoke } from "./smoke-capture.mjs";
 import assert from "node:assert/strict";
 import { app, screen } from "electron";
 import { writeFileSync } from "node:fs";
@@ -16,19 +17,19 @@ async function waitForValue(read, expected, description) {
 const advice = {
   speak: true,
   kind: "say",
-  lead: "Start with the real example, explain your actions, and put the measured result in context.",
+  lead: "I can explain the starting point, the changes I made, and the measured result from the real example.",
   points: [
     {
       label: "Situation",
-      text: "Explain the starting point and the original constraint from the notes.",
+      text: "Original constraint from the notes",
     },
     {
       label: "Action",
-      text: "Describe the specific changes you made and why those changes mattered.",
+      text: "Changes I made",
     },
     {
       label: "Result",
-      text: "Use the actual numbers and explain how the result was measured.",
+      text: "Measured result and baseline",
     },
   ],
   sourceIds: [],
@@ -40,7 +41,7 @@ export async function verifyPanel({ controller, panel, win, artifacts }) {
   const capture = async (name) =>
     writeFileSync(
       path.join(artifacts, name + ".png"),
-      (await panel.webContents.capturePage()).toPNG(),
+      (await captureSmoke(panel)).toPNG(),
     );
   await controller.command("start", { source: "demo" });
   controller.stopInputs();
@@ -165,10 +166,16 @@ export async function verifyPanel({ controller, panel, win, artifacts }) {
   if (process.platform === "darwin") app.focus({ steal: true });
   await wait(100);
   win.hide();
+  panel.setFocusable(true);
   panel.show();
   panel.focus();
   panel.webContents.focus();
-  await wait(100);
+  for (let attempt = 0; attempt < 3 && !panel.isFocused(); attempt++) {
+    app.focus({ steal: true }); await wait(150); win.hide(); panel.show(); panel.focus(); panel.webContents.focus(); await wait(150);
+  }
+  const focusDeadline = Date.now() + Math.min(20000, Number(process.env.CALLWISE_SMOKE_FOCUS_WAIT_MS) || 0);
+  if (!panel.isFocused() && Date.now() < focusDeadline) console.log("Smoke: waiting for the test panel to receive native focus.");
+  while (!panel.isFocused() && Date.now() < focusDeadline) await wait(100);
   assert.equal(
     panel.isFocused(),
     true,
@@ -266,11 +273,12 @@ export async function verifyPanel({ controller, panel, win, artifacts }) {
   );
   engine.providers.fast = {
     generate: async ({ onPartial }) => {
+      const streamAdvice = { ...advice, lead: "I can explain my actions." };
       for (let i = 1; i <= 60; i++) {
-        onPartial({ ...advice, lead: advice.lead.slice(0, i) });
+        onPartial({ ...streamAdvice, lead: streamAdvice.lead.slice(0, i) });
         await wait(17);
       }
-      return advice;
+      return streamAdvice;
     },
   };
   const streaming = engine.run("fast", "Explain my real actions.");
@@ -316,7 +324,7 @@ export async function verifyReady({ controller, panel, win, artifacts }) {
   const capture = async (window, name) =>
     writeFileSync(
       path.join(artifacts, name + ".png"),
-      (await window.webContents.capturePage()).toPNG(),
+      (await captureSmoke(window)).toPNG(),
     );
   const js = (source) => win.webContents.executeJavaScript(source);
   win.showInactive();

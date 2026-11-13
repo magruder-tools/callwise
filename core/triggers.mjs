@@ -17,7 +17,7 @@ export function isBackchannel(text) {
   );
 }
 export const isWrapUp = (text) =>
-  /\b(anything else|we.re at time|wrap (up|this)|before we (go|finish)|last question)\b/i.test(
+  /\b(anything else|we.re at time|wrap (up|this)|before we (go|finish)|last question|(?:do you have|any) (?:any )?questions (?:for|about) (?:us|me|the role|the team)|what (?:would|do) you (?:like|want) to ask)\b/i.test(
     text,
   );
 export const commitmentCue = (text) =>

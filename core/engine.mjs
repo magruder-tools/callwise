@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { ContextStore, terms } from "./context.mjs";
 import { makePrompt, validateAdvice, words, concise } from "./prompts.mjs";
 import { CALL_DEFAULTS } from "./defaults.mjs";
+import { coversText } from "./coverage.mjs";
+import { frameFor, guardCard, validSay, SELF_NOTE } from "./cards.mjs";
 import {
   classifyTurn,
   cleanQuestion,
@@ -311,10 +313,24 @@ export class CoachEngine extends EventEmitter {
     if (row.final) this.trackStructure(row);
     if (draining) {
       if (row.final) this.revision++;
+      if (this.stageCoach?.enabled()) void this.stageCoach.ingest(row, prior, { drain: true });
       this.emitState();
       return true;
     }
     const own = isOwnTurn(row, this.settings.userName);
+    if (this.stageCoach?.enabled()) {
+      if (own && this.userSpeechAt === null) this.userSpeechAt = this.clock();
+      if (!own) this.userSpeechAt = null;
+      if (row.final) { this.revision++; if (!own && !row.gap && !prior?.final) this.otherTurns++; }
+      void this.stageCoach.ingest(row, prior).catch(() => {
+        // Local matching failure still leaves a usable frame; it must not interrupt transcription.
+        if (this.stageCoach.turn?.id === row.id) {
+          this.stageCoach.show(this.stageCoach.frame(this.stageCoach.turn), this.stageCoach.turn);
+        }
+      });
+      this.emitState();
+      return true;
+    }
     if (this.config.turnPauseMs > 0) {
       if (!own && !row.gap) this.queueTurn(row);
       else if (own && !isBackchannel(row.text)) {
@@ -519,12 +535,7 @@ export class CoachEngine extends EventEmitter {
       return;
     }
     for (const point of this.prep?.myPoints || []) {
-      const wanted = terms(point.text || point.label),
-        actual = new Set(terms(row.text));
-      if (
-        wanted.length &&
-        wanted.filter((t) => actual.has(t)).length / wanted.length >= 0.6
-      )
+      if (coversText(point.text || point.label, row.text))
         covered.push(point.id);
     }
     this.rebuildCoverage();
@@ -845,7 +856,7 @@ export class CoachEngine extends EventEmitter {
       const full = prompt.materialBudget.full;
       if (full)
         sources = materials.map(({ text, ...d }) => ({ ...d, excerpt: text }));
-      const result = await this.providers[lane].generate({
+      let result = await this.providers[lane].generate({
         lane,
         prompt,
         transcript: rows,
@@ -863,6 +874,7 @@ export class CoachEngine extends EventEmitter {
             partial.kind === "fact"
           )
             return;
+          if (this.stageCoach && this.source !== "demo" && lane === "fast" && !validSay(partial.lead)) return;
           const now = this.clock();
           job.latency.firstTokenAt ??= now;
           job.latency.firstPaintAt ??= now;
@@ -898,6 +910,14 @@ export class CoachEngine extends EventEmitter {
           this.emitState();
         },
       });
+      if (live() && this.stageCoach && this.source !== "demo" && lane === "fast" && SELF_NOTE.test(result.say || result.lead || "") && this.metrics.fastCalls < this.config.maxFast) {
+        this.metrics.fastCalls++;
+        this.metrics.inputTokens += Number(result.usage?.input_tokens || 0); this.metrics.outputTokens += Number(result.usage?.output_tokens || 0);
+        this.recordUsage?.(result.usage, lane);
+        result = await this.providers[lane].generate({ lane, signal: job.controller.signal, prompt: { ...prompt,
+          instructions: prompt.instructions + " Return a finished first-person sentence of at most 24 words. Never include a note to self, a hedge, or a request to recall details. Omit unsupported details and give an answer frame if evidence is missing." },
+          transcript: rows, sources, question });
+      }
       if (!live()) {
         this.removeDraft(job);
         return;
@@ -921,6 +941,12 @@ export class CoachEngine extends EventEmitter {
       this.removeDraft(job);
       let shown = false;
       for (const card of validateAdvice(result)) {
+        if (this.stageCoach && this.source !== "demo" && lane === "fast") {
+          const safe = guardCard(card, { question: job.trigger?.question || question, onGap: () => this.diagnostics("coaching.gap", { type: "unsafe_cue" }) });
+          card.say = safe.say; card.frame = safe.frame; card.askBack = safe.askBack;
+          card.lead = safe.say || safe.frame.join(" · ");
+          card.points = safe.cues.map((c) => ({ label: "", text: c.text }));
+        }
         if (
           (card.kind === "fact" && !card.sourceIds.length) ||
           card.sourceIds.some((id) => !allowed.has(id))
@@ -933,6 +959,8 @@ export class CoachEngine extends EventEmitter {
         job.latency.firstTokenAt ??= now;
         job.latency.firstPaintAt ??= now;
         job.latency.doneAt = now;
+        Object.assign(job.latency, { matchedAt: job.latency.matchedAt ?? start, revealedAt: job.latency.firstPaintAt,
+          source: card.sourceIds.length ? "live" : "none", revealLeadMs: job.latency.firstPaintAt - job.latency.turnEndedAt });
         const late = job.late ?? this.isLate(job, explicit);
         this.cards.push({
           ...card,
@@ -1012,15 +1040,12 @@ export class CoachEngine extends EventEmitter {
       question,
       trigger: job.trigger || { speaker: "You", text: question },
       kind: "say",
-      lead: "I need more verified context to help with that.",
-      points: [
-        {
-          label: "Try",
-          text: "Add your notes or ask a more specific question.",
-        },
-      ],
-      title: "More context needed",
-      body: "I don't have enough verified context to answer yet. Add your notes or ask a more specific question.",
+      lead: "",
+      points: [],
+      frame: frameFor(question),
+      askBack: "Which part would be most useful to explore?",
+      title: "Start with",
+      body: "No verified context is on file. " + frameFor(question).join(" → "),
       say: "",
       sourceIds: [],
       sources: [],

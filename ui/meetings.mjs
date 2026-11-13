@@ -652,6 +652,7 @@ export function createMeetingUi({
         render();
         break;
       case "m-stage-select": {
+        if (state.get().stage) { await command("card.select", { id: node.dataset.id }); break; }
         // View an earlier card until a newer one arrives.
         const fast = s.cards.filter(
           (c) => c.status !== "dismissed" && c.lane !== "strategy" && c.kind !== "bigger_picture",

@@ -1,0 +1,541 @@
+{
+  "type": "object",
+  "properties": {
+    "callwisePack": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_.:-]{1,180}$"
+    },
+    "createdBy": {
+      "type": "string"
+    },
+    "meeting": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "start": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "type": {
+          "enum": [
+            "interview",
+            "sales",
+            "client",
+            "other"
+          ]
+        },
+        "goal": {
+          "type": "string"
+        },
+        "people": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "role": {
+                "type": "string"
+              },
+              "org": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "role",
+              "org"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "title",
+        "start",
+        "type",
+        "goal",
+        "people"
+      ],
+      "additionalProperties": false
+    },
+    "points": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 200
+    },
+    "stories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_.:-]{1,180}$"
+          },
+          "title": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string"
+          },
+          "numbers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                },
+                "period": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "label",
+                "value",
+                "period"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 50
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "locator": {
+                  "type": "string"
+                },
+                "quote": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title",
+                "locator",
+                "quote"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 200,
+            "minItems": 1
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "result",
+          "numbers",
+          "sources"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 200
+    },
+    "cards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_.:-]{1,180}$"
+          },
+          "kind": {
+            "enum": [
+              "story",
+              "view",
+              "fact",
+              "logistics"
+            ]
+          },
+          "status": {
+            "enum": [
+              "needs_review",
+              "approved"
+            ]
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "minItems": 1
+          },
+          "say": {
+            "type": "string"
+          },
+          "cues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "icon": {
+                  "enum": [
+                    "number",
+                    "person",
+                    "decision",
+                    "caution",
+                    "ask",
+                    "time",
+                    "money",
+                    "place"
+                  ]
+                },
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "icon",
+                "text"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 3
+          },
+          "storyId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_.:-]{1,180}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "backupStoryId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_.:-]{1,180}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "proof": {
+            "anyOf": [
+              {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "number_bars"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "before": {
+                        "type": [
+                          "number",
+                          "string"
+                        ]
+                      },
+                      "after": {
+                        "type": [
+                          "number",
+                          "string"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "value",
+                      "label"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "beats"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "beats": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "label": {
+                              "type": "string"
+                            },
+                            "text": {
+                              "type": "string"
+                            },
+                            "highlight": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "label",
+                            "text"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 12
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title",
+                      "beats"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "scope"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "stats": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "value": {
+                              "type": "string"
+                            },
+                            "label": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "label"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 12
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title",
+                      "stats"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "image"
+                      },
+                      "tileId": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9_.:-]{1,180}$"
+                      },
+                      "src": {
+                        "type": "string"
+                      },
+                      "alt": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "tileId"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "questions",
+          "say",
+          "cues",
+          "storyId",
+          "backupStoryId",
+          "proof"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 200
+    },
+    "facts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_.:-]{1,180}$"
+          },
+          "about": {
+            "enum": [
+              "you",
+              "them"
+            ]
+          },
+          "text": {
+            "type": "string"
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "locator": {
+                "type": "string"
+              },
+              "quote": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "title"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "id",
+          "about",
+          "text",
+          "source"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 200
+    },
+    "questionsForThem": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 200
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_.:-]{1,180}$"
+          },
+          "storyId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_.:-]{1,180}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ask": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "storyId",
+          "ask"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 200
+    },
+    "glossary": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 300
+    },
+    "tiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_.:-]{1,180}$"
+          },
+          "file": {
+            "type": "string"
+          },
+          "alt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "file",
+          "alt"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 40
+    }
+  },
+  "required": [
+    "callwisePack",
+    "id",
+    "createdBy",
+    "meeting",
+    "points",
+    "stories",
+    "cards",
+    "facts",
+    "questionsForThem",
+    "gaps",
+    "glossary",
+    "tiles"
+  ],
+  "additionalProperties": false,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

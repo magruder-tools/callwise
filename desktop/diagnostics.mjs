@@ -42,12 +42,17 @@ const numeric = new Set([
   "lostMs",
   "bufferMs",
   "status",
+  "matchedAt",
+  "revealedAt",
+  "liveMs",
 ]);
 export function diagnosticFields(fields = {}) {
   const safe = {};
   for (const [key, value] of Object.entries(fields)) {
     if (numeric.has(key) && Number.isFinite(value) && value >= 0)
       safe[key] = value;
+    else if (key === "revealLeadMs" && Number.isFinite(value)) safe[key] = value;
+    else if (key === "source" && ["prepared", "prepared_closest", "live", "none", "fact"].includes(value)) safe[key] = value;
     else if (key === "state" && states.has(value)) safe[key] = value;
     else if (key === "channel" && ["mic", "system"].includes(value))
       safe[key] = value;

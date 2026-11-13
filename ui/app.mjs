@@ -22,6 +22,9 @@ import {
   localSettings,
 } from "./views/meetings.mjs";
 import { createMeetingUi } from "./meetings.mjs";
+import { createRound3Ui } from "./round3.mjs";
+import { bankReview } from "./views/bank.mjs";
+import { rehearsalView } from "./views/rehearsal.mjs";
 const root = document.getElementById("app"),
   panel =
     new URLSearchParams(window.location?.search || "").get("surface") ===
@@ -77,6 +80,7 @@ const clipboard = async (text) => {
   ui.notice = "Copied.";
   render();
 };
+const round3Ui = createRound3Ui({ state, ui, command, render, bridge, clipboard });
 function receive(s) {
   if (s.transcriptDelta) {
     const rows = new Map(
@@ -202,6 +206,7 @@ function render() {
   const s = state.get();
   if (!s) return;
   captureDrafts(root, ui);
+  round3Ui.capture(root);
   const view = panel ? "live" : ui.screen;
   root.dataset.view = view;
   let content;
@@ -231,6 +236,10 @@ function render() {
             ? localSettings(s, ui, settings)
             : localWelcome(s, ui);
   } else content = { ready, live, recap, settings, welcome }[view](s, ui);
+  if (!panel && view !== "settings" && !["running", "paused", "finishing"].includes(s.status)) {
+    if (s.rehearsal && s.rehearsal.status !== "idle") content = rehearsalView(s);
+    else if (s.bank && view === "ready") content = bankReview(s);
+  }
   const notices =
     (s.meetings && (s.meetings.locked || s.desktop?.storageBlocked)
       ? `<div class="banner warning" role="status"><span>Saved data is locked. End any open meeting, then unlock to try again. Unsaved notes stay open.</span>${button("storage-unlock", ui.storageUnlocking ? "Unlocking…" : "Unlock saved data", { disabled: !!ui.storageUnlocking || !!s.meetings.archiveOperation || ["running", "paused", "finishing"].includes(s.status) })}</div>`
@@ -264,6 +273,8 @@ function render() {
       : `<div data-region="notices">${notices}</div><div data-region="${view}">${content}</div>`,
   );
   restoreDrafts(root, ui);
+  round3Ui.restore(root);
+  round3Ui.decorate(root, s);
   clock();
   for (const id of [
     "meeting-notice",
@@ -305,6 +316,7 @@ function fitPanel() {
 }
 window.addEventListener("resize", fitPanel);
 root.addEventListener("toggle", fitPanel, true);
+root.addEventListener("input", (event) => round3Ui.edit(event.target));
 function meterLocal(channel, rms) {
   const node =
     document.getElementById(`meter-${channel}`) ||
@@ -321,6 +333,12 @@ state.subscribe(() => {
 });
 bridge.onState(receive);
 bridge.onStopCapture(() => capture?.stop());
+let rehearsalCapture;
+bridge.onRehearsalCapture?.((start, options) => {
+  if (!start) { rehearsalCapture?.stop(); return; }
+  rehearsalCapture ||= new AudioCapture(bridge, meterLocal, (message) => { run("rehearsal.stop"); report(message); });
+  void rehearsalCapture.start({ inputDevice: options?.inputDevice || "", channels: ["mic"] }).catch((error) => { run("rehearsal.stop"); report(error); });
+});
 bridge.onMeters?.(({ channel, rms }) => {
   latestMeters[channel] = rms;
   meterLocal(channel, rms);
@@ -331,6 +349,7 @@ bridge.onNavigate?.((data) => {
     return;
   }
   if (data.screen) {
+    if (data.prepMeeting) { ui.meetingTitle = data.prepMeeting.title; ui.meetingPeople = (data.prepMeeting.people || []).join(", "); }
     ui.screen = data.screen;
     if (data.tab) ui.tab = data.tab;
     render();
@@ -408,6 +427,7 @@ async function testAI(save) {
 }
 async function act(action, node) {
   const s = state.get();
+  if (action.startsWith("r3-")) return round3Ui.act(action, node);
   if (action.startsWith("m-")) return meetingUi.act(action, node);
   if (s.meetings && ["pause", "end", "new", "export"].includes(action))
     await meetingUi.flushNotes();
@@ -870,6 +890,17 @@ root.addEventListener("submit", (e) => {
     }
   })().catch(report);
 });
+root.addEventListener("dragover", (event) => { if (event.target.closest("#pack-drop-zone")) event.preventDefault(); });
+root.addEventListener("keydown", (event) => { if (event.target.id === "pack-drop-zone" && ["Enter", " "].includes(event.key)) { event.preventDefault(); void round3Ui.act("r3-import", event.target).catch(report); } });
+root.addEventListener("drop", (event) => {
+  if (!event.target.closest("#pack-drop-zone")) return;
+  event.preventDefault();
+  if (bridge.desktop) void command("desktop.pack.import", { paths: Array.from(event.dataTransfer.files, file => bridge.filePath(file)) }).catch(report);
+  else for (const file of event.dataTransfer.files) {
+    if (file.size > 2 * 1024 * 1024 || !/\.json$/i.test(file.name)) { report("In the browser, choose a pack.json below 2 MB."); continue; }
+    void file.text().then(json => command("pack.import", { json })).catch(report);
+  }
+});
 root.addEventListener("dragover", (e) => {
   if (e.target.closest("#drop-zone")) {
     e.preventDefault();
@@ -937,6 +968,7 @@ window.addEventListener("keydown", (e) => {
 window.addEventListener("beforeunload", () => {
   clearTimeout(testTimer);
   capture?.stop();
+  rehearsalCapture?.stop();
 });
 setInterval(clock, 1000);
 void command("state")

@@ -4,6 +4,7 @@ export const SESSION_SHORTCUTS = Object.freeze({
   previous: "Control+Alt+[",
   next: "Control+Alt+]",
   visibility: "Control+Alt+H",
+  other: "Control+Alt+O",
 });
 
 export class SessionShortcuts {

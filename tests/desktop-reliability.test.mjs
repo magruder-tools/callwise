@@ -41,12 +41,12 @@ test("shortcuts keep help, pause and visibility while paused and release after t
   shortcuts.sync("idle");
   assert.equal(active.size, 0);
   shortcuts.sync("running");
-  assert.equal(active.size, 4);
+  assert.equal(active.size, Object.keys(SESSION_SHORTCUTS).length - 1);
   assert.equal(failures.length, 1);
   shortcuts.sync("running");
   assert.equal(
     registered.length,
-    5,
+    Object.keys(SESSION_SHORTCUTS).length,
     "snapshots do not re-register or repeat conflicts",
   );
   assert.ok(
@@ -57,7 +57,7 @@ test("shortcuts keep help, pause and visibility while paused and release after t
   assert.ok(active.has(SESSION_SHORTCUTS.pause));
   assert.ok(active.has(SESSION_SHORTCUTS.visibility));
   shortcuts.sync("running");
-  assert.equal(active.size, 4);
+  assert.equal(active.size, Object.keys(SESSION_SHORTCUTS).length - 1);
   shortcuts.sync("ended");
   assert.equal(active.size, 0);
 });

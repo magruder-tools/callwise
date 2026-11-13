@@ -1,0 +1,729 @@
+{
+  "description": "Synthetic interview topics. Six indexed phrasings and six held-out rephrasings per card; negatives never have an approved answer. Calibration uses even-indexed rephrasings; report odd-indexed holdout separately.",
+  "cards": [
+    {
+      "id": "client-result",
+      "questions": [
+        "Tell me about a measurable client acquisition result.",
+        "Give an example of a customer growth win.",
+        "How did you approach increased new customer signups?",
+        "What is your experience with winning more customers?",
+        "Describe a time involving a measurable client acquisition result.",
+        "Can you discuss a customer growth win?"
+      ],
+      "phrasings": [
+        "Walk me through increased new customer signups.",
+        "What would you highlight about winning more customers?",
+        "Which story demonstrates a customer growth win?",
+        "Have you ever been responsible for a measurable client acquisition result?",
+        "I would like to hear how you handled winning more customers.",
+        "Could you share the outcome of increased new customer signups?"
+      ],
+      "novelPhrasings": [
+        "Which achievement best demonstrates that you can grow a customer base?"
+      ]
+    },
+    {
+      "id": "multi-account",
+      "questions": [
+        "Tell me about managing many client accounts at once.",
+        "Give an example of balancing a portfolio of clients.",
+        "How did you approach prioritizing competing client demands?",
+        "What is your experience with juggling multiple accounts?",
+        "Describe a time involving managing many client accounts at once.",
+        "Can you discuss balancing a portfolio of clients?"
+      ],
+      "phrasings": [
+        "Walk me through prioritizing competing client demands.",
+        "What would you highlight about juggling multiple accounts?",
+        "Which story demonstrates balancing a portfolio of clients?",
+        "Have you ever been responsible for managing many client accounts at once?",
+        "I would like to hear how you handled juggling multiple accounts.",
+        "Could you share the outcome of prioritizing competing client demands?"
+      ],
+      "novelPhrasings": [
+        "If five customers all need urgent help on the same morning, how do you cope?"
+      ]
+    },
+    {
+      "id": "team-lead",
+      "questions": [
+        "Tell me about leading a team of specialists.",
+        "Give an example of managing cross-functional people.",
+        "How did you approach coordinating designers and engineers?",
+        "What is your experience with directing a delivery team?",
+        "Describe a time involving leading a team of specialists.",
+        "Can you discuss managing cross-functional people?"
+      ],
+      "phrasings": [
+        "Walk me through coordinating designers and engineers.",
+        "What would you highlight about directing a delivery team?",
+        "Which story demonstrates managing cross-functional people?",
+        "Have you ever been responsible for leading a team of specialists?",
+        "I would like to hear how you handled directing a delivery team.",
+        "Could you share the outcome of coordinating designers and engineers?"
+      ],
+      "novelPhrasings": [
+        "How do you get people from different disciplines pulling in the same direction?"
+      ]
+    },
+    {
+      "id": "rebrand",
+      "questions": [
+        "Tell me about leading a company rebrand.",
+        "Give an example of changing a brand identity.",
+        "How did you approach repositioning a business brand?",
+        "What is your experience with refreshing a company image?",
+        "Describe a time involving leading a company rebrand.",
+        "Can you discuss changing a brand identity?"
+      ],
+      "phrasings": [
+        "Walk me through repositioning a business brand.",
+        "What would you highlight about refreshing a company image?",
+        "Which story demonstrates changing a brand identity?",
+        "Have you ever been responsible for leading a company rebrand?",
+        "I would like to hear how you handled refreshing a company image.",
+        "Could you share the outcome of repositioning a business brand?"
+      ],
+      "novelPhrasings": [
+        "When have you changed the way the public perceives a business?"
+      ]
+    },
+    {
+      "id": "budget",
+      "questions": [
+        "Tell me about allocating an advertising budget.",
+        "Give an example of dividing paid media spend.",
+        "How did you approach deciding how much each campaign receives?",
+        "What is your experience with planning campaign expenditure?",
+        "Describe a time involving allocating an advertising budget.",
+        "Can you discuss dividing paid media spend?"
+      ],
+      "phrasings": [
+        "Walk me through deciding how much each campaign receives.",
+        "What would you highlight about planning campaign expenditure?",
+        "Which story demonstrates dividing paid media spend?",
+        "Have you ever been responsible for allocating an advertising budget?",
+        "I would like to hear how you handled planning campaign expenditure.",
+        "Could you share the outcome of deciding how much each campaign receives?"
+      ],
+      "novelPhrasings": [
+        "How do you decide where the next dollar of campaign investment should go?"
+      ]
+    },
+    {
+      "id": "conflict",
+      "questions": [
+        "Tell me about resolving a disagreement with a colleague.",
+        "Give an example of settling an internal team conflict.",
+        "How did you approach handling friction between coworkers?",
+        "What is your experience with mediating a workplace dispute?",
+        "Describe a time involving resolving a disagreement with a colleague.",
+        "Can you discuss settling an internal team conflict?"
+      ],
+      "phrasings": [
+        "Walk me through handling friction between coworkers.",
+        "What would you highlight about mediating a workplace dispute?",
+        "Which story demonstrates settling an internal team conflict?",
+        "Have you ever been responsible for resolving a disagreement with a colleague?",
+        "I would like to hear how you handled mediating a workplace dispute.",
+        "Could you share the outcome of handling friction between coworkers?"
+      ],
+      "novelPhrasings": [
+        "Tell me about two coworkers who could not agree and how you helped."
+      ]
+    },
+    {
+      "id": "failure",
+      "questions": [
+        "Tell me about a project that failed and what you learned.",
+        "Give an example of a professional setback.",
+        "How did you approach recovering from an unsuccessful initiative?",
+        "What is your experience with learning from a work mistake?",
+        "Describe a time involving a project that failed and what you learned.",
+        "Can you discuss a professional setback?"
+      ],
+      "phrasings": [
+        "Walk me through recovering from an unsuccessful initiative.",
+        "What would you highlight about learning from a work mistake?",
+        "Which story demonstrates a professional setback?",
+        "Have you ever been responsible for a project that failed and what you learned?",
+        "I would like to hear how you handled learning from a work mistake.",
+        "Could you share the outcome of recovering from an unsuccessful initiative?"
+      ],
+      "novelPhrasings": [
+        "What went wrong in an initiative you owned, and how did that change your approach?"
+      ]
+    },
+    {
+      "id": "deadline",
+      "questions": [
+        "Tell me about delivering a project under a tight deadline.",
+        "Give an example of shipping when time was short.",
+        "How did you approach meeting an urgent delivery date?",
+        "What is your experience with finishing work on a compressed schedule?",
+        "Describe a time involving delivering a project under a tight deadline.",
+        "Can you discuss shipping when time was short?"
+      ],
+      "phrasings": [
+        "Walk me through meeting an urgent delivery date.",
+        "What would you highlight about finishing work on a compressed schedule?",
+        "Which story demonstrates shipping when time was short?",
+        "Have you ever been responsible for delivering a project under a tight deadline?",
+        "I would like to hear how you handled finishing work on a compressed schedule.",
+        "Could you share the outcome of meeting an urgent delivery date?"
+      ],
+      "novelPhrasings": [
+        "Have you ever had to ship something much sooner than expected?"
+      ]
+    },
+    {
+      "id": "analytics",
+      "questions": [
+        "Tell me about using analytics to make a business decision.",
+        "Give an example of turning performance data into action.",
+        "How did you approach making a decision based on metrics?",
+        "What is your experience with letting measurement guide your strategy?",
+        "Describe a time involving using analytics to make a business decision.",
+        "Can you discuss turning performance data into action?"
+      ],
+      "phrasings": [
+        "Walk me through making a decision based on metrics.",
+        "What would you highlight about letting measurement guide your strategy?",
+        "Which story demonstrates turning performance data into action?",
+        "Have you ever been responsible for using analytics to make a business decision?",
+        "I would like to hear how you handled letting measurement guide your strategy.",
+        "Could you share the outcome of making a decision based on metrics?"
+      ],
+      "novelPhrasings": [
+        "When did a pattern in the numbers cause you to change course?"
+      ]
+    },
+    {
+      "id": "retention",
+      "questions": [
+        "Tell me about improving customer retention.",
+        "Give an example of reducing customer churn.",
+        "How did you approach keeping existing customers loyal?",
+        "What is your experience with preventing clients from leaving?",
+        "Describe a time involving improving customer retention.",
+        "Can you discuss reducing customer churn?"
+      ],
+      "phrasings": [
+        "Walk me through keeping existing customers loyal.",
+        "What would you highlight about preventing clients from leaving?",
+        "Which story demonstrates reducing customer churn?",
+        "Have you ever been responsible for improving customer retention?",
+        "I would like to hear how you handled preventing clients from leaving.",
+        "Could you share the outcome of keeping existing customers loyal?"
+      ],
+      "novelPhrasings": [
+        "How have you persuaded existing customers to stay with a business?"
+      ]
+    },
+    {
+      "id": "hiring",
+      "questions": [
+        "Tell me about hiring a new team member.",
+        "Give an example of recruiting the right candidate.",
+        "How did you approach choosing someone to join your staff?",
+        "What is your experience with interviewing and selecting employees?",
+        "Describe a time involving hiring a new team member.",
+        "Can you discuss recruiting the right candidate?"
+      ],
+      "phrasings": [
+        "Walk me through choosing someone to join your staff.",
+        "What would you highlight about interviewing and selecting employees?",
+        "Which story demonstrates recruiting the right candidate?",
+        "Have you ever been responsible for hiring a new team member?",
+        "I would like to hear how you handled interviewing and selecting employees.",
+        "Could you share the outcome of choosing someone to join your staff?"
+      ],
+      "novelPhrasings": [
+        "What do you look for when choosing a person to join your team?"
+      ]
+    },
+    {
+      "id": "feedback",
+      "questions": [
+        "Tell me about giving difficult feedback to a direct report.",
+        "Give an example of coaching an underperforming employee.",
+        "How did you approach addressing poor work performance?",
+        "What is your experience with having a tough performance conversation?",
+        "Describe a time involving giving difficult feedback to a direct report.",
+        "Can you discuss coaching an underperforming employee?"
+      ],
+      "phrasings": [
+        "Walk me through addressing poor work performance.",
+        "What would you highlight about having a tough performance conversation?",
+        "Which story demonstrates coaching an underperforming employee?",
+        "Have you ever been responsible for giving difficult feedback to a direct report?",
+        "I would like to hear how you handled having a tough performance conversation.",
+        "Could you share the outcome of addressing poor work performance?"
+      ],
+      "novelPhrasings": [
+        "Tell me about helping someone whose results were below expectations."
+      ]
+    },
+    {
+      "id": "stakeholder",
+      "questions": [
+        "Tell me about getting executive stakeholder buy-in.",
+        "Give an example of persuading leadership to support a proposal.",
+        "How did you approach securing senior management approval?",
+        "What is your experience with winning sponsorship from executives?",
+        "Describe a time involving getting executive stakeholder buy-in.",
+        "Can you discuss persuading leadership to support a proposal?"
+      ],
+      "phrasings": [
+        "Walk me through securing senior management approval.",
+        "What would you highlight about winning sponsorship from executives?",
+        "Which story demonstrates persuading leadership to support a proposal?",
+        "Have you ever been responsible for getting executive stakeholder buy-in?",
+        "I would like to hear how you handled winning sponsorship from executives.",
+        "Could you share the outcome of securing senior management approval?"
+      ],
+      "novelPhrasings": [
+        "How have you convinced senior leaders to back your recommendation?"
+      ]
+    },
+    {
+      "id": "launch",
+      "questions": [
+        "Tell me about launching a new product.",
+        "Give an example of bringing a product to market.",
+        "How did you approach running a go-to-market launch?",
+        "What is your experience with introducing a new offering?",
+        "Describe a time involving launching a new product.",
+        "Can you discuss bringing a product to market?"
+      ],
+      "phrasings": [
+        "Walk me through running a go-to-market launch.",
+        "What would you highlight about introducing a new offering?",
+        "Which story demonstrates bringing a product to market?",
+        "Have you ever been responsible for launching a new product?",
+        "I would like to hear how you handled introducing a new offering.",
+        "Could you share the outcome of running a go-to-market launch?"
+      ],
+      "novelPhrasings": [
+        "Walk me through taking a new offering from development into the market."
+      ]
+    },
+    {
+      "id": "crisis",
+      "questions": [
+        "Tell me about handling a public relations crisis.",
+        "Give an example of responding to reputational damage.",
+        "How did you approach managing negative media coverage?",
+        "What is your experience with dealing with a brand controversy?",
+        "Describe a time involving handling a public relations crisis.",
+        "Can you discuss responding to reputational damage?"
+      ],
+      "phrasings": [
+        "Walk me through managing negative media coverage.",
+        "What would you highlight about dealing with a brand controversy?",
+        "Which story demonstrates responding to reputational damage?",
+        "Have you ever been responsible for handling a public relations crisis?",
+        "I would like to hear how you handled dealing with a brand controversy.",
+        "Could you share the outcome of managing negative media coverage?"
+      ],
+      "novelPhrasings": [
+        "What would you do when damaging press coverage puts a company under pressure?"
+      ]
+    },
+    {
+      "id": "research",
+      "questions": [
+        "Tell me about conducting customer research.",
+        "Give an example of learning what customers need.",
+        "How did you approach interviewing users to understand their problems?",
+        "What is your experience with discovering audience insights?",
+        "Describe a time involving conducting customer research.",
+        "Can you discuss learning what customers need?"
+      ],
+      "phrasings": [
+        "Walk me through interviewing users to understand their problems.",
+        "What would you highlight about discovering audience insights?",
+        "Which story demonstrates learning what customers need?",
+        "Have you ever been responsible for conducting customer research?",
+        "I would like to hear how you handled discovering audience insights.",
+        "Could you share the outcome of interviewing users to understand their problems?"
+      ],
+      "novelPhrasings": [
+        "How do you uncover what an audience actually wants?"
+      ]
+    },
+    {
+      "id": "automation",
+      "questions": [
+        "Tell me about automating repetitive work.",
+        "Give an example of removing manual steps from a process.",
+        "How did you approach saving time through workflow automation?",
+        "What is your experience with building a more efficient recurring workflow?",
+        "Describe a time involving automating repetitive work.",
+        "Can you discuss removing manual steps from a process?"
+      ],
+      "phrasings": [
+        "Walk me through saving time through workflow automation.",
+        "What would you highlight about building a more efficient recurring workflow?",
+        "Which story demonstrates removing manual steps from a process?",
+        "Have you ever been responsible for automating repetitive work?",
+        "I would like to hear how you handled building a more efficient recurring workflow.",
+        "Could you share the outcome of saving time through workflow automation?"
+      ],
+      "novelPhrasings": [
+        "When have you replaced repeated manual tasks with a system?"
+      ]
+    },
+    {
+      "id": "vendor",
+      "questions": [
+        "Tell me about selecting an outside vendor.",
+        "Give an example of evaluating an external agency partner.",
+        "How did you approach choosing a supplier for a project?",
+        "What is your experience with comparing service providers?",
+        "Describe a time involving selecting an outside vendor.",
+        "Can you discuss evaluating an external agency partner?"
+      ],
+      "phrasings": [
+        "Walk me through choosing a supplier for a project.",
+        "What would you highlight about comparing service providers?",
+        "Which story demonstrates evaluating an external agency partner?",
+        "Have you ever been responsible for selecting an outside vendor?",
+        "I would like to hear how you handled comparing service providers.",
+        "Could you share the outcome of choosing a supplier for a project?"
+      ],
+      "novelPhrasings": [
+        "How would you compare agencies before choosing one to do the work?"
+      ]
+    },
+    {
+      "id": "negotiation",
+      "questions": [
+        "Tell me about negotiating a commercial contract.",
+        "Give an example of agreeing terms with a business partner.",
+        "How did you approach bargaining over deal conditions?",
+        "What is your experience with reaching a contract agreement?",
+        "Describe a time involving negotiating a commercial contract.",
+        "Can you discuss agreeing terms with a business partner?"
+      ],
+      "phrasings": [
+        "Walk me through bargaining over deal conditions.",
+        "What would you highlight about reaching a contract agreement?",
+        "Which story demonstrates agreeing terms with a business partner?",
+        "Have you ever been responsible for negotiating a commercial contract?",
+        "I would like to hear how you handled reaching a contract agreement.",
+        "Could you share the outcome of bargaining over deal conditions?"
+      ],
+      "novelPhrasings": [
+        "Tell me about reaching mutually acceptable terms on a business deal."
+      ]
+    },
+    {
+      "id": "scope",
+      "questions": [
+        "Tell me about handling project scope creep.",
+        "Give an example of responding to extra work requests.",
+        "How did you approach controlling changes to agreed deliverables?",
+        "What is your experience with keeping a project within its original scope?",
+        "Describe a time involving handling project scope creep.",
+        "Can you discuss responding to extra work requests?"
+      ],
+      "phrasings": [
+        "Walk me through controlling changes to agreed deliverables.",
+        "What would you highlight about keeping a project within its original scope?",
+        "Which story demonstrates responding to extra work requests?",
+        "Have you ever been responsible for handling project scope creep?",
+        "I would like to hear how you handled keeping a project within its original scope.",
+        "Could you share the outcome of controlling changes to agreed deliverables?"
+      ],
+      "novelPhrasings": [
+        "What do you do when a client keeps asking for deliverables outside the agreement?"
+      ]
+    },
+    {
+      "id": "remote",
+      "questions": [
+        "Tell me about collaborating with a remote team.",
+        "Give an example of working across time zones.",
+        "How did you approach coordinating distributed colleagues?",
+        "What is your experience with managing asynchronous teamwork?",
+        "Describe a time involving collaborating with a remote team.",
+        "Can you discuss working across time zones?"
+      ],
+      "phrasings": [
+        "Walk me through coordinating distributed colleagues.",
+        "What would you highlight about managing asynchronous teamwork?",
+        "Which story demonstrates working across time zones?",
+        "Have you ever been responsible for collaborating with a remote team?",
+        "I would like to hear how you handled managing asynchronous teamwork.",
+        "Could you share the outcome of coordinating distributed colleagues?"
+      ],
+      "novelPhrasings": [
+        "How have you worked effectively with colleagues who are in different countries?"
+      ]
+    },
+    {
+      "id": "onboarding",
+      "questions": [
+        "Tell me about onboarding a new client.",
+        "Give an example of starting a customer relationship.",
+        "How did you approach welcoming a newly signed account?",
+        "What is your experience with setting up a client engagement?",
+        "Describe a time involving onboarding a new client.",
+        "Can you discuss starting a customer relationship?"
+      ],
+      "phrasings": [
+        "Walk me through welcoming a newly signed account.",
+        "What would you highlight about setting up a client engagement?",
+        "Which story demonstrates starting a customer relationship?",
+        "Have you ever been responsible for onboarding a new client?",
+        "I would like to hear how you handled setting up a client engagement.",
+        "Could you share the outcome of welcoming a newly signed account?"
+      ],
+      "novelPhrasings": [
+        "What happens in the first few weeks after a customer signs with you?"
+      ]
+    },
+    {
+      "id": "reporting",
+      "questions": [
+        "Tell me about presenting results to a client.",
+        "Give an example of explaining performance in a client report.",
+        "How did you approach communicating campaign outcomes to customers?",
+        "What is your experience with walking a client through their metrics?",
+        "Describe a time involving presenting results to a client.",
+        "Can you discuss explaining performance in a client report?"
+      ],
+      "phrasings": [
+        "Walk me through communicating campaign outcomes to customers.",
+        "What would you highlight about walking a client through their metrics?",
+        "Which story demonstrates explaining performance in a client report?",
+        "Have you ever been responsible for presenting results to a client?",
+        "I would like to hear how you handled walking a client through their metrics.",
+        "Could you share the outcome of communicating campaign outcomes to customers?"
+      ],
+      "novelPhrasings": [
+        "How do you help a customer understand whether their campaigns are succeeding?"
+      ]
+    },
+    {
+      "id": "pricing",
+      "questions": [
+        "Tell me about setting the price of a service.",
+        "Give an example of designing a service pricing model.",
+        "How did you approach deciding what to charge customers?",
+        "What is your experience with establishing a fee structure?",
+        "Describe a time involving setting the price of a service.",
+        "Can you discuss designing a service pricing model?"
+      ],
+      "phrasings": [
+        "Walk me through deciding what to charge customers.",
+        "What would you highlight about establishing a fee structure?",
+        "Which story demonstrates designing a service pricing model?",
+        "Have you ever been responsible for setting the price of a service?",
+        "I would like to hear how you handled establishing a fee structure.",
+        "Could you share the outcome of deciding what to charge customers?"
+      ],
+      "novelPhrasings": [
+        "What factors determine the fee you quote for an engagement?"
+      ]
+    },
+    {
+      "id": "seo",
+      "questions": [
+        "Tell me about improving organic search traffic.",
+        "Give an example of growing website visibility in search engines.",
+        "How did you approach raising unpaid search rankings?",
+        "What is your experience with increasing visitors through SEO?",
+        "Describe a time involving improving organic search traffic.",
+        "Can you discuss growing website visibility in search engines?"
+      ],
+      "phrasings": [
+        "Walk me through raising unpaid search rankings.",
+        "What would you highlight about increasing visitors through SEO?",
+        "Which story demonstrates growing website visibility in search engines?",
+        "Have you ever been responsible for improving organic search traffic?",
+        "I would like to hear how you handled increasing visitors through SEO.",
+        "Could you share the outcome of raising unpaid search rankings?"
+      ],
+      "novelPhrasings": [
+        "How have you helped a site get more visitors without paying for search ads?"
+      ]
+    },
+    {
+      "id": "email",
+      "questions": [
+        "Tell me about improving an email marketing campaign.",
+        "Give an example of increasing newsletter engagement.",
+        "How did you approach optimizing a promotional email sequence?",
+        "What is your experience with growing response to marketing emails?",
+        "Describe a time involving improving an email marketing campaign.",
+        "Can you discuss increasing newsletter engagement?"
+      ],
+      "phrasings": [
+        "Walk me through optimizing a promotional email sequence.",
+        "What would you highlight about growing response to marketing emails?",
+        "Which story demonstrates increasing newsletter engagement?",
+        "Have you ever been responsible for improving an email marketing campaign?",
+        "I would like to hear how you handled growing response to marketing emails.",
+        "Could you share the outcome of optimizing a promotional email sequence?"
+      ],
+      "novelPhrasings": [
+        "What have you changed to get better results from a newsletter?"
+      ]
+    },
+    {
+      "id": "conversion",
+      "questions": [
+        "Tell me about improving a website conversion rate.",
+        "Give an example of turning website visitors into buyers.",
+        "How did you approach optimizing a landing page funnel?",
+        "What is your experience with increasing the percentage of visitors who purchase?",
+        "Describe a time involving improving a website conversion rate.",
+        "Can you discuss turning website visitors into buyers?"
+      ],
+      "phrasings": [
+        "Walk me through optimizing a landing page funnel.",
+        "What would you highlight about increasing the percentage of visitors who purchase?",
+        "Which story demonstrates turning website visitors into buyers?",
+        "Have you ever been responsible for improving a website conversion rate?",
+        "I would like to hear how you handled increasing the percentage of visitors who purchase.",
+        "Could you share the outcome of optimizing a landing page funnel?"
+      ],
+      "novelPhrasings": [
+        "How would you reduce the number of people who visit a landing page without buying?"
+      ]
+    },
+    {
+      "id": "brand-voice",
+      "questions": [
+        "Tell me about developing a consistent brand voice.",
+        "Give an example of setting guidelines for a company tone.",
+        "How did you approach keeping brand messaging consistent?",
+        "What is your experience with defining how a brand speaks?",
+        "Describe a time involving developing a consistent brand voice.",
+        "Can you discuss setting guidelines for a company tone?"
+      ],
+      "phrasings": [
+        "Walk me through keeping brand messaging consistent.",
+        "What would you highlight about defining how a brand speaks?",
+        "Which story demonstrates setting guidelines for a company tone?",
+        "Have you ever been responsible for developing a consistent brand voice?",
+        "I would like to hear how you handled defining how a brand speaks.",
+        "Could you share the outcome of keeping brand messaging consistent?"
+      ],
+      "novelPhrasings": [
+        "How do you make writing sound like the same company across different channels?"
+      ]
+    },
+    {
+      "id": "accessibility",
+      "questions": [
+        "Tell me about making a digital experience accessible.",
+        "Give an example of improving usability for people with disabilities.",
+        "How did you approach removing accessibility barriers from a website?",
+        "What is your experience with designing an inclusive digital product?",
+        "Describe a time involving making a digital experience accessible.",
+        "Can you discuss improving usability for people with disabilities?"
+      ],
+      "phrasings": [
+        "Walk me through removing accessibility barriers from a website.",
+        "What would you highlight about designing an inclusive digital product?",
+        "Which story demonstrates improving usability for people with disabilities?",
+        "Have you ever been responsible for making a digital experience accessible?",
+        "I would like to hear how you handled designing an inclusive digital product.",
+        "Could you share the outcome of removing accessibility barriers from a website?"
+      ],
+      "novelPhrasings": [
+        "What have you done so people using assistive technology can use a website?"
+      ]
+    },
+    {
+      "id": "ethics",
+      "questions": [
+        "Tell me about handling an ethical concern at work.",
+        "Give an example of speaking up about questionable business conduct.",
+        "How did you approach making a difficult integrity decision?",
+        "What is your experience with responding to a workplace ethics problem?",
+        "Describe a time involving handling an ethical concern at work.",
+        "Can you discuss speaking up about questionable business conduct?"
+      ],
+      "phrasings": [
+        "Walk me through making a difficult integrity decision.",
+        "What would you highlight about responding to a workplace ethics problem?",
+        "Which story demonstrates speaking up about questionable business conduct?",
+        "Have you ever been responsible for handling an ethical concern at work?",
+        "I would like to hear how you handled responding to a workplace ethics problem.",
+        "Could you share the outcome of making a difficult integrity decision?"
+      ],
+      "novelPhrasings": [
+        "Tell me about a time when doing the right thing at work was difficult."
+      ]
+    }
+  ],
+  "offBank": [
+    "What is the weather tomorrow?",
+    "Where should I go on vacation?",
+    "Can you recommend a pasta recipe?",
+    "Who won the baseball game?",
+    "How do I fix a leaking faucet?",
+    "What is the capital of Peru?",
+    "Can I bring my dog to the office?",
+    "Where is the nearest train station?",
+    "What time is lunch?",
+    "How much does parking cost?",
+    "Do you prefer coffee or tea?",
+    "What is your favorite movie?",
+    "How does a solar eclipse happen?",
+    "What book are you reading?",
+    "How do I change a bicycle tire?",
+    "What does this medical diagnosis mean?",
+    "How do I apply for a passport?",
+    "Where can I learn to play piano?",
+    "How deep is the ocean?",
+    "What should I wear to a wedding?",
+    "Can you speak French?",
+    "What time zone are you in?",
+    "Could you repeat your name?",
+    "Is my microphone working?",
+    "Shall we take a short break?",
+    "Can everyone see my screen?",
+    "What is your mailing address?",
+    "How long is the flight to Rome?",
+    "Which hiking trail do you like?",
+    "How old is your cat?",
+    "When is the next national holiday?",
+    "How do I grow tomatoes?",
+    "What does the moon weigh?",
+    "How many players are on a chess board?",
+    "Can we reschedule for Thursday?",
+    "Where did you leave your umbrella?",
+    "Would you like some water?",
+    "How do you fold a fitted sheet?",
+    "What is your favorite museum?",
+    "Can you explain the rules of cricket?"
+  ],
+  "nearMisses": [
+    "What salary are you looking for?",
+    "Why are you leaving your current employer?",
+    "When could you start this role?",
+    "Do you need visa sponsorship?",
+    "What is your notice period?",
+    "Are you willing to relocate?",
+    "What attracted you to our company?",
+    "Which university did you attend?",
+    "What certifications do you hold?",
+    "What are your long-term career goals?",
+    "How many hours a week are you available?",
+    "Can you provide professional references?",
+    "Have you used our proprietary billing system?",
+    "What is your current employment status?",
+    "Are you comfortable traveling internationally?",
+    "How would you describe our competitors?",
+    "What questions do you have about benefits?",
+    "What is your preferred office location?",
+    "How did you hear about this job opening?",
+    "What is your legal right to work here?"
+  ]
+}

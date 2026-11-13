@@ -1,0 +1,98 @@
+[
+  {
+    "name": "listening",
+    "file": "stage/listening.json",
+    "screen": "live"
+  },
+  {
+    "name": "held",
+    "file": "stage/held.json",
+    "screen": "live"
+  },
+  {
+    "name": "early",
+    "file": "stage/early.json",
+    "screen": "live"
+  },
+  {
+    "name": "prepared",
+    "file": "stage/prepared.json",
+    "screen": "live"
+  },
+  {
+    "name": "closest",
+    "file": "stage/closest.json",
+    "screen": "live"
+  },
+  {
+    "name": "live",
+    "file": "stage/live.json",
+    "screen": "live"
+  },
+  {
+    "name": "fact",
+    "file": "stage/fact.json",
+    "screen": "live"
+  },
+  {
+    "name": "frame",
+    "file": "stage/frame.json",
+    "screen": "live"
+  },
+  {
+    "name": "none",
+    "file": "stage/none.json",
+    "screen": "live"
+  },
+  {
+    "name": "unclear",
+    "file": "stage/unclear.json",
+    "screen": "live"
+  },
+  {
+    "name": "model-slow",
+    "file": "stage/model-slow.json",
+    "screen": "live"
+  },
+  {
+    "name": "wrapup-questions",
+    "file": "stage/wrapup-questions.json",
+    "screen": "live"
+  },
+  {
+    "name": "settings-midcall",
+    "file": "stage/settings-midcall.json",
+    "screen": "settings",
+    "tab": "Prep"
+  },
+  {
+    "name": "review-cards",
+    "file": "stage/review-cards.json",
+    "screen": "ready"
+  },
+  {
+    "name": "ready-packs",
+    "file": "stage/ready-packs.json",
+    "screen": "ready"
+  },
+  {
+    "name": "rehearsal-asking",
+    "file": "stage/rehearsal-asking.json",
+    "screen": "ready"
+  },
+  {
+    "name": "rehearsal-listening",
+    "file": "stage/rehearsal-listening.json",
+    "screen": "ready"
+  },
+  {
+    "name": "rehearsal-done",
+    "file": "stage/rehearsal-done.json",
+    "screen": "ready"
+  },
+  {
+    "name": "debrief",
+    "file": "stage/debrief.json",
+    "screen": "live"
+  }
+]

@@ -1,3 +1,4 @@
+import { captureSmoke } from "./smoke-capture.mjs";
 import electron from "electron";
 const {
   app,
@@ -15,6 +16,7 @@ const {
   screen,
   Tray,
   nativeImage,
+  Notification,
 } = electron;
 import { createSecureStorage } from "./secure-storage.mjs";
 // Do not construct Electron's Keychain-backed store for smoke tests or MCP
@@ -29,6 +31,7 @@ import {
   unlinkSync,
   rmSync,
   readFileSync,
+  lstatSync,
 } from "node:fs";
 import { release as osRelease } from "node:os";
 import { readConfig } from "../core/config.mjs";
@@ -79,6 +82,7 @@ import { recoverRestoreSwap } from "./library-restore.mjs";
 import { retrySavedData } from "./storage-recovery.mjs";
 import { FolderArchive } from "./folder-archive.mjs";
 import { revealLibrary } from "./library-location.mjs";
+import { installRound3 } from "./round3.mjs";
 
 const headlessMcp = process.argv.includes("--mcp-server");
 if (!headlessMcp) configureAudioBackend(app.commandLine);
@@ -100,6 +104,12 @@ const DEFAULT_PREFERENCES = Object.freeze({
   meetingRetentionDays: 0,
   audioRetentionDays: 30,
   includePreviewUpdates: buildMetadata.releaseChannel === "preview",
+  earlyReveal: true,
+  localMatching: true,
+  assistantPrepEnabled: false,
+  preflightEnabled: false,
+  calendarWatching: false,
+  prepWatchEnabled: false,
 });
 function reportFailure(message) {
   console.error(message);
@@ -567,7 +577,7 @@ async function boot() {
       callback(
         wc === win?.webContents &&
           trustedFrame(wc.mainFrame) &&
-          (soundCheck ||
+          ((controller.round3?.rehearsal.state.status === "listening" && permission === "media") || soundCheck ||
             (controller.engine.status === "running" &&
               controller.mode === "audio")) &&
           (permission === "display-capture" ||
@@ -579,7 +589,7 @@ async function boot() {
     (wc, permission) =>
       wc === win?.webContents &&
       trustedFrame(wc.mainFrame) &&
-      (soundCheck ||
+      ((controller.round3?.rehearsal.state.status === "listening" && permission === "media") || soundCheck ||
         (controller.mode === "audio" &&
           controller.engine.status === "running")) &&
       ["media", "display-capture"].includes(permission),
@@ -594,6 +604,8 @@ async function boot() {
           controller.engine.status === "running")),
   );
   const send = (name, data) => sendToWindows([win, panel], name, data);
+  const round3Desktop = installRound3({ controller, native, paths, store: meetingStore, getWindow: () => win, send, dialog, clipboard, app, Tray, Menu, nativeImage, Notification, smoke,
+    getNotified: () => readiness.preflightNotified || [], saveNotified: (keys) => { readiness.preflightNotified = keys; saveReadiness(readinessFile, safeStorage, readiness); } });
   const shortcuts = new SessionShortcuts(
     globalShortcut,
     {
@@ -624,6 +636,7 @@ async function boot() {
           .catch((error) => controller.engine.error(error)),
       previous: () => send("callwise:navigate", { direction: "previous" }),
       next: () => send("callwise:navigate", { direction: "next" }),
+      other: () => void controller.command("card.other").catch((error) => controller.engine.error(error)),
       visibility: () => {
         if (panel?.isVisible()) panel.hide();
         else panel?.showInactive();
@@ -646,6 +659,7 @@ async function boot() {
     codexLogin.close();
     shortcuts.close();
     controller.close();
+    round3Desktop.close();
     meetings?.close();
     native.close();
     tray?.destroy();
@@ -831,6 +845,7 @@ async function boot() {
     if (
       meetings?.archiveOperation &&
       (name.startsWith("meeting.") ||
+        /^(?:bank\.|pack\.|rehearsal\.)/.test(name) ||
         [
           "configure",
           "start",
@@ -838,6 +853,8 @@ async function boot() {
           "new",
           "desktop.data.delete",
           "desktop.delete-all",
+          "desktop.pack.import",
+          "watchFolder.choose",
         ].includes(name))
     )
       throw new Error(
@@ -892,10 +909,13 @@ async function boot() {
         panel.showInactive();
         return { shown: true };
       }
-      return meetingCommands(name, payload);
+      const result = await meetingCommands(name, payload);
+      if (name === "desktop.meeting.calendar") round3Desktop.cacheCalendar(result);
+      return result;
     }
     if (meetings && name.startsWith("meeting."))
       return meetings.command(name, payload);
+    if (round3Desktop.handles(name)) return round3Desktop.command(name, payload);
     if (
       meetings &&
       name === "configure" &&
@@ -942,7 +962,15 @@ async function boot() {
       if (codexLogin.busy)
         throw new Error("Finish or cancel Codex sign-in first.");
       endSound(false);
-      return startMeeting({ meetings, controller, payload });
+      if (controller.round3.rehearsal.state.status !== "idle") await controller.round3.rehearsal.stop();
+      const result = await startMeeting({ meetings, controller, payload });
+      const selected = controller.round3.selectedPrepMeeting;
+      if (selected && meetings.activeId) {
+        await controller.round3.bank.command("pack.attach", { packId: selected.packId, meetingId: meetings.activeId });
+        controller.round3.selectedPrepMeeting = null;
+      }
+      void controller.round3.refresh();
+      return result;
     }
     if (name === "desktop.codex.signin") {
       if (
@@ -1265,7 +1293,9 @@ async function boot() {
       });
       if (!result.canceled) {
         const text = await extractFile(result.filePaths[0]);
+        controller.engine.context.add({ title: path.basename(result.filePaths[0]), text, kind: "profile" });
         await controller.command("configure", { profile: text.slice(0, 6000) });
+        controller.materialsChanged();
       }
       return controller.snapshot();
     }
@@ -1288,7 +1318,7 @@ async function boot() {
           }
         : await dialog.showOpenDialog(win, {
             title: "Add meeting context",
-            properties: ["openFile", "multiSelections"],
+            properties: ["openFile", "openDirectory", "multiSelections"],
             filters: [
               {
                 name: "Text and transcripts",
@@ -1301,18 +1331,28 @@ async function boot() {
                   "vtt",
                   "srt",
                   "csv",
+                  "zip",
                 ],
               },
             ],
           });
       if (result.canceled) return { imported: 0 };
+      const packPaths = [], materialPaths = [];
+      for (const filename of result.filePaths) {
+        let isPack = lstatSync(filename).isDirectory() || path.extname(filename).toLowerCase() === ".zip" || path.basename(filename).toLowerCase() === "pack.json";
+        if (!isPack && path.extname(filename).toLowerCase() === ".json" && lstatSync(filename).size <= 2 * 1024 * 1024) {
+          try { isPack = Object.hasOwn(JSON.parse(readFileSync(filename, "utf8")), "callwisePack"); } catch { /* Ordinary JSON material retains the existing import route. */ }
+        }
+        (isPack ? packPaths : materialPaths).push(filename);
+      }
+      const packs = packPaths.length ? await round3Desktop.command("desktop.pack.import", { paths: packPaths }) : null;
       const imported = await importFiles(
-        result.filePaths,
+        materialPaths,
         controller.engine.context,
         controller.engine.settings.project,
       );
       controller.materialsChanged();
-      return imported;
+      return packs ? { ...imported, packs: packs.imported, message: `${packs.imported.length} prep pack(s) added for review.${materialPaths.length ? " Materials added." : ""}` } : imported;
     }
     if (name === "desktop.export") {
       const result = await dialog.showSaveDialog(win, {
@@ -1344,6 +1384,7 @@ async function boot() {
       buffer.byteLength <= 19200
     ) {
       const data = Buffer.from(buffer);
+      if (round3Desktop.audio(channel, data)) return;
       if (soundCheck?.channel === channel) {
         soundCheck.level = Math.max(soundCheck.level, pcmRms(data));
         soundCheck.transcriber.push(data, Date.now() - soundCheck.startedAt);
@@ -1393,12 +1434,18 @@ async function boot() {
       send("callwise:meters", { channel, rms });
   });
   ipcMain.on("callwise:capture-status", (event, channel, status) => {
-    if (event.sender === win?.webContents && trustedFrame(event.senderFrame))
+    if (event.sender === win?.webContents && trustedFrame(event.senderFrame)) {
+      if (controller.round3.rehearsal.state.status !== "idle") {
+        if (status === "failed") { void controller.round3.rehearsal.stop(); controller.engine.error("Rehearsal microphone stopped. Start rehearsal again when ready."); }
+        return;
+      }
       controller.captureStatus(channel, status);
+    }
   });
   for (const event of ["suspend", "lock-screen"])
     powerMonitor.on(event, () => {
       codexLogin.cancel();
+      void controller.round3.rehearsal.stop();
       if (controller.engine.status === "running") {
         controller.stopInputs();
         controller.engine.pause();
@@ -1505,6 +1552,7 @@ async function boot() {
   app.on("will-quit", shutdown);
   app.on("window-all-closed", () => app.quit());
   app.on("activate", () => {
+    if (smoke && panel?.isVisible()) { panel.focus(); return; }
     if (win && !win.isDestroyed()) {
       win.show();
       win.focus();
@@ -1562,14 +1610,14 @@ async function boot() {
     await new Promise((r) => setTimeout(r, 800));
     writeFileSync(
       path.join(artifacts, "desktop-preview.png"),
-      (await panel.webContents.capturePage()).toPNG(),
+      (await captureSmoke(panel)).toPNG(),
     );
     console.log("Smoke: default live screenshot captured.");
     panel.setSize(340, 400);
     await new Promise((r) => setTimeout(r, 500));
     writeFileSync(
       path.join(artifacts, "narrow-preview.png"),
-      (await panel.webContents.capturePage()).toPNG(),
+      (await captureSmoke(panel)).toPNG(),
     );
     controller.engine.providers.fast = {
       generate: async () => ({
@@ -1622,7 +1670,7 @@ async function boot() {
         );
       writeFileSync(
         path.join(artifacts, `${name}.png`),
-        (await panel.webContents.capturePage()).toPNG(),
+        (await captureSmoke(panel)).toPNG(),
       );
     }
     for (let i = 3; i < DEMO_TRANSCRIPT.length; i++)
@@ -1638,7 +1686,7 @@ async function boot() {
     await new Promise((r) => setTimeout(r, 350));
     writeFileSync(
       path.join(artifacts, "recap.png"),
-      (await win.webContents.capturePage()).toPNG(),
+      (await captureSmoke(win)).toPNG(),
     );
     if (controller.recap?.whoOwesWhat.length !== 2 || !controller.recap.email)
       throw new Error(
@@ -1651,7 +1699,7 @@ async function boot() {
     await new Promise((r) => setTimeout(r, 120));
     writeFileSync(
       path.join(artifacts, "recap-source.png"),
-      (await win.webContents.capturePage()).toPNG(),
+      (await captureSmoke(win)).toPNG(),
     );
     await win.webContents.executeJavaScript(
       "document.querySelector('.email-draft').scrollIntoView({block: 'start'})",
@@ -1659,13 +1707,13 @@ async function boot() {
     await new Promise((r) => setTimeout(r, 120));
     writeFileSync(
       path.join(artifacts, "recap-email.png"),
-      (await win.webContents.capturePage()).toPNG(),
+      (await captureSmoke(win)).toPNG(),
     );
     await controller.command("new", { clearContext: true });
     await new Promise((r) => setTimeout(r, 350));
     writeFileSync(
       path.join(artifacts, "ready.png"),
-      (await win.webContents.capturePage()).toPNG(),
+      (await captureSmoke(win)).toPNG(),
     );
     console.log(
       "Desktop smoke completed: two coaching lanes and source-linked demo cards rendered.",
@@ -1706,6 +1754,7 @@ else {
   });
   void boot().catch((error) => {
     reportFailure(`Callwise startup failed: ${error.message}`);
+    if (smoke) console.error(error.stack);
     app.exit(1);
   });
 }

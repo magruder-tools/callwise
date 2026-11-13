@@ -280,4 +280,8 @@ test("Codex strategy restricts inherited connectors and parses final structured 
     rpc.calls.find((c) => c.method === "turn/start").params.outputSchema.type,
     "object",
   );
+  rpc.calls = [];
+  const schema = { type: "object", properties: { say: { type: "string" } }, required: ["say"], additionalProperties: false };
+  await p.generate({ prompt: { instructions: "Write a version 3 card", input: "Synthetic evidence" }, schema, signal: new AbortController().signal });
+  assert.deepEqual(rpc.calls.find((c) => c.method === "turn/start").params.outputSchema, schema);
 });

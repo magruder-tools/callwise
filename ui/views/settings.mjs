@@ -1,3 +1,4 @@
+import { round3Settings } from "../components/round3-settings.mjs";
 import {
   escape,
   header,
@@ -13,9 +14,10 @@ export const DEFAULT_KEYS = {
   previous: "Control+Alt+[",
   next: "Control+Alt+]",
   visibility: "Control+Alt+H",
+  other: "Control+Alt+O",
 };
 export function settings(s, ui) {
-  return `${header(s, "Settings")}${callReturnBar(s)}<div class="settings-layout"><nav aria-label="Settings sections">${["General", "Audio", "AI", "Privacy", "Advanced"].map((t) => button("settings-tab", t, { className: ui.tab === t ? "selected" : "", attrs: `data-tab="${t}"` })).join("")}${button("close-settings", "Done", { className: "text-button" })}</nav><main class="settings-view"><h1>${ui.tab}</h1>${content(s, ui)}</main></div>`;
+  return `${header(s, "Settings")}${callReturnBar(s)}<div class="settings-layout"><nav aria-label="Settings sections">${["General", "Audio", "AI", "Privacy", "Prep", "Advanced"].map((t) => button("settings-tab", t, { className: ui.tab === t ? "selected" : "", attrs: `data-tab="${t}"` })).join("")}${button("close-settings", "Done", { className: "text-button" })}</nav><main class="settings-view"><h1>${ui.tab}</h1>${ui.tab === "Prep" ? round3Settings(s) : content(s, ui)}</main></div>`;
 }
 function field(
   id,

@@ -18,6 +18,13 @@ const stage =
 if (path.resolve(stage) === root || !path.isAbsolute(stage))
   throw new Error("Use a separate absolute temporary build folder.");
 mkdirSync(stage, { recursive: true, mode: 0o700 });
+// Local models must be present and match the pinned manifest before they enter a signed build.
+const matcherManifest = JSON.parse(readFileSync(path.join(root, "native/resources/matcher-model.json")));
+for (const file of matcherManifest.files) {
+  const bytes = readFileSync(path.join(root, "native/resources/matcher", file.file));
+  if (bytes.length !== file.bytes || createHash("sha256").update(bytes).digest("hex") !== file.sha256)
+    throw new Error(`Matcher asset failed verification: ${file.file}`);
+}
 const sources = [
   "package.json",
   "package-lock.json",

@@ -31,7 +31,7 @@ test("assistant discovery never asks to unlock storage", async () => {
   assert.equal(
     (await server.handle({ jsonrpc: "2.0", id: 2, method: "tools/list" })).tools
       .length,
-    4,
+    7,
   );
   assert.equal(attempts, 0);
 });

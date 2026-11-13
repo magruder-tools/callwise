@@ -24,6 +24,7 @@ import {
 import { sanitizeSheets } from "./call-sheets.mjs";
 import { ContextStore } from "./context.mjs";
 import { estimateCost } from "./cost.mjs";
+import { Round3 } from "./round3.mjs";
 import { DEMO_DOCUMENTS, DEMO_TRANSCRIPT } from "../fixtures/demo.mjs";
 
 export class CallController extends EventEmitter {
@@ -59,7 +60,7 @@ export class CallController extends EventEmitter {
     };
     this.summaryCursor = 0;
     this.lastSummaryMs = 0;
-    this.preferences = sanitizePreferences(preferences);
+    this.preferences = sanitizePreferences({ earlyReveal: true, localMatching: true, assistantPrepEnabled: false, preflightEnabled: false, calendarWatching: false, ...preferences });
     this.onPreferences = onPreferences;
     this.diagnostics = diagnostics;
     this.transcriberFactory = speechFactory || transcriberFactory;
@@ -132,6 +133,7 @@ export class CallController extends EventEmitter {
     this.captureInputs = { mic: "off", system: "off" };
     this.demoProvider = new DemoProvider();
     this.setProviders();
+    this.round3 = new Round3(this);
     if (savedDraft && !demoOnly) this.schedulePrep();
   }
   // With the meeting notebook attached, live help is opt-in: anything but an explicit true is off, matching
@@ -230,7 +232,7 @@ export class CallController extends EventEmitter {
     return result;
   }
   configureContext(payload) {
-    if (this.engine.status === "running")
+    if (this.engine.status === "running" && Object.keys(payload).some((key) => !["earlyReveal", "debug", "preflightEnabled", "calendarWatching", "assistantPrepEnabled", "localMatching"].includes(key)))
       throw new Error("Pause the call before changing its settings.");
     if (
       payload.contextApps !== undefined &&
@@ -261,7 +263,7 @@ export class CallController extends EventEmitter {
     ]);
     // Persist only explicit user edits, so demo fixtures cannot become defaults.
     this.rememberPreferences(payload);
-    this.engine.configure(payload);
+    if (this.engine.status !== "running") this.engine.configure(payload);
     const next = JSON.stringify([
       this.engine.settings.project,
       this.engine.settings.contextBackend,
@@ -275,6 +277,7 @@ export class CallController extends EventEmitter {
         if (doc.kind === "connector") this.engine.context.docs.delete(id);
     }
     this.setProviders();
+    void this.round3?.refresh();
     if (prepBefore !== this.prepKey()) this.schedulePrep();
     this.engine.emitState();
     return this.snapshot();
@@ -327,6 +330,7 @@ export class CallController extends EventEmitter {
   snapshot() {
     return {
       ...this.engine.snapshot(),
+      ...this.round3?.snapshot(),
       preferences: structuredClone(this.preferences),
       desktop: this.desktopState || null,
       libraryPath: this.libraryPath || null,
@@ -365,6 +369,12 @@ export class CallController extends EventEmitter {
       throw new Error("Invalid command payload.");
     if (this.connecting && !["pause", "end", "new", "state"].includes(name))
       throw new Error("The connection is still starting.");
+    if (/^(?:bank\.|pack\.|rehearsal\.)/.test(name) || (name.startsWith("card.") && !(name === "card.pin" && this.engine.cards.some((c) => c.id === payload.id))) || ["prep.copyPrompt", "prep.build", "preflight.open", "debrief.surprise.add"].includes(name))
+      return (await this.round3.command(name, payload)) ?? this.snapshot();
+    if (name === "pin" && this.round3.coach.history.has(payload.id))
+      return this.round3.coach.action("card.pin", payload);
+    if (name === "feedback" && payload.status === "dismissed" && this.round3.coach.history.has(payload.id))
+      return this.round3.coach.action("card.dismiss", payload);
     switch (name) {
       case "library.path":
         if (!this.libraryPath)
@@ -1055,6 +1065,7 @@ export class CallController extends EventEmitter {
   async prepare({ force = false } = {}) {
     clearTimeout(this.prepTimer);
     this.prepTimer = null;
+    if (this.round3?.attached && !this.demoStarted) return this.round3.prepare({ force });
     const signature = this.prepKey();
     if (!force && signature === this.prepSignature && this.engine.prep) return;
     this.prepJob?.abort();
@@ -1357,6 +1368,7 @@ export class CallController extends EventEmitter {
     if (this.closing) return;
     this.closing = true;
     this.cancelDocuments();
+    this.round3?.close();
     this.stopInputs();
     this.engine.end();
     this.codex?.close();

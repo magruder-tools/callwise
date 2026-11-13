@@ -1,7 +1,7 @@
 {
   "name": "callwise",
   "productName": "Callwise",
-  "version": "0.5.9",
+  "version": "0.6.0",
   "description": "Local meeting notes, transcripts and optional live coaching",
   "private": true,
   "type": "module",
@@ -15,11 +15,11 @@
     "start": "electron .",
     "demo": "node scripts/demo-server.mjs",
     "test": "node --test tests/*.test.mjs",
-    "test:ui": "node scripts/verify-ui.mjs && node scripts/verify-round3-ui.mjs",
+    "test:ui": "node scripts/verify-ui.mjs && node scripts/verify-round3-ui.mjs && node scripts/verify-bank-ui.mjs",
     "check": "node scripts/check.mjs",
     "format": "prettier --write .",
     "doctor": "node scripts/doctor.mjs",
-    "dist:mac": "node scripts/fetch-diarization-models.mjs && node scripts/build-native.mjs && node scripts/bundle-codex.mjs && electron-builder --mac dmg zip --arm64 --publish never",
+    "dist:mac": "node scripts/fetch-diarization-models.mjs && node scripts/fetch-matcher-model.mjs && node scripts/build-native.mjs && node scripts/bundle-codex.mjs && electron-builder --mac dmg zip --arm64 --publish never",
     "dist:win": "electron-builder --win zip --x64 --publish never",
     "package:source": "node scripts/package-source.mjs",
     "bundle:codex": "node scripts/bundle-codex.mjs",
@@ -28,15 +28,21 @@
     "build:native": "node scripts/build-native.mjs",
     "models:fetch": "node scripts/fetch-diarization-models.mjs",
     "test:meetings": "node scripts/verify-meeting-ui.mjs",
-    "bench:local": "node scripts/bench-speech.mjs"
+    "bench:local": "node scripts/bench-speech.mjs",
+    "test:match": "node scripts/eval-matcher.mjs",
+    "test:replay": "node scripts/replay-bank.mjs",
+    "models:matcher": "node scripts/fetch-matcher-model.mjs"
   },
   "dependencies": {
+    "@breezystack/lamejs": "1.2.7",
+    "@huggingface/tokenizers": "0.2.0",
+    "adm-zip": "0.6.1",
     "mammoth": "1.13.0",
+    "minisearch": "7.2.0",
+    "onnxruntime-node": "1.31.1",
     "pdfjs-dist": "6.4.299",
     "socket.io-client": "4.8.3",
-    "ws": "8.21.3",
-    "minisearch": "7.2.0",
-    "@breezystack/lamejs": "1.2.7"
+    "ws": "8.21.3"
   },
   "devDependencies": {
     "@electron/osx-sign": "2.7.1",
@@ -44,8 +50,8 @@
     "electron": "44.11.3",
     "electron-builder": "26.15.3",
     "linkedom": "0.18.13",
-    "prettier": "3.6.2",
-    "npm": "12.2.1"
+    "npm": "12.2.1",
+    "prettier": "3.6.2"
   },
   "build": {
     "appId": "local.callwise.desktop",
@@ -121,6 +127,9 @@
         "from": "native/build/callwise-native",
         "to": "MacOS/callwise-native"
       }
+    ],
+    "asarUnpack": [
+      "node_modules/onnxruntime-node/bin/**"
     ]
   },
   "overrides": {

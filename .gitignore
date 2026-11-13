@@ -23,3 +23,6 @@ bundled/
 native/CallwiseNative/.build/
 native/build/
 native/resources/models/
+
+# Pinned local sentence model, fetched and verified before packaging
+native/resources/matcher/

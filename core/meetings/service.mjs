@@ -295,6 +295,7 @@ export class MeetingService extends EventEmitter {
     const header = this.put("meetings", id, id, {
       title: text(title, 200) || "Untitled meeting",
       titleSource: title ? "user" : "auto",
+      type: ["interview", "sales", "client"].includes(preferences.mode) ? preferences.mode : "other",
       people: Array.isArray(people)
         ? people
             .filter((p) => typeof p === "string")
@@ -459,6 +460,11 @@ export class MeetingService extends EventEmitter {
         durationMs: snapshot.activeTimeMs,
       });
       if (snapshot.status === "ended") {
+        const coach = this.controller?.round3?.coach;
+        if (coach) {
+          this.put("docs", id, "coaching:debrief", coach.debrief(id, this.controller.engine.commitments));
+          this.put("docs", id, "coaching:learning", { surprises: coach.learning() });
+        }
         this.put("jobs", id, "recap", {
           status: "queued",
           basedOn: { revision: m.contentRevision },
@@ -519,6 +525,7 @@ export class MeetingService extends EventEmitter {
       enhancedDraft: this.get("docs", id, "notes:enhancedDraft"),
       recap: this.get("docs", id, "recap"),
       recapDraft: this.get("docs", id, "recap:draft"),
+      debrief: this.debrief(id),
       actions: this.all("actions", id),
       audio: this.all("audio_chunks", id).map(({ path, ...a }) => a),
       jobs: this.all("jobs", id),
@@ -560,6 +567,10 @@ export class MeetingService extends EventEmitter {
       libraryRevision: this.libraryRevision,
       unsaved: !!current && current.saving === false,
     };
+  }
+  debrief(id) {
+    const d = this.get("docs", id, "coaching:debrief");
+    return d ? { meetingId: id, promises: d.promises, surprises: d.surprises, cardsShown: d.cardsShown, speed: d.speed } : null;
   }
   saveNotes(id, { text: value, version, lineTimes = [] }) {
     const prior = this.get("docs", id, "notes:original");

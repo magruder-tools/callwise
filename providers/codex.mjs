@@ -284,7 +284,7 @@ export class CodexProvider {
       note: "App discovery only. Automatic connector execution is disabled in this first build.",
     };
   }
-  async generate({ prompt, signal }) {
+  async generate({ prompt, signal, schema }) {
     if (this.busy) throw new Error("A Codex strategy turn is already running.");
     this.busy = true;
     let threadId, turnId;
@@ -439,7 +439,7 @@ export class CodexProvider {
                     }
                   : {}),
               },
-              outputSchema: COACH_SCHEMA,
+              outputSchema: schema || COACH_SCHEMA,
             },
             20000,
           )

@@ -86,3 +86,10 @@ export const errorBanner = (s) => {
 };
 export const check = (id, label, checked = false, action = "") =>
   `<label class="check"><input id="${id}" type="checkbox" ${checked ? "checked" : ""} ${action ? `data-action="${action}"` : ""}><span>${escape(label)}</span></label>`;
+
+// While a call is live, Settings always shows the way back.
+export function callReturnBar(s) {
+  if (!["running", "paused", "finishing"].includes(s.status)) return "";
+  const label = s.status === "paused" ? "Call paused" : s.status === "finishing" ? "Saving final words" : "Call in progress";
+  return `<div class="call-return" role="status"><span class="status-dot ${s.status === "running" ? "recording" : ""}"></span><span class="call-return-label">${label}</span><time id="call-time"></time><span class="call-return-note"></span>${button("close-settings", "Back to call", { iconName: "left", className: "primary" })}</div>`;
+}

@@ -29,7 +29,7 @@
 | E5 | **done** | The existing debug switch is exposed as Show speed readout and the numbers are in stage.speed. Drawing the Stage readout remains Claude's pass, as specified in the finish brief. |
 | Screens | **done** | Plain functional inbox/review, rehearsal, saved debrief and Prep settings. Nineteen contract fixtures, 76 four-width screenshots, 44 px targets and edit-preservation checks pass. |
 | Icon | **done** | The existing four-bar mark now uses the protected theme's light and indigo colors; SVG, PNG and macOS ICNS are rebuilt. |
-| Release verification | **not done** | Code/browser/model/library checks and signing pass. The signed native-window smoke, installation and on-screen About version/icon verification pass. Pull-request Linux CI is being corrected for an asynchronous Resume-control race. |
+| Release verification | **not done** | Code/browser/model/library checks and signing pass. The signed native-window smoke, installation and on-screen About version/icon verification pass. Pull-request Linux CI is being corrected for asynchronous renderer-readiness races. |
 
 ## Measured results
 
@@ -43,7 +43,7 @@
 - Renderer: **19 states × 4 widths = 76 screenshots**, at 400/640/980/1280 px, with no horizontal overflow and 44 px controls.
 - Runtime audit: **zero advisories**, including zero high or critical findings.
 - Signed app's actual offline-model worker/native library and encrypted SQLite/backup/restore checks pass with disposable data. Native-window smoke passes with all 40 native presses. The installed About window shows 0.6.0 and the new icon; 0.5.9 is retained at `/Applications/.Callwise-0.5.9-rollback-round3.app`.
-- CI: [draft PR #10](https://github.com/magruder-tools/callwise/pull/10) targets `codex/fix-meeting-setup-scrolling`. Its first [Linux run](https://github.com/magruder-tools/callwise/actions/runs/43476201458) reached the panel test and failed during an immediate renderer action. The smoke now waits for the paused Resume control before clicking and includes the failed expression in diagnostics. The original screenshot check is retained; captures settle for two frames and retry a transient UnknownVizError exactly once.
+- CI: [draft PR #10](https://github.com/magruder-tools/callwise/pull/10) targets `codex/fix-meeting-setup-scrolling`. Its first [Linux run](https://github.com/magruder-tools/callwise/actions/runs/43476201458) reached the panel test and failed during an immediate renderer action. The next run passed all panel checks, including 40/40 native presses, then exposed the analogous Start-button re-enable race. The smoke now waits for the paused Resume control before clicking and for Start to re-enable after its failed command settles, with the same bounded assertions. Failed renderer expressions are included in diagnostics. The original screenshot check is retained; captures settle for two frames and retry a transient UnknownVizError exactly once.
 
 ## Decisions
 
@@ -60,6 +60,7 @@
 - Read calendar metadata on deliberate import/selection only with existing access; background reads require the separate calendar-watching preference. Persist only notification-key hashes in encrypted readiness data to prevent repeat alerts after restart.
 - Keep UI additions functional and token-based. Add image/unclear/early/wrap-up supplements in shared integration code so the protected Stage component remains unchanged.
 - Keep the original waveform geometry and recolor native vector assets directly to the existing palette.
+- The Dock has exactly one saved Callwise entry, pointing to `/Applications/Callwise.app`, now 0.6.0; there are no Callwise entries in its recent-app or other shortcut sections.
 - Preserve the established root and helper signing identities and keep the previous app for rollback. No real meeting is ended without a new explicit instruction.
 
 ## Claude design handoff

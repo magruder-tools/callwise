@@ -408,7 +408,11 @@ export async function verifyReady({ controller, panel, win, artifacts }) {
       "Failed startup must show the wrong-key message exactly once",
     );
     assert.equal(controller.connecting, false);
-    assert.equal(await js(`document.querySelector('#start').disabled`), false);
+    await waitForValue(
+      () => js(`document.querySelector('#start').disabled`),
+      false,
+      "Failed startup must re-enable Start after its command settles",
+    );
     await capture(win, "start-wrong-key");
     controller.engine.clearErrors();
     controller.transcriberFactory = (options) => ({

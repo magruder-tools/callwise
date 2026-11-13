@@ -59,7 +59,11 @@ try {
   const pulse = () => page.evaluate(() => window.pushSnapshot(window.snapshot));
   const settings = () =>
     page.locator('[data-action="settings"]').first().click();
-  const done = () => page.locator('[data-action="close-settings"]').click();
+  const done = async () => {
+    const back = page.getByRole("button", { name: "Back to call", exact: true });
+    if (await back.count()) await back.click();
+    else await page.getByRole("button", { name: "Done", exact: true }).click();
+  };
   const settle = async (name, error = "") => {
     await page.waitForFunction((name) => !!window.pending[name], name);
     await page.evaluate(

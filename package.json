@@ -1,7 +1,7 @@
 {
   "name": "callwise",
   "productName": "Callwise",
-  "version": "0.5.8",
+  "version": "0.5.9",
   "description": "Local meeting notes, transcripts and optional live coaching",
   "private": true,
   "type": "module",

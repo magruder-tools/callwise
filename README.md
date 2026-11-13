@@ -1,6 +1,8 @@
 # Callwise
 
-Current development version: **0.5.8**. Round 3 checkpoint A is described in
+Current local preview: **0.5.9**, combining Round 3 Group A and Claude's Stage UI.
+The answer bank and surprise-handling engine remain future checkpoints.
+Round 3 checkpoint A is described in
 [the checkpoint record](docs/ROUND_3_CHECKPOINT_A.md). No public release is implied.
 
 ## Callwise 0.5.4 usability update

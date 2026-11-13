@@ -5,6 +5,7 @@ import {
   check,
   section,
   selfTestResults,
+  callReturnBar,
 } from "../components/common.mjs";
 export const DEFAULT_KEYS = {
   help: "Control+Alt+Space",
@@ -14,7 +15,7 @@ export const DEFAULT_KEYS = {
   visibility: "Control+Alt+H",
 };
 export function settings(s, ui) {
-  return `${header(s, "Settings")}<div class="settings-layout"><nav aria-label="Settings sections">${["General", "Audio", "AI", "Privacy", "Advanced"].map((t) => button("settings-tab", t, { className: ui.tab === t ? "selected" : "", attrs: `data-tab="${t}"` })).join("")}${button("close-settings", "Done", { className: "text-button" })}</nav><main class="settings-view"><h1>${ui.tab}</h1>${content(s, ui)}</main></div>`;
+  return `${header(s, "Settings")}${callReturnBar(s)}<div class="settings-layout"><nav aria-label="Settings sections">${["General", "Audio", "AI", "Privacy", "Advanced"].map((t) => button("settings-tab", t, { className: ui.tab === t ? "selected" : "", attrs: `data-tab="${t}"` })).join("")}${button("close-settings", "Done", { className: "text-button" })}</nav><main class="settings-view"><h1>${ui.tab}</h1>${content(s, ui)}</main></div>`;
 }
 function field(
   id,

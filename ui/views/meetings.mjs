@@ -4,10 +4,12 @@ import {
   button as b,
   check,
   section,
+  callReturnBar,
 } from "../components/common.mjs";
 import { meters } from "../components/meters.mjs";
 import { chips } from "../components/chips.mjs";
 import { coachingFeed } from "../components/coaching-feed.mjs";
+import { stage } from "../components/stage.mjs";
 const attr = (id) => `data-id="${e(id)}"`;
 const time = (ms) =>
   `${Math.floor((ms || 0) / 60000)}:${String(Math.floor((ms || 0) / 1000) % 60).padStart(2, "0")}`;
@@ -113,6 +115,8 @@ export function notebook(s, ui) {
       m.engine !== "manual";
   const coachAvailable = active && s.preferences.liveHelp;
   const mobileTab = ui.notebookTab || (coachAvailable ? "coach" : "notes");
+  if (coachAvailable && mobileTab === "coach")
+    return stage(s, ui, stageChrome(s, ui, m, recording));
   return `${header(s)}<main class="notebook-view ${coachAvailable ? "with-coaching" : ""} ${mobileTab === "coach" ? "show-coach" : ""}"><div class="meeting-toolbar"><div class="meeting-status"><span class="status-dot ${recording ? "recording" : ""}"></span>${recording ? (m.retainAudio ? "Transcribing · recording audio" : "Transcribing") : active ? (s.status === "finishing" ? "Saving final words…" : (m.captureMode === "notes-only" || m.engine === "manual") && s.status === "running" ? "Taking notes" : "Paused") : m.saving === false ? "Not saved — export before closing" : "Meeting saved"}<time id="call-time">${time(active ? s.activeTimeMs : m.durationMs)}</time></div><div class="row">${active ? `${s.status === "paused" ? b("resume", "Resume") : b("pause", "Pause", { disabled: s.status === "finishing" })}${b("end", "End meeting", { className: "primary", disabled: s.status === "finishing" })}` : b("m-ready", "New meeting")}${b("m-history", "History", { className: "text-button" })}</div></div><div data-region="processing" class="processing-status" role="status">${(
     m.processing || []
   )
@@ -142,6 +146,45 @@ export function notebook(s, ui) {
       "",
     )}<div class="row"><label>Merge speaker<select id="speaker-from">${m.speakers.map((sp) => `<option value="${e(sp.id)}">${e(sp.name || sp.label)}</option>`).join("")}</select></label><label>Into<select id="speaker-into">${m.speakers.map((sp) => `<option value="${e(sp.id)}">${e(sp.name || sp.label)}</option>`).join("")}</select></label>${b("m-merge-speakers", "Merge")}</div></details><footer class="meeting-export"><h3>Take the next step</h3><div class="row">${b("m-export-notes", "Save to Apple Notes")}${b("m-export-reminders", "Save selected reminders", { disabled: !ui.exportActions?.length })}${b("m-export-file", "Export file")}${b("m-export-json", "Export JSON", { className: "text-button" })}${m.folderArchived ? b("m-archive-open", "Show recording in iCloud Drive") : m.audio.length ? b("m-play", "Play recording", { attrs: 'data-start="0"' }) : ""}${b("m-stop-playback", "Stop playback", { className: "text-button" })}${s.preferences.liveHelp && active ? b("m-coach", "Open live coaching") : ""}${!active ? b("m-delete", "Delete meeting", { className: "text-button danger" }) : ""}</div></footer></div>${transcript(m, ui)}${coachAvailable ? coachingFeed(s) : ""}</div></main>${exportDialog(ui)}${deleteDialog(ui)}${ui.objectionSheet ? `<dialog id="meeting-objection" class="meeting-dialog"><h2>Capture has stopped.</h2><p>Choose what to keep, then continue taking notes without transcription or recording. Your own notes and actions are kept either way.</p>${b("m-objection-keep", "Keep captured content; continue with notes only")}${b("m-objection-delete", "Delete transcript and audio; continue with notes only", { className: "danger" })}</dialog>` : ""}`;
 }
+// The slim top bar and footer the Stage uses in place of the notebook header.
+function stageChrome(s, ui, m, recording) {
+  const status =
+    s.status === "finishing"
+      ? "Saving final words…"
+      : s.status === "paused"
+        ? "Paused"
+        : recording
+          ? "Listening"
+          : "Taking notes";
+  const tabs = [
+    ["coach", "Coaching"],
+    ["notes", "Notes"],
+    ["transcript", "Transcript"],
+  ]
+    .map(([tab, title]) =>
+      b("m-notebook-tab", title, {
+        attrs: `data-tab="${tab}" aria-pressed="${tab === "coach"}"`,
+        className: tab === "coach" ? "selected" : "",
+      }),
+    )
+    .join("");
+  const capture =
+    m.captureMode !== "notes-only" && !["manual", "fireflies"].includes(m.engine);
+  const topBar = `<header class="stage-top" data-region="stage-top">
+    <div class="stage-status"><span class="status-dot ${recording ? "recording" : ""}"></span><span>${status}</span><time id="call-time">${time(s.activeTimeMs)}</time>${capture ? meters() : ""}</div>
+    <nav class="segmented stage-tabs" aria-label="Meeting content">${tabs}</nav>
+    <div class="stage-actions">${s.status === "paused" ? b("resume", "Resume") : b("pause", "Pause", { disabled: s.status === "finishing" })}${b("end", "End", { className: "end-call", title: "End meeting", disabled: s.status === "finishing" })}${b("m-coach-floating", "", { iconName: "copy", title: "Float a small window", className: "icon-button" })}${b("settings", "", { iconName: "settings", title: "Settings", className: "icon-button" })}</div>
+  </header>${s.meetings.warning ? `<div class="banner warning" role="status">${e(s.meetings.warning)}</div>` : ""}`;
+  const footer = `<footer class="stage-foot">${(m.processing || [])
+    .map((label) => `<span>${e(label)}</span>`)
+    .join("")}${
+    m.notice
+      ? `<details class="notice-receipt stage-receipt"><summary>Notice shared ${new Date(m.notice.confirmedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</summary><p>${e(m.notice.text)}</p><p>New participant joined? Share the notice again.</p><div class="row">${b("m-repeat-notice", "I shared it again")}${b("m-objection", "Someone objected — pause now", { className: "text-button" })}</div></details>`
+      : ""
+  }</footer>`;
+  return { topBar, footer };
+}
+
 export function meetingHistory(s, ui) {
   const rows = ui.searchResults || s.meetings.library;
   return `${header(s)}<main class="history-view"><div class="section-heading"><div><span class="eyebrow">A MEMORY YOU CAN SEARCH</span><h1>Your conversations.</h1></div>${b("m-ready", "New meeting", { className: "primary" })}</div><form id="meeting-search-form" class="history-search"><input id="meeting-search" type="search" placeholder="Find a decision, a person, a promise…" aria-label="Search meetings" value="${e(ui.historyQuery || "")}"><button type="submit">Search</button></form><div class="history-filters">${field("history-person", "Person", ui.historyPerson || "", 'maxlength="100"')}${field("history-from", "Since", ui.historyFrom || "", 'type="date"')}${check("history-open-actions", "Open follow-ups", !!ui.historyOpenActions)}${b("m-apply-filters", "Apply filters", { className: "text-button" })}</div><form id="meeting-question-form" class="history-question"><label for="meeting-question">Ask your meeting history</label><div class="row"><input id="meeting-question" placeholder="What did we agree about the launch?" maxlength="1000"><button type="submit" ${ui.askingHistory ? "disabled" : ""}>${ui.askingHistory ? "Finding evidence…" : "Ask on this Mac"}</button>${ui.askingHistory ? b("m-cancel-history", "Stop") : ""}</div></form>${ui.historyAnswer ? `<section class="history-answer"><p>${e(ui.historyAnswer.answer)}</p>${ui.historyAnswer.meetings.map((m) => b("m-open", m.title, { attrs: attr(m.id), className: "source-chip" })).join("")}<p class="help">${ui.historyAnswer.engine === "apple" ? "Generated locally. Check the linked evidence." : "Matching excerpts; no generated answer available."}</p></section>` : ""}<div class="meeting-history-list">${rows.length ? rows.map((m) => `<article class="history-meeting"><div><span class="history-date">${new Date(m.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span><h2>${b("m-open", m.title, { attrs: attr(m.id), className: "text-button" })}</h2><p>${e(m.people.join(", ") || "Private meeting")} · ${time(m.durationMs)}${m.openActions ? ` · ${m.openActions} open follow-ups` : ""}</p>${(m.excerpts || []).map((x) => `<blockquote>${e(x.text)}</blockquote>`).join("")}</div>${b("m-open", "Open →", { attrs: attr(m.id), className: "text-button" })}</article>`).join("") : '<div class="empty-history"><h2>Room for the next good conversation.</h2><p>Saved meetings stay here, encrypted and searchable on your Mac.</p></div>'}</div></main>`;
@@ -231,5 +274,5 @@ export function localSettings(s, ui, legacy) {
       .join(
         "",
       )}</select></label>${check("confirm-retention", "Apply these retention limits to existing meetings too")}${b("m-retention", "Apply retention")}</section>${section("iCloud Drive archive", `${b("m-archive-choose", "Choose iCloud Drive folder")}<p class="help">${e(p.iCloudArchiveFolder || "Choose a folder in iCloud Drive before enabling automatic exports.")}</p>${check("iCloudArchiveEnabled", "Automatically export finished meetings to iCloud Drive", !!p.iCloudArchiveEnabled, "pref-switch")}<p>Exports include audio recordings, a searchable PDF, transcript and notes. macOS syncs the chosen folder. Original audio is kept until iCloud confirms upload, file verification and cloud-cache offload. Transcripts and notes remain searchable on this Mac. No Codex task or AI service performs the transfer.</p><p class="help">${e(s.desktop?.folderArchive?.message || "Keep Callwise running while upload/offload finishes. Existing exported files remain in iCloud if you delete a local meeting.")}</p>${b("m-archive-retry", "Retry pending exports")}`)}${section("Backup & restore", `${field("backup-passphrase", "Backup passphrase — at least 12 characters", "", 'type="password" autocomplete="new-password" maxlength="300"')}${b("m-backup", "Save encrypted backup", { disabled: !!s.meetings.archiveOperation })}${check("confirm-restore", "Restore into an empty library; existing meetings are not replaced")}${b("m-restore", "Restore backup", { disabled: !!s.meetings.archiveOperation })}<p>Keep the passphrase safe. It is not stored by Callwise.</p>`)}${section("Delete local data", `${b("delete-everything", "Delete all Callwise data", { className: "danger", disabled: !!s.meetings.archiveOperation || ["running", "paused", "finishing"].includes(s.status) })}`)}`;
-  return `${header(s, "Settings")}<div class="settings-layout"><nav aria-label="Settings sections">${tabs.map((t) => b("settings-tab", t, { attrs: `data-tab="${e(t)}"`, className: ui.tab === t ? "selected" : "" })).join("")}${b("close-settings", "Done", { className: "text-button" })}</nav><main class="settings-view">${body}</main></div>`;
+  return `${header(s, "Settings")}${callReturnBar(s)}<div class="settings-layout"><nav aria-label="Settings sections">${tabs.map((t) => b("settings-tab", t, { attrs: `data-tab="${e(t)}"`, className: ui.tab === t ? "selected" : "" })).join("")}${b("close-settings", "Done", { className: "text-button" })}</nav><main class="settings-view">${body}</main></div>`;
 }

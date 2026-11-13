@@ -46,13 +46,13 @@ summary:focus-visible,
   outline-offset: 3px;
 }
 .primary {
-  background: var(--mint);
-  color: #14241d;
-  border-color: var(--mint);
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
   font-weight: 600;
 }
 .primary:hover:not(:disabled) {
-  background: #b9f1dd;
+  background: var(--accent-ink);
 }
 .danger,
 .end,
@@ -81,7 +81,7 @@ summary:focus-visible,
 input,
 textarea,
 select {
-  background: #141921;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--small-radius);
   padding: 10px 12px;
@@ -220,7 +220,7 @@ small,
   padding: 4px;
   border-radius: 10px;
   gap: 4px;
-  background: #141921;
+  background: var(--raised);
 }
 .segmented button {
   border: 0;
@@ -230,8 +230,9 @@ small,
   padding: 8px;
 }
 .segmented button.selected {
-  background: var(--raised);
-  color: var(--mint);
+  background: var(--surface);
+  color: var(--accent-ink);
+  box-shadow: 0 1px 2px rgba(20, 22, 26, 0.08);
 }
 .drop-zone {
   display: flex;
@@ -239,7 +240,7 @@ small,
   gap: 12px;
   flex-wrap: wrap;
   padding: 16px;
-  border: 1px dashed #46515f;
+  border: 1px dashed var(--line-strong);
   border-radius: var(--radius);
   margin: 12px 0;
 }
@@ -338,10 +339,13 @@ small,
   font-size: var(--font-xs);
 }
 .banner.warning {
-  color: var(--amber);
+  color: var(--warning);
+  background: var(--warning-tint);
 }
 .banner.error {
-  border-color: #543737;
+  color: var(--danger);
+  background: var(--danger-tint);
+  border-color: #f4c7c1;
 }
 .banner button {
   min-height: 28px;
@@ -703,6 +707,7 @@ small,
 }
 .settings-layout nav button {
   justify-content: flex-start;
+  text-align: left;
   border: 0;
   background: transparent;
   padding: 10px 12px;
@@ -911,7 +916,7 @@ dialog {
   padding: 24px;
 }
 dialog::backdrop {
-  background: #0009;
+  background: rgba(20, 22, 26, 0.35);
 }
 dialog p {
   font-size: var(--font-sm);
@@ -1280,7 +1285,7 @@ body.panel .card-region {
   flex-wrap: wrap;
   gap: 6px 14px;
   padding: 10px 0;
-  color: var(--muted, #9ba6b4);
+  color: var(--muted);
   font-size: 12px;
   line-height: 1.4;
 }

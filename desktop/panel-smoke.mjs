@@ -37,7 +37,10 @@ const advice = {
 };
 export async function verifyPanel({ controller, panel, win, artifacts }) {
   const engine = controller.engine;
-  const js = (source) => panel.webContents.executeJavaScript(source);
+  const js = async (source) => {
+    try { return await panel.webContents.executeJavaScript(source); }
+    catch (error) { throw new Error(`Panel smoke renderer check failed (${source.slice(0, 180)}): ${error.message}`, { cause: error }); }
+  };
   const capture = async (name) =>
     writeFileSync(
       path.join(artifacts, name + ".png"),
@@ -300,6 +303,11 @@ export async function verifyPanel({ controller, panel, win, artifacts }) {
     false,
   );
   await controller.command("pause");
+  await waitForValue(
+    () => js(`document.querySelector('[data-action="resume"]') !== null`),
+    true,
+    "Paused controls must render before testing Resume",
+  );
   await js(`document.querySelector('[data-action="resume"]').click()`);
   const clean =
     "The browser demo does not connect to accounts or record audio. Open the desktop app for live mode.";

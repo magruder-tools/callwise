@@ -29,7 +29,7 @@
 | E5 | **done** | The existing debug switch is exposed as Show speed readout and the numbers are in stage.speed. Drawing the Stage readout remains Claude's pass, as specified in the finish brief. |
 | Screens | **done** | Plain functional inbox/review, rehearsal, saved debrief and Prep settings. Nineteen contract fixtures, 76 four-width screenshots, 44 px targets and edit-preservation checks pass. |
 | Icon | **done** | The existing four-bar mark now uses the protected theme's light and indigo colors; SVG, PNG and macOS ICNS are rebuilt. |
-| Release verification | **not done** | Code/browser/model/library checks and signing pass. Final native-window smoke, installation verification and pull-request CI are pending; the Mac is currently locked and an unlock request is open. |
+| Release verification | **not done** | Code/browser/model/library checks and signing pass. The signed native-window smoke, installation and on-screen About version/icon verification pass. Pull-request Linux CI is being corrected for an asynchronous Resume-control race. |
 
 ## Measured results
 
@@ -42,8 +42,8 @@
 - Final full test suite: **442 passing, zero failures**. Syntax checks cover **185 modules**. Both browser suites pass. The replay has eight explicit timing/behavior checks, all five ladder paths, unclear speech and a stalled provider.
 - Renderer: **19 states × 4 widths = 76 screenshots**, at 400/640/980/1280 px, with no horizontal overflow and 44 px controls.
 - Runtime audit: **zero advisories**, including zero high or critical findings.
-- Signed app's actual offline-model worker/native library and encrypted SQLite/backup/restore checks pass with disposable data. Native-window smoke is waiting for the Mac to be unlocked; the locked desktop cannot accept reliable native input.
-- CI: pending the draft pull request into `codex/fix-meeting-setup-scrolling`. The original Linux screenshot check is retained; captures settle for two frames and retry a transient UnknownVizError exactly once.
+- Signed app's actual offline-model worker/native library and encrypted SQLite/backup/restore checks pass with disposable data. Native-window smoke passes with all 40 native presses. The installed About window shows 0.6.0 and the new icon; 0.5.9 is retained at `/Applications/.Callwise-0.5.9-rollback-round3.app`.
+- CI: [draft PR #10](https://github.com/magruder-tools/callwise/pull/10) targets `codex/fix-meeting-setup-scrolling`. Its first [Linux run](https://github.com/magruder-tools/callwise/actions/runs/43476201458) reached the panel test and failed during an immediate renderer action. The smoke now waits for the paused Resume control before clicking and includes the failed expression in diagnostics. The original screenshot check is retained; captures settle for two frames and retry a transient UnknownVizError exactly once.
 
 ## Decisions
 

@@ -49,14 +49,14 @@ test("meeting MCP supports stateless modern metadata, discovery and legacy initi
   assert.equal(d.supportedVersions[0], "2026-07-28");
   assert.equal(
     (await s.handle(request("tools/list", { _meta: meta }))).tools.length,
-    4,
+    7,
   );
   await assert.rejects(
     s.handle(request("tools/list")),
     (e) => e.code === -32602,
   );
   await s.handle(request("initialize", { protocolVersion: "2025-06-18" }));
-  assert.equal((await s.handle(request("tools/list"))).tools.length, 4);
+  assert.equal((await s.handle(request("tools/list"))).tools.length, 7);
   await assert.rejects(
     s.handle(
       request("tools/list", {

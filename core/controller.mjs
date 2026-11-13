@@ -22,7 +22,9 @@ import {
   recapMarkdown,
 } from "./preparation.mjs";
 import { sanitizeSheets } from "./call-sheets.mjs";
+import { ContextStore } from "./context.mjs";
 import { estimateCost } from "./cost.mjs";
+import { Round3 } from "./round3.mjs";
 import { DEMO_DOCUMENTS, DEMO_TRANSCRIPT } from "../fixtures/demo.mjs";
 
 export class CallController extends EventEmitter {
@@ -58,7 +60,7 @@ export class CallController extends EventEmitter {
     };
     this.summaryCursor = 0;
     this.lastSummaryMs = 0;
-    this.preferences = sanitizePreferences(preferences);
+    this.preferences = sanitizePreferences({ earlyReveal: true, localMatching: true, assistantPrepEnabled: false, preflightEnabled: false, calendarWatching: false, ...preferences });
     this.onPreferences = onPreferences;
     this.diagnostics = diagnostics;
     this.transcriberFactory = speechFactory || transcriberFactory;
@@ -131,6 +133,7 @@ export class CallController extends EventEmitter {
     this.captureInputs = { mic: "off", system: "off" };
     this.demoProvider = new DemoProvider();
     this.setProviders();
+    this.round3 = new Round3(this);
     if (savedDraft && !demoOnly) this.schedulePrep();
   }
   // With the meeting notebook attached, live help is opt-in: anything but an explicit true is off, matching
@@ -229,7 +232,7 @@ export class CallController extends EventEmitter {
     return result;
   }
   configureContext(payload) {
-    if (this.engine.status === "running")
+    if (this.engine.status === "running" && Object.keys(payload).some((key) => !["earlyReveal", "debug", "preflightEnabled", "calendarWatching", "assistantPrepEnabled", "localMatching"].includes(key)))
       throw new Error("Pause the call before changing its settings.");
     if (
       payload.contextApps !== undefined &&
@@ -260,7 +263,7 @@ export class CallController extends EventEmitter {
     ]);
     // Persist only explicit user edits, so demo fixtures cannot become defaults.
     this.rememberPreferences(payload);
-    this.engine.configure(payload);
+    if (this.engine.status !== "running") this.engine.configure(payload);
     const next = JSON.stringify([
       this.engine.settings.project,
       this.engine.settings.contextBackend,
@@ -274,6 +277,7 @@ export class CallController extends EventEmitter {
         if (doc.kind === "connector") this.engine.context.docs.delete(id);
     }
     this.setProviders();
+    void this.round3?.refresh();
     if (prepBefore !== this.prepKey()) this.schedulePrep();
     this.engine.emitState();
     return this.snapshot();
@@ -326,8 +330,10 @@ export class CallController extends EventEmitter {
   snapshot() {
     return {
       ...this.engine.snapshot(),
+      ...this.round3?.snapshot(),
       preferences: structuredClone(this.preferences),
       desktop: this.desktopState || null,
+      libraryPath: this.libraryPath || null,
       config: publicConfig(this.config),
       sheets: this.sheets.map(({ materials, history, ...s }) => ({
         ...s,
@@ -363,7 +369,17 @@ export class CallController extends EventEmitter {
       throw new Error("Invalid command payload.");
     if (this.connecting && !["pause", "end", "new", "state"].includes(name))
       throw new Error("The connection is still starting.");
+    if (/^(?:bank\.|pack\.|rehearsal\.)/.test(name) || (name.startsWith("card.") && !(name === "card.pin" && this.engine.cards.some((c) => c.id === payload.id))) || ["prep.copyPrompt", "prep.build", "preflight.open", "debrief.surprise.add"].includes(name))
+      return (await this.round3.command(name, payload)) ?? this.snapshot();
+    if (name === "pin" && this.round3.coach.history.has(payload.id))
+      return this.round3.coach.action("card.pin", payload);
+    if (name === "feedback" && payload.status === "dismissed" && this.round3.coach.history.has(payload.id))
+      return this.round3.coach.action("card.dismiss", payload);
     switch (name) {
+      case "library.path":
+        if (!this.libraryPath)
+          throw new Error("The meeting library is available in the installed app.");
+        return { path: this.libraryPath, encrypted: true };
       case "state":
         return this.snapshot();
       case "configure":
@@ -883,19 +899,25 @@ export class CallController extends EventEmitter {
     this.drainJob = (async () => {
       let timer;
       try {
-        await Promise.race([
+        const results = await Promise.race([
           Promise.allSettled(
             [...this.transcribers.values()].map((t) =>
-              t.finish?.({ timeoutMs }),
+              Promise.resolve().then(() => t.finish
+                ? t.finish({ timeoutMs }) : { flushed: false }),
             ),
           ),
           new Promise((resolve) => {
-            timer = setTimeout(resolve, timeoutMs);
+            timer = setTimeout(() => resolve(null), timeoutMs);
           }),
         ]);
         if (generation !== this.generation) return;
+        let incomplete = !results || results.some((result) =>
+          result.status === "rejected" ||
+          result.value?.flushed === false ||
+          result.value?.finished === false);
         for (const row of this.engine.transcript.values())
-          if (!row.final)
+          if (!row.final) {
+            incomplete = true;
             this.engine.ingest(
               {
                 ...row,
@@ -905,6 +927,18 @@ export class CallController extends EventEmitter {
               },
               { drain: true },
             );
+          }
+        if (incomplete)
+          this.engine.ingest({
+            id: `drain:gap:${randomUUID()}`,
+            speaker: "Transcription gap",
+            channel: "other",
+            text: "Final words may be missing: transcription did not finish before capture stopped.",
+            gap: true,
+            final: true,
+            startMs: this.engine.activeTimeMs(),
+            captureEpoch: this.engine.captureEpoch,
+          }, { drain: true });
         this.stopInputs();
         if (ending) this.engine.end();
       } finally {
@@ -1031,6 +1065,7 @@ export class CallController extends EventEmitter {
   async prepare({ force = false } = {}) {
     clearTimeout(this.prepTimer);
     this.prepTimer = null;
+    if (this.round3?.attached && !this.demoStarted) return this.round3.prepare({ force });
     const signature = this.prepKey();
     if (!force && signature === this.prepSignature && this.engine.prep) return;
     this.prepJob?.abort();
@@ -1144,10 +1179,22 @@ export class CallController extends EventEmitter {
     }
   }
   async loadSheet(id) {
-    if (this.engine.status === "running" || this.engine.status === "paused")
+    if (["running", "paused", "finishing"].includes(this.engine.status))
       throw new Error("End the current call first.");
     const sheet = this.sheets.find((s) => s.id === id);
     if (!sheet) throw new Error("That saved call is no longer available.");
+    // Validate the entire restore, including recap history, before clearing the draft.
+    const context = new ContextStore();
+    for (const material of sheet.materials)
+      context.add({ ...material, project: sheet.project });
+    for (const h of sheet.history)
+      context.add({
+        id: `recap:${sheet.id}:${h.at}`,
+        title: `Previous recap (${h.at.slice(0, 10)})`,
+        text: h.recap,
+        kind: "recap",
+        project: sheet.project,
+      });
     await this.command("new", { clearContext: true });
     this.sheetId = sheet.id;
     this.engine.configure({
@@ -1161,15 +1208,7 @@ export class CallController extends EventEmitter {
       project: sheet.project,
       activeSheetId: sheet.id,
     });
-    for (const material of sheet.materials)
-      this.engine.context.add({ ...material, project: sheet.project });
-    for (const h of sheet.history)
-      this.engine.context.add({
-        id: `recap:${sheet.id}:${h.at}`,
-        title: `Previous recap (${h.at.slice(0, 10)})`,
-        text: h.recap,
-        kind: "recap",
-      });
+    this.engine.context = context;
     this.schedulePrep();
     this.engine.emitState();
     return this.snapshot();
@@ -1180,7 +1219,8 @@ export class CallController extends EventEmitter {
     const job = new AbortController();
     this.recapJob = job;
     this.recapping = true;
-    this.recapAt = new Date().toISOString();
+    this.recapAt ??= new Date().toISOString();
+    const carried = this.snapshot().recapCarried;
     this.engine.emitState();
     const rows = [...this.engine.transcript.values()],
       commitments = this.engine.commitments,
@@ -1234,6 +1274,12 @@ export class CallController extends EventEmitter {
       if (this.recapJob === job) {
         this.recapping = false;
         this.recapJob = null;
+        if (carried)
+          try {
+            this.carryRecap(true);
+          } catch (error) {
+            this.engine.error(error, { condition: "save-calls" });
+          }
         this.engine.emitState();
       }
     }
@@ -1322,6 +1368,7 @@ export class CallController extends EventEmitter {
     if (this.closing) return;
     this.closing = true;
     this.cancelDocuments();
+    this.round3?.close();
     this.stopInputs();
     this.engine.end();
     this.codex?.close();

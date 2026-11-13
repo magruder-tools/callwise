@@ -31,7 +31,7 @@ test("assistant discovery never asks to unlock storage", async () => {
   assert.equal(
     (await server.handle({ jsonrpc: "2.0", id: 2, method: "tools/list" })).tools
       .length,
-    4,
+    7,
   );
   assert.equal(attempts, 0);
 });
@@ -119,6 +119,40 @@ test("a thrown Keychain initialization is not retried until a new process gate i
   assert.equal(attempts, 1);
   assert.equal(createSecureStorage(load).isEncryptionAvailable(), false);
   assert.equal(attempts, 2);
+});
+
+test("available but unauthorized Keychain access prompts once across saved files until explicit retry", (t) => {
+  const directory = mkdtempSync(path.join(tmpdir(), "callwise-unapproved-keychain-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const original = Buffer.from("Synthetic existing encrypted file");
+  for (const file of ["preferences.bin", "calls.bin", "connections.bin", "readiness.bin"])
+    writeFileSync(path.join(directory, file), original);
+  let prompts = 0, approved = false;
+  const storage = createSecureStorage(() => ({
+    isEncryptionAvailable: () => true,
+    encryptString(value) {
+      prompts++;
+      if (!approved) throw new Error("Synthetic Keychain permission denied");
+      return Buffer.from(value);
+    },
+    decryptString(value) { return value.toString(); },
+  }));
+  for (let i = 0; i < 5; i++) {
+    assert.throws(() => readPreferences(path.join(directory, "preferences.bin"), storage));
+    assert.throws(() => readSheets(path.join(directory, "calls.bin"), storage));
+    assert.throws(() => readConnections(path.join(directory, "connections.bin"), storage));
+    assert.deepEqual(readReadiness(path.join(directory, "readiness.bin"), storage), {});
+  }
+  assert.equal(prompts, 1);
+  assert.equal(storage.blocked, true);
+  for (const file of ["preferences.bin", "calls.bin", "connections.bin", "readiness.bin"])
+    assert.deepEqual(readFileSync(path.join(directory, file)), original);
+  approved = true;
+  assert.equal(storage.retryAccess(), true);
+  assert.equal(storage.decryptString(Buffer.from("Synthetic readable data")), "Synthetic readable data");
+  assert.equal(prompts, 2);
+  assert.equal(storage.decryptString(Buffer.from("Another readable file")), "Another readable file");
+  assert.equal(prompts, 2);
 });
 
 test("successful storage is reused and a corrupt file does not lock other readable files", () => {

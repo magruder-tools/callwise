@@ -258,7 +258,8 @@ test("explicit help cancels proactive work across lanes and explains model silen
     await auto;
     assert.equal(aborted, 1);
     assert.equal(e.cards.at(-1).origin, "asked");
-    assert.match(e.cards.at(-1).lead, /verified context/);
+    assert.equal(e.cards.at(-1).lead, "");
+    assert.deepEqual(e.cards.at(-1).frame, ["Your view", "Why", "One example"]);
   } finally {
     e.end();
   }

@@ -28,6 +28,7 @@ export function sanitizePreferences(patch, previous = {}) {
     noticeWording: 2000,
     activeSheetId: 200,
     iCloudArchiveFolder: 4096,
+    prepWatchFolder: 4096,
   })) {
     if (merged[key] === undefined) continue;
     if (typeof merged[key] !== "string")
@@ -50,6 +51,12 @@ export function sanitizePreferences(patch, previous = {}) {
     "driveArchiveEnabled",
     "iCloudArchiveEnabled",
     "includePreviewUpdates",
+    "earlyReveal",
+    "localMatching",
+    "assistantPrepEnabled",
+    "preflightEnabled",
+    "calendarWatching",
+    "prepWatchEnabled",
   ]) {
     if (merged[key] === undefined) continue;
     if (typeof merged[key] !== "boolean")
@@ -109,7 +116,7 @@ export function sanitizePreferences(patch, previous = {}) {
     next.hotkeys = {};
     for (const [action, accelerator] of Object.entries(merged.hotkeys)) {
       if (
-        !["help", "pause", "previous", "next", "visibility"].includes(action) ||
+        !["help", "pause", "previous", "next", "visibility", "other"].includes(action) ||
         typeof accelerator !== "string" ||
         !/^Control\+Alt\+(?:Shift\+)?(?:[A-Z0-9\[\]]|Space|Left|Right)$/.test(
           accelerator,

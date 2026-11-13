@@ -1,0 +1,101 @@
+{
+  "callwisePack": 1,
+  "id": "example-interview-2026-11-14",
+  "createdBy": "Claude",
+  "meeting": {
+    "title": "Interview with Example Agency",
+    "start": "2026-11-14T15:00:00-08:00",
+    "type": "interview",
+    "goal": "Show I can run several accounts and lead a team",
+    "people": [
+      {
+        "name": "Jordan Lee",
+        "role": "Managing Director",
+        "org": "Example Agency"
+      }
+    ]
+  },
+  "points": [
+    "Ran more than ten accounts at once",
+    "Led a rebrand that grew revenue"
+  ],
+  "stories": [
+    {
+      "id": "ojo",
+      "title": "Ojo client acquisition",
+      "result": "Client acquisition grew 4.8 times in two years",
+      "numbers": [
+        {
+          "label": "client acquisition",
+          "value": "4.8\u00d7",
+          "period": "two years"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Study guide",
+          "locator": "page N",
+          "quote": "client acquisition growing 4.8 times over two years"
+        }
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "id": "proud-result",
+      "kind": "story",
+      "status": "needs_review",
+      "questions": [
+        "Tell me about a client result you're proud of.",
+        "What's the win you'd lead with?",
+        "Which result best shows what you can do?"
+      ],
+      "say": "One I'm proud of is Ojo: client acquisition grew 4.8 times in two years.",
+      "cues": [
+        {
+          "icon": "person",
+          "text": "Credit the team"
+        }
+      ],
+      "storyId": "ojo",
+      "backupStoryId": null,
+      "proof": {
+        "type": "number_bars",
+        "value": "4.8\u00d7",
+        "label": "Ojo, client acquisition, two years"
+      }
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "about": "them",
+      "text": "Example Agency opened a second office in 2025.",
+      "source": {
+        "title": "Company site",
+        "url": "https://example.com/about"
+      }
+    }
+  ],
+  "questionsForThem": [
+    "What does a strong first 90 days look like in this role?"
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "storyId": "ojo",
+      "ask": "What did you personally decide on Ojo?"
+    }
+  ],
+  "glossary": [
+    "Ojo",
+    "CNV"
+  ],
+  "tiles": [
+    {
+      "id": "t1",
+      "file": "tiles/ojo.svg",
+      "alt": "Ojo acquisition before and after"
+    }
+  ]
+}

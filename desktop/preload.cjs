@@ -39,6 +39,12 @@ contextBridge.exposeInMainWorld("callwise", {
     ipcRenderer.on("callwise:stop-capture", listener);
     return () => ipcRenderer.removeListener("callwise:stop-capture", listener);
   },
+  onRehearsalCapture: (callback) => {
+    const start = (_event, data) => callback(true, data), stop = () => callback(false);
+    ipcRenderer.on("callwise:start-rehearsal-capture", start);
+    ipcRenderer.on("callwise:stop-rehearsal-capture", stop);
+    return () => { ipcRenderer.removeListener("callwise:start-rehearsal-capture", start); ipcRenderer.removeListener("callwise:stop-rehearsal-capture", stop); };
+  },
   onFlushNotes: (callback) => {
     const listener = (_event, token) =>
       Promise.resolve(callback())

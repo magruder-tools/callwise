@@ -103,7 +103,11 @@ test("timed out volatile words become a single unfinalized final with their orig
   await c.command("pause");
   assert.equal(c.engine.transcript.get("partial").final, true);
   assert.equal(c.engine.transcript.get("partial").unfinalized, true);
-  assert.equal(c.engine.transcript.size, 1);
+  assert.equal(c.engine.transcript.size, 2);
+  assert.match(
+    [...c.engine.transcript.values()].find((r) => r.gap)?.text || "",
+    /Final words may be missing/,
+  );
   c.close();
 });
 test("local-only meetings neither call cloud help nor emit repeated missing-provider errors", async () => {

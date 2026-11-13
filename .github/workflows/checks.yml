@@ -7,11 +7,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: "24.22.1"
           cache: npm
+      - name: UI ownership
+        if: github.event_name == 'pull_request'
+        run: node scripts/check-ui-ownership.mjs
+        env:
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
+          GITHUB_BASE_REF: ${{ github.base_ref }}
       - run: npm ci --ignore-scripts
+      - name: Electron desktop smoke
+        timeout-minutes: 3
+        run: |
+          node node_modules/electron/install.js
+          xvfb-run -a node_modules/.bin/electron . --smoke --no-sandbox
       - name: Syntax and metadata
         run: |
           npm run check 2>&1 | tee check.log
@@ -20,6 +33,8 @@ jobs:
         run: |
           npm test 2>&1 | tee test.log
           test ${PIPESTATUS[0]} -eq 0
+      - name: Prepared-card matcher and timing replay
+        run: npm run test:match && npm run test:replay
       - name: Capture renderer context
         if: failure()
         run: nl -ba ui/app.mjs | sed -n '425,445p' > renderer-lines.log
@@ -34,7 +49,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Callwise-browser-validation
-          path: artifacts/browser/*.png
+          path: artifacts/browser/**/*.png
           if-no-files-found: ignore
       - name: Upload diagnostics
         if: failure()

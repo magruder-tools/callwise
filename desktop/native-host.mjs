@@ -12,6 +12,7 @@ const MODES = new Set([
   "reminders",
   "calendar",
   "archive-files",
+  "embedding",
 ]);
 const MESSAGES = {
   icloud_archive_unavailable:
@@ -212,6 +213,15 @@ export class NativeServices {
       this.hosts.delete(host);
       host.close();
     }
+  }
+  async embed(texts) {
+    // Keep the on-device sentence model warm. A process launch per partial misses the 15 ms budget.
+    if (!this.embeddingHost || this.embeddingHost.closed) {
+      this.embeddingHost = this.hostFactory({ binary: this.binary, resources: this.resources, mode: "embedding" });
+      this.hosts.add(this.embeddingHost);
+    }
+    const result = await this.embeddingHost.request("vectors", { texts }, { timeout: 15000 });
+    return result.vectors;
   }
   close() {
     for (const h of this.hosts) h.close();

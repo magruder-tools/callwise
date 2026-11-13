@@ -1,0 +1,19 @@
+.round3 { min-width: 0; overflow-wrap: anywhere; }
+.round3 .round3-list { list-style: none; padding: 0; display: grid; gap: calc(var(--space) * 3); }
+.round3 .stage-card { padding: calc(var(--space) * 4); margin-block: calc(var(--space) * 3); min-width: 0; }
+.round3 .row { flex-wrap: wrap; gap: calc(var(--space) * 2); }
+.round3 h1, .round3 h2, .round3 h3 { overflow-wrap: anywhere; }
+.round3 h2 { font-size: var(--font-lg); }
+.round3 h3 { font-size: var(--font-md); }
+.round3 input, .round3 textarea, .round3 select { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; margin-block: calc(var(--space) * 2); }
+.round3 button, .round3 input, .round3 select, .round3 summary { min-height: 44px; }
+.round3 summary { display: flex; align-items: center; cursor: pointer; }
+.round3 .round3-gaps { border-top: 1px solid var(--line); margin-top: calc(var(--space) * 3); padding-top: calc(var(--space) * 3); }
+.round3 .round3-path { overflow-wrap: anywhere; }
+.settings-view:has(> .round3) { min-width: 0; width: 100%; box-sizing: border-box; }
+.round3 .check { min-height: 44px; min-width: 0; align-items: center; }
+.round3 .check input { width: 20px; height: 20px; min-height: 20px; min-width: 20px; flex: 0 0 20px; }
+.round3 .drop-zone { flex-wrap: wrap; min-height: 44px; }
+.round3 .earlier-item { width: 100%; box-sizing: border-box; }
+.round3-proof-image { display: block; max-width: 100%; max-height: 360px; object-fit: contain; }
+.round3-stage-actions { padding: calc(var(--space) * 2); }

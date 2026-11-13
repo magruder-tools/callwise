@@ -17,15 +17,21 @@ export function isBackchannel(text) {
   );
 }
 export const isWrapUp = (text) =>
-  /\b(anything else|we.re at time|wrap (up|this)|before we (go|finish)|last question)\b/i.test(
+  /\b(anything else|we.re at time|wrap (up|this)|before we (go|finish)|last question|(?:do you have|any) (?:any )?questions (?:for|about) (?:us|me|the role|the team)|what (?:would|do) you (?:like|want) to ask)\b/i.test(
     text,
   );
 export const commitmentCue = (text) =>
-  /\b(?:i|we)(?:['’]ll| will| can| shall| am going to| are going to)\s+(?:send|share|get(?! into\b)(?: back)?|email|schedule|set up|introduce|connect|check|confirm|look into|follow up|circle back|put together|draft|book)\b/i.test(
-    text,
-  ) ||
-  /\b(?:send|share|get back|email|schedule|confirm|follow up|deliver|finish|complete)\b[^.!?]{0,70}\bby\s+(?:tomorrow|next|monday|tuesday|wednesday|thursday|friday|\d)/i.test(
-    text,
+  sentencesFor(text).some(
+    ({ clean }) =>
+      !/\b(?:won['’]t|will not|can['’]t|cannot|do not|don['’]t|not going to|might|may|could|maybe|perhaps|not sure)\b[^.!?]{0,80}\b(?:send|share|get|email|schedule|confirm|follow up|deliver|finish|complete|introduce|connect|check|draft|book)\b/i.test(
+        clean,
+      ) &&
+      (/\b(?:i|we)(?:['’]ll| will| can| shall| am going to| are going to)\s+(?:send|share|get(?! into\b)(?: back)?|email|schedule|set up|introduce|connect|check|confirm|look into|follow up|circle back|put together|draft|book)\b/i.test(
+        clean,
+      ) ||
+        /\b(?:send|share|get back|email|schedule|confirm|follow up|deliver|finish|complete)\b[^.!?]{0,70}\bby\s+(?:tomorrow|next|monday|tuesday|wednesday|thursday|friday|\d)/i.test(
+          clean,
+        )),
   );
 const logistics = (text) =>
   /^(?:can you hear me|can you see my screen|is this thing on|give (?:me|us) (?:a|one) (?:second|sec|minute)|hold on|bear with me|one moment|let me share my screen)\b/i.test(
@@ -38,13 +44,35 @@ function sentencesFor(text) {
       .match(/[^.!?？]+[.!?？]*/g) || []
   ).map((sentence) => {
     let clean = sentence.trim();
-    for (let i = 0; i < 3; i++)
-      clean = clean.replace(
-        /^(?:so|okay|ok|right|well|and|but|great|alright|now|then|um|uh|yeah)\b[,\s]*/i,
+    for (let i = 0; i < 12; i++) {
+      const next = clean.replace(
+        /^(?:all right|that['’]s (?:great|interesting|helpful)|so|okay|ok|right|well|and|but|great|alright|now|then|um|uh|yeah)\b[,\s]*/i,
         "",
       );
+      if (next === clean) break;
+      clean = next;
+    }
     return { original: sentence.trim(), clean };
   });
+}
+function questionSentence({ clean }) {
+  if (!normalize(clean) || logistics(clean)) return false;
+  return (
+    (/[?？]$/.test(clean) && normalize(clean).split(" ").length >= 2) ||
+    /^(?:who|what|when|where|why|how|can|could|would|do|does|did|is|are|have|will|should|was|were|has|had|which|whose|any)\b/i.test(
+      clean,
+    ) ||
+    /^(?:tell (?:me|us)|walk (?:me|us) through|talk (?:me|us) through|talk to (?:me|us) about|(?:let['’]s )?talk about|describe|give (?:me|us)|explain|help me understand|remind me|show me|i['’]d (?:love|like) to (?:hear|know|understand)|i['’]m (?:curious|wondering)|i wonder|what about|how about|send me)\b/i.test(
+      clean,
+    ) ||
+    /\b(?:my question is|the question is|i wanted to ask about)\b/i.test(clean)
+  );
+}
+export function cleanQuestion(text) {
+  return sentencesFor(text)
+    .filter(questionSentence)
+    .map(({ clean }) => clean)
+    .join(" ");
 }
 export function isLogisticsTurn(text) {
   const sentences = sentencesFor(text);
@@ -56,22 +84,7 @@ export function classifyTurn(row, mode = "general", userName = "") {
   const text = String(row.text || "").trim();
   const meaningful = sentencesFor(text).filter((s) => !logistics(s.clean));
   if (!meaningful.length) return null;
-  for (const { original, clean } of meaningful) {
-    if (/[?？]$/.test(original) && normalize(original).split(" ").length >= 2)
-      return "question";
-    if (
-      /^(?:who|what|when|where|why|how|can|could|would|do|does|did|is|are|have|will|should|was|were|has|had|which|whose|any)\b/i.test(
-        clean,
-      ) ||
-      /^(?:tell (?:me|us)|walk (?:me|us) through|talk (?:me|us) through|talk to (?:me|us) about|(?:let['’]s )?talk about|describe|give (?:me|us)|explain|help me understand|remind me|show me|i['’]d (?:love|like) to (?:hear|know|understand)|i['’]m (?:curious|wondering)|i wonder|what about|how about|send me)\b/i.test(
-        clean,
-      ) ||
-      /\b(?:my question is|the question is|i wanted to ask about)\b/i.test(
-        clean,
-      )
-    )
-      return "question";
-  }
+  if (meaningful.some(questionSentence)) return "question";
   if (isWrapUp(text)) return "wrap_up";
   if (normalize(text).split(" ").length < 4) return null;
   // Interview playbook only requests words for questions.

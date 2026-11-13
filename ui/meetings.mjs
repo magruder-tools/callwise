@@ -651,6 +651,20 @@ export function createMeetingUi({
         ui.notebookTab = "coach";
         render();
         break;
+      case "m-stage-select": {
+        if (state.get().stage) { await command("card.select", { id: node.dataset.id }); break; }
+        // View an earlier card until a newer one arrives.
+        const fast = s.cards.filter(
+          (c) => c.status !== "dismissed" && c.lane !== "strategy" && c.kind !== "bigger_picture",
+        );
+        ui.stageSelect = { id: node.dataset.id, latestId: fast.at(-1)?.id };
+        render();
+        break;
+      }
+      case "m-stage-latest":
+        ui.stageSelect = null;
+        render();
+        break;
       case "m-coach-floating":
         await command("desktop.meeting.coach");
         break;

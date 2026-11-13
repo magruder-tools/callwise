@@ -43,7 +43,8 @@
   border-radius: 16px;
   padding: 24px;
   min-width: 0;
-  background: linear-gradient(160deg, #1b2229, var(--surface));
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
 }
 .setup-card h2 {
   font-size: 19px;
@@ -127,10 +128,10 @@
   width: calc(100vw - 50px);
   max-height: 85vh;
   overflow: auto;
-  box-shadow: 0 24px 90px #0008;
+  box-shadow: 0 24px 80px rgba(20, 22, 26, 0.22);
 }
 .meeting-dialog::backdrop {
-  background: #080c11ba;
+  background: rgba(20, 22, 26, 0.35);
   backdrop-filter: blur(8px);
 }
 .meeting-dialog h1 {
@@ -139,8 +140,8 @@
 }
 .meeting-dialog blockquote {
   margin: 20px 0;
-  background: #11181d;
-  border-left: 3px solid var(--mint);
+  background: var(--accent-tint);
+  border-radius: 10px;
   padding: 18px;
   line-height: 1.7;
 }
@@ -186,7 +187,7 @@
 }
 .status-dot.recording {
   background: var(--coral);
-  box-shadow: 0 0 0 4px #ef9c9c14;
+  box-shadow: 0 0 0 4px var(--danger-tint);
 }
 .meeting-status time {
   font-variant-numeric: tabular-nums;
@@ -244,8 +245,8 @@
 }
 .meeting-notes {
   min-height: 235px;
-  border: 1px solid #344237;
-  background: linear-gradient(180deg, #1c2622, #19211f);
+  border: 1px solid var(--line);
+  background: var(--surface);
   font-size: 16px;
   line-height: 1.85;
   padding: 20px;
@@ -254,7 +255,7 @@
   tab-size: 2;
 }
 .meeting-notes::placeholder {
-  color: #88998f;
+  color: #8a929e;
 }
 .meeting-transcript {
   max-height: calc(100vh - 360px);
@@ -294,17 +295,17 @@
 }
 .transcript-row > p {
   font-size: 14px;
-  color: #dce1e8;
+  color: var(--text);
   line-height: 1.7;
   margin-bottom: 0;
   white-space: pre-wrap;
 }
 .transcript-row.volatile > p {
-  color: #8f9ba8;
+  color: var(--muted);
   font-style: italic;
 }
 .transcript-row.gap {
-  border: 1px dashed #8e724a;
+  border: 1px dashed #e0a77d;
   margin: 12px 0;
 }
 .transcript-row.gap > p {
@@ -321,7 +322,7 @@
   opacity: 1;
 }
 .transcript-row.highlight {
-  background: #263d33;
+  background: var(--accent-tint);
   outline: 1px solid var(--mint);
 }
 .small {
@@ -392,7 +393,7 @@
 .history-card .points span { display: inline; color: var(--text); font-weight: inherit; }
 .history-card .card-footer { flex-wrap: wrap; gap: 8px; }
 .history-card .sources { flex: 1; min-width: 0; flex-wrap: wrap; }
-.deeper-card { border-color: #7fb7dc66; }
+.deeper-card { border-color: var(--accent-line); }
 .coaching-detail { font-size: 18px; line-height: 1.6; white-space: pre-line; }
 .coaching-pending, .empty-coaching { color: var(--muted); padding: 20px; line-height: 1.5; }
 .coaching-workspace > .ask-row { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
@@ -441,11 +442,11 @@
 .recap-bullet {
   position: relative;
   padding: 10px 0;
-  border-bottom: 1px solid #30384477;
+  border-bottom: 1px solid var(--line);
 }
 .recap-bullet > p {
   font-size: 14px;
-  color: #dce1e8;
+  color: var(--text);
   line-height: 1.7;
   white-space: pre-wrap;
   margin-bottom: 4px;
@@ -459,9 +460,9 @@
   font-size: 12px;
   min-height: 25px;
   padding: 3px 8px;
-  background: #22302a;
-  color: var(--mint);
-  border-color: #384d42;
+  background: var(--accent-tint);
+  color: var(--accent-ink);
+  border-color: var(--accent-line);
 }
 .action-section {
   margin-top: 30px;
@@ -471,7 +472,7 @@
   border: 1px solid var(--line);
   border-radius: 10px;
   margin: 12px 0;
-  background: #191f25;
+  background: var(--surface);
 }
 .meeting-action .action-text {
   flex: 1;
@@ -532,7 +533,7 @@
 .live-note-hint {
   margin: 22px 0;
   padding: 16px 18px;
-  background: #1a2029;
+  background: var(--raised);
   border-radius: 10px;
   color: var(--muted);
   font-size: 13px;
@@ -604,9 +605,9 @@
 }
 .history-answer {
   padding: 18px;
-  border-left: 3px solid var(--mint);
-  background: var(--surface);
-  border-radius: 8px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-tint);
+  border-radius: 12px;
   margin-bottom: 20px;
 }
 .history-answer p {

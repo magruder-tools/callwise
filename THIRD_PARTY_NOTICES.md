@@ -47,3 +47,9 @@ Their license notices remain with installed dependencies. DOCX extraction uses r
 - **@breezystack/lamejs 1.2.7** — LGPL-3.0; https://github.com/shijinyu/lamejs. Unmodified JavaScript MP3 encoder, retained separately in installed dependencies/app resources with its license. The GPL-3.0-or-later Callwise source and exact dependency lock permit rebuilding/replacing this component.
 
 Apple Speech, Foundation Models, EventKit, Core ML and AVFoundation are system frameworks, not redistributed model libraries. Their availability depends on the user's Mac and installed Apple assets. Only SystemLanguageModel is selected for local generation.
+
+## Offline sentence matching (0.6.0)
+
+BGE-small-en-v1.5 by BAAI / FlagEmbedding (MIT), ONNX conversion by Xenova. Model: https://huggingface.co/BAAI/bge-small-en-v1.5; conversion pinned at https://huggingface.co/Xenova/bge-small-en-v1.5/tree/ea104dacec62c0de699686887e3f920caeb4f3e3. Copyright and license: native/resources/licenses/BGE-LICENSE. The model files and tokenizer are pinned by SHA-256 in native/resources/matcher-model.json and are bundled at build time. No runtime download is enabled.
+
+Runtime dependencies @huggingface/tokenizers, onnxruntime-node (Microsoft) and adm-zip retain their licenses in their installed packages.

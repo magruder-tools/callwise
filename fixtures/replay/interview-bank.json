@@ -1,0 +1,385 @@
+{
+  "description": "Synthetic timing replay with deterministic match scores. Semantic accuracy and real local inference latency are evaluated separately in fixtures/match/eval.json. Provider answers are stubbed; no audio or user material is used.",
+  "pack": {
+    "callwisePack": 1,
+    "id": "synthetic-interview-bank",
+    "createdBy": "Synthetic replay fixture",
+    "meeting": {
+      "title": "Synthetic interview",
+      "start": null,
+      "type": "interview",
+      "goal": "Exercise timing without a real call",
+      "people": []
+    },
+    "points": [],
+    "stories": [
+      {
+        "id": "client-result",
+        "title": "Customer growth",
+        "result": "I led the work and measured our results.",
+        "numbers": [],
+        "sources": [
+          {
+            "title": "Synthetic replay notes",
+            "locator": "replay fixture",
+            "quote": "I led the work and measured our results."
+          }
+        ]
+      },
+      {
+        "id": "multi-account",
+        "title": "Account portfolio",
+        "result": "I led the work and measured our results.",
+        "numbers": [],
+        "sources": [
+          {
+            "title": "Synthetic replay notes",
+            "locator": "replay fixture",
+            "quote": "I led the work and measured our results."
+          }
+        ]
+      },
+      {
+        "id": "team-lead",
+        "title": "Specialist team",
+        "result": "I led the work and measured our results.",
+        "numbers": [],
+        "sources": [
+          {
+            "title": "Synthetic replay notes",
+            "locator": "replay fixture",
+            "quote": "I led the work and measured our results."
+          }
+        ]
+      }
+    ],
+    "cards": [
+      {
+        "id": "client-result",
+        "kind": "story",
+        "status": "approved",
+        "questions": [
+          "Tell me about a measurable client acquisition result.",
+          "Give an example of a customer growth win.",
+          "How did you approach increased new customer signups?",
+          "What is your experience with winning more customers?",
+          "Describe a time involving a measurable client acquisition result.",
+          "Can you discuss a customer growth win?"
+        ],
+        "say": "I led the work and measured our results.",
+        "cues": [
+          {
+            "icon": "decision",
+            "text": "Customer growth"
+          }
+        ],
+        "storyId": "client-result",
+        "backupStoryId": "multi-account",
+        "proof": null
+      },
+      {
+        "id": "multi-account",
+        "kind": "story",
+        "status": "approved",
+        "questions": [
+          "Tell me about managing many client accounts at once.",
+          "Give an example of balancing a portfolio of clients.",
+          "How did you approach prioritizing competing client demands?",
+          "What is your experience with juggling multiple accounts?",
+          "Describe a time involving managing many client accounts at once.",
+          "Can you discuss balancing a portfolio of clients?"
+        ],
+        "say": "I led the work and measured our results.",
+        "cues": [
+          {
+            "icon": "decision",
+            "text": "Account portfolio"
+          }
+        ],
+        "storyId": "multi-account",
+        "backupStoryId": null,
+        "proof": null
+      },
+      {
+        "id": "team-lead",
+        "kind": "story",
+        "status": "approved",
+        "questions": [
+          "Tell me about leading a team of specialists.",
+          "Give an example of managing cross-functional people.",
+          "How did you approach coordinating designers and engineers?",
+          "What is your experience with directing a delivery team?",
+          "Describe a time involving leading a team of specialists.",
+          "Can you discuss managing cross-functional people?"
+        ],
+        "say": "I led the work and measured our results.",
+        "cues": [
+          {
+            "icon": "decision",
+            "text": "Specialist team"
+          }
+        ],
+        "storyId": "team-lead",
+        "backupStoryId": null,
+        "proof": null
+      }
+    ],
+    "facts": [
+      {
+        "id": "company",
+        "about": "them",
+        "text": "Example Agency opened a second office.",
+        "source": {
+          "title": "Synthetic company notes",
+          "quote": "Example Agency opened a second office."
+        }
+      }
+    ],
+    "questionsForThem": [
+      "How is success measured?",
+      "What are the team priorities?",
+      "What happens in the first month?",
+      "What would you change about the role?"
+    ],
+    "gaps": [],
+    "glossary": [],
+    "tiles": []
+  },
+  "scenarios": [
+    {
+      "name": "early-reworded-acknowledgement",
+      "rule": "B5.1, B5.4, B5.7",
+      "events": [
+        {
+          "at": 0,
+          "id": "q",
+          "text": "That's great. Tell me about a measurable client acquisition result.",
+          "final": false,
+          "card": "client-result",
+          "score": 0.94,
+          "margin": 0.3
+        },
+        {
+          "at": 1000,
+          "tick": true
+        },
+        {
+          "at": 1500,
+          "id": "q",
+          "text": "Which client acquisition result are you proud of?",
+          "final": true,
+          "card": "client-result",
+          "score": 0.91,
+          "margin": 0.24
+        }
+      ],
+      "expected": "prepared"
+    },
+    {
+      "name": "middle-final-immediate",
+      "rule": "B5.2",
+      "events": [
+        {
+          "at": 0,
+          "id": "q",
+          "text": "How do you balance client accounts?",
+          "final": false,
+          "card": "multi-account",
+          "score": 0.68,
+          "margin": 0.2
+        },
+        {
+          "at": 1200,
+          "id": "q",
+          "text": "How do you balance client accounts?",
+          "final": true,
+          "card": "multi-account",
+          "score": 0.68,
+          "margin": 0.2
+        }
+      ],
+      "expected": "prepared"
+    },
+    {
+      "name": "twist-held-and-one-swap",
+      "rule": "B5.4, B5.5",
+      "events": [
+        {
+          "at": 0,
+          "id": "q",
+          "text": "Tell me about customer growth.",
+          "final": false,
+          "card": "client-result",
+          "score": 0.94,
+          "margin": 0.3
+        },
+        {
+          "at": 1000,
+          "tick": true
+        },
+        {
+          "at": 1500,
+          "id": "q",
+          "text": "Actually, tell me about leading a specialist team.",
+          "final": true,
+          "card": "team-lead",
+          "score": 0.96,
+          "margin": 0.3
+        },
+        {
+          "at": 3500,
+          "tick": true
+        }
+      ],
+      "expected": "prepared"
+    },
+    {
+      "name": "early-disabled",
+      "rule": "B5.8",
+      "earlyReveal": false,
+      "events": [
+        {
+          "at": 0,
+          "id": "q",
+          "text": "Tell me about customer growth.",
+          "final": false,
+          "card": "client-result",
+          "score": 0.94,
+          "margin": 0.3
+        },
+        {
+          "at": 1000,
+          "tick": true
+        },
+        {
+          "at": 1500,
+          "id": "q",
+          "text": "Tell me about customer growth.",
+          "final": true,
+          "card": "client-result",
+          "score": 0.94,
+          "margin": 0.3
+        }
+      ],
+      "expected": "prepared"
+    },
+    {
+      "name": "question-stabilizes-after-a-change",
+      "rule": "B5.1 stable 600 ms",
+      "events": [
+        {
+          "at": 0,
+          "id": "q",
+          "text": "Tell me about customer growth.",
+          "final": false,
+          "card": "client-result",
+          "score": 0.94,
+          "margin": 0.3
+        },
+        {
+          "at": 900,
+          "id": "q",
+          "text": "How do you manage a portfolio of client accounts?",
+          "final": false,
+          "card": "multi-account",
+          "score": 0.94,
+          "margin": 0.3
+        },
+        {
+          "at": 1000,
+          "tick": true,
+          "expectedPhase": "held"
+        },
+        {
+          "at": 1500,
+          "tick": true,
+          "expectedPhase": "early"
+        },
+        {
+          "at": 1900,
+          "id": "q",
+          "text": "How do you manage a portfolio of client accounts?",
+          "final": true,
+          "card": "multi-account",
+          "score": 0.94,
+          "margin": 0.3
+        }
+      ],
+      "expected": "prepared"
+    }
+  ],
+  "type": "interview",
+  "line": "Synthetic answer-bank compatibility replay",
+  "materials": [
+    {
+      "id": "synthetic-source",
+      "title": "Synthetic replay notes",
+      "text": "I led the work and measured our results."
+    }
+  ],
+  "turns": [
+    {
+      "id": "bank-legacy-q",
+      "at": 1000,
+      "speaker": "Interviewer",
+      "channel": "system",
+      "text": "Tell me about a measurable customer result.",
+      "expected": "say"
+    },
+    {
+      "id": "bank-legacy-own",
+      "at": 2000,
+      "speaker": "You",
+      "channel": "mic",
+      "text": "I led the work and measured our results.",
+      "expected": "silent",
+      "mustSkip": true
+    },
+    {
+      "id": "bank-legacy-ack",
+      "at": 3000,
+      "speaker": "Interviewer",
+      "channel": "system",
+      "text": "Okay, got it.",
+      "expected": "silent",
+      "mustSkip": true
+    }
+  ],
+  "ladderCases": [
+    {
+      "mode": "prepared",
+      "expectedSource": "prepared",
+      "question": "How did you measure your work?"
+    },
+    {
+      "mode": "closest",
+      "expectedSource": "prepared_closest",
+      "question": "How did you measure your work?"
+    },
+    {
+      "mode": "live",
+      "expectedSource": "live",
+      "question": "How did you measure your work?"
+    },
+    {
+      "mode": "none",
+      "expectedSource": "none",
+      "question": "How did you measure your work?"
+    },
+    {
+      "mode": "fact",
+      "expectedSource": "fact",
+      "question": "What is your company known for?"
+    },
+    {
+      "mode": "unclear",
+      "expectedSource": null,
+      "question": "How did you measure your work?"
+    },
+    {
+      "mode": "slow",
+      "expectedSource": "none",
+      "question": "How did you measure your work?"
+    }
+  ]
+}

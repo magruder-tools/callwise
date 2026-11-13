@@ -1,0 +1,252 @@
+{
+  "sessionId": "e5c6101f-adbf-4a52-8113-568daecd66a7",
+  "status": "running",
+  "source": "manual",
+  "startedAt": null,
+  "stoppedAt": null,
+  "activeTimeMs": 0,
+  "snapshotAt": 1794548802662,
+  "settings": {
+    "mode": "interview",
+    "goal": "",
+    "project": "",
+    "profile": "",
+    "quiet": false,
+    "autoSearch": false,
+    "contextBackend": "off",
+    "contextApps": [],
+    "contextConsent": false
+  },
+  "revision": 0,
+  "prep": null,
+  "summary": "",
+  "commitments": [],
+  "covered": [],
+  "otherTurns": 0,
+  "latencies": [],
+  "transcript": [],
+  "cards": [],
+  "context": [],
+  "metrics": {
+    "fastCalls": 0,
+    "strategyCalls": 0,
+    "discarded": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "accepted": 0,
+    "dismissed": 0
+  },
+  "errors": [],
+  "activity": [],
+  "pendingOrigin": "auto",
+  "pendingTrigger": null,
+  "thinking": {
+    "fast": false,
+    "strategy": false
+  },
+  "limits": {
+    "fast": 120,
+    "strategy": 15
+  },
+  "stage": {
+    "phase": "final",
+    "question": {
+      "clean": "Tell me about a client result.",
+      "raw": "Okay, so, tell me about a client result."
+    },
+    "current": {
+      "id": "wrapup-synthetic",
+      "source": "prepared",
+      "say": "",
+      "frame": [],
+      "cues": [
+        {
+          "icon": "ask",
+          "text": "How is success measured?"
+        },
+        {
+          "icon": "ask",
+          "text": "What are the team priorities?"
+        },
+        {
+          "icon": "ask",
+          "text": "What happens in the first month?"
+        },
+        {
+          "icon": "ask",
+          "text": "What would you change about the role?"
+        }
+      ],
+      "askBack": null,
+      "proof": null,
+      "sources": [
+        {
+          "id": "client-result:0",
+          "title": "Synthetic replay notes"
+        }
+      ],
+      "pinned": false,
+      "createdAt": 1000
+    },
+    "earlier": [],
+    "readyNext": [],
+    "notice": null,
+    "speed": {
+      "lastRevealLeadMs": -500,
+      "medianRevealMs": -400,
+      "lastLiveMs": 1700
+    }
+  },
+  "packs": [
+    {
+      "id": "synthetic-interview-bank",
+      "title": "Synthetic interview",
+      "meetingStart": null,
+      "type": "interview",
+      "status": "needs_review",
+      "cards": 3,
+      "approved": 0,
+      "gaps": 1,
+      "origin": "import",
+      "updatedAt": 1000,
+      "attachedMeetingId": null,
+      "updatePending": false
+    }
+  ],
+  "bank": null,
+  "prepPrompt": {
+    "available": true
+  },
+  "watchFolder": {
+    "enabled": true,
+    "path": "/Synthetic/Callwise Prep"
+  },
+  "rehearsal": {
+    "status": "idle",
+    "packId": null,
+    "index": 0,
+    "total": 0,
+    "question": null,
+    "cues": [],
+    "results": []
+  },
+  "preflight": {
+    "state": "off",
+    "meetingTitle": null,
+    "startsAt": null,
+    "reasons": []
+  },
+  "prepEstimate": null,
+  "prepProgress": null,
+  "attachOffers": [],
+  "matcher": {
+    "available": true,
+    "model": "Bundled offline sentence model",
+    "error": null
+  },
+  "preferences": {
+    "mode": "interview",
+    "liveHelp": true,
+    "earlyReveal": true,
+    "localMatching": true,
+    "assistantPrepEnabled": false,
+    "preflightEnabled": false,
+    "calendarWatching": false,
+    "setupDismissed": true
+  },
+  "desktop": {
+    "packaged": true,
+    "version": "0.6.0",
+    "platform": "darwin",
+    "readiness": {
+      "core": true,
+      "mic": true,
+      "system": true,
+      "ai": true
+    },
+    "native": {
+      "speech": true,
+      "installedLocales": [
+        "en-US"
+      ]
+    }
+  },
+  "libraryPath": "/Synthetic/Callwise/meetings",
+  "config": {
+    "openaiReady": false,
+    "firefliesReady": false,
+    "mcpReady": false,
+    "autoLatestModels": false,
+    "serviceTier": "default",
+    "modelUpdateWarning": ""
+  },
+  "sheets": [],
+  "preparing": false,
+  "recapping": false,
+  "recap": null,
+  "recapCarried": false,
+  "costEstimate": 0,
+  "demoOnly": true,
+  "backend": "openai",
+  "capture": {
+    "mic": "off",
+    "system": "off"
+  },
+  "connecting": false,
+  "contextApps": [],
+  "retrieval": {
+    "status": "idle",
+    "detail": "Choose apps in Connections to search your context.",
+    "searches": 0,
+    "cacheHits": 0,
+    "sources": 0,
+    "lastRetrievedAt": null,
+    "limit": 20
+  },
+  "meetings": {
+    "current": {
+      "id": "synthetic-meeting",
+      "title": "Synthetic interview",
+      "people": [
+        "Jordan"
+      ],
+      "createdAt": 1000,
+      "durationMs": 45000,
+      "status": "running",
+      "saving": true,
+      "captureMode": "transcribe",
+      "engine": "apple",
+      "retainAudio": false,
+      "notes": {
+        "text": "Synthetic notes",
+        "version": 1
+      },
+      "speakers": [
+        {
+          "id": "you",
+          "label": "You"
+        },
+        {
+          "id": "them",
+          "label": "Them"
+        }
+      ],
+      "segments": [],
+      "actions": [],
+      "audio": [],
+      "jobs": [],
+      "events": [],
+      "processing": [],
+      "recap": null,
+      "enhanced": null,
+      "debrief": null
+    },
+    "activeId": "synthetic-meeting",
+    "library": [],
+    "warning": "",
+    "locked": false,
+    "processing": [],
+    "archiveOperation": null,
+    "libraryRevision": 0
+  }
+}
